@@ -97,6 +97,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if isinstance(preflight_result, ReadyExecution):
             resolved_target_command = resolve_target(repo_root, preflight_result.command)
             resolved_session = resolve_session(
+                repo_root,
+                preflight_result.workflow_id,
                 resolved_target_command,
                 preflight_result.resolved_provider,
             )
@@ -149,8 +151,6 @@ def _format_ready_message(result: ReadyExecution) -> str:
 
 def _format_workflow_id_suffix(result: ReadyExecution) -> str:
     """local workflow_id があれば確認用メッセージへ含める。"""
-    if result.workflow_id is None:
-        return ""
     return f", workflow_id={result.workflow_id}"
 
 
@@ -167,8 +167,14 @@ def _format_session_suffix(result: ReadyExecution) -> str:
     session = result.resolved_session
     if session is None:
         return ""
+    restore_suffix = "new"
+    if session.restore_manifest is not None:
+        restore_suffix = (
+            f"{session.restore_strategy}:{session.restore_manifest.workflow_id}"
+        )
     return (
         f", session_mode={session.mode}, "
         f"session_lane={session.lane}, "
-        f"session_key={session.key.canonical_key}"
+        f"session_key={session.key.canonical_key}, "
+        f"session_restore={restore_suffix}"
     )

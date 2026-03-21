@@ -40,7 +40,7 @@ class ReadyExecution(BaseModel):
     config: VVAIConfig
     resolved_provider: ResolvedProvider
     resolved_session: ResolvedSession | None = None
-    workflow_id: str | None = None
+    workflow_id: str
 
     @property
     def provider(self) -> str:
@@ -69,7 +69,7 @@ def run_preflight(
         command=resolved_command,
         config=config,
         resolved_provider=resolve_provider(resolved_command, config, env),
-        workflow_id=_resolve_workflow_id(resolved_command),
+        workflow_id=_resolve_workflow_id(resolved_command, env),
     )
 
 
@@ -96,8 +96,27 @@ def _authorize_actor(
         )
 
     return None
-def _resolve_workflow_id(resolved_command: ResolvedCommand) -> str | None:
-    """local 実行時だけ workflow_id を採番する。"""
+
+
+def _resolve_workflow_id(
+    resolved_command: ResolvedCommand,
+    env: Mapping[str, str],
+) -> str:
+    """全 event で使う workflow_id を解決する。"""
     if resolved_command.event_name != "local":
-        return None
+        run_id = _normalize_optional_env_value(env.get("GITHUB_RUN_ID"))
+        run_attempt = _normalize_optional_env_value(env.get("GITHUB_RUN_ATTEMPT"))
+        if run_id is not None:
+            if run_attempt is None:
+                return f"run-{run_id}"
+            return f"run-{run_id}-attempt-{run_attempt}"
+        return f"debug-{generate_local_workflow_id()}"
     return generate_local_workflow_id()
+
+
+def _normalize_optional_env_value(value: str | None) -> str | None:
+    """空文字の環境変数を未指定として扱う。"""
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None

@@ -47,8 +47,8 @@
 - [x] provider 抽象を定義する
 - [x] `codex` / `claude` の選択ロジックを実装する
 - [x] session key と lane の設計をコードに落とす
-- [ ] session の保存対象と復元対象を実装する
-- [ ] `inherit` / `compact` / `new` の振る舞いを実装する
+- [x] session の保存対象と復元対象を実装する
+- [x] `inherit` / `compact` / `new` の振る舞いを実装する
 
 ### 6. Artifact / Metrics / Report
 
