@@ -18,7 +18,9 @@ from vv_ai.preflight import (
     SilentSkip,
     run_preflight,
 )
+from vv_ai.provider import ProviderResolutionError
 from vv_ai.resolve import ResolutionError, resolve_raw_input
+from vv_ai.session import SessionResolutionError, resolve_session
 from vv_ai.target import TargetResolutionError, resolve_target
 
 
@@ -94,8 +96,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         preflight_result = run_preflight(repo_root, resolved_command, os.environ)
         if isinstance(preflight_result, ReadyExecution):
             resolved_target_command = resolve_target(repo_root, preflight_result.command)
+            resolved_session = resolve_session(
+                resolved_target_command,
+                preflight_result.resolved_provider,
+            )
             preflight_result = preflight_result.model_copy(
-                update={"command": resolved_target_command}
+                update={
+                    "command": resolved_target_command,
+                    "resolved_session": resolved_session,
+                }
             )
     except (
         ValidationError,
@@ -103,6 +112,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         ResolutionError,
         VVAIConfigError,
         PreflightError,
+        ProviderResolutionError,
+        SessionResolutionError,
         TargetResolutionError,
     ) as exc:
         print(f"入力エラー: {exc}", file=sys.stderr)
@@ -132,6 +143,7 @@ def _format_ready_message(result: ReadyExecution) -> str:
         f"provider_source={result.provider_source}"
         f"{_format_workflow_id_suffix(result)}"
         f"{_format_target_suffix(result)}"
+        f"{_format_session_suffix(result)}"
     )
 
 
@@ -148,3 +160,15 @@ def _format_target_suffix(result: ReadyExecution) -> str:
     if target is None:
         return ""
     return f", target={target.canonical_id}"
+
+
+def _format_session_suffix(result: ReadyExecution) -> str:
+    """解決済み session があれば確認用メッセージへ含める。"""
+    session = result.resolved_session
+    if session is None:
+        return ""
+    return (
+        f", session_mode={session.mode}, "
+        f"session_lane={session.lane}, "
+        f"session_key={session.key.canonical_key}"
+    )

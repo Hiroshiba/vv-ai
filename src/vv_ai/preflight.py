@@ -8,16 +8,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from vv_ai.config import ProviderName, VVAIConfig, load_vv_ai_config
+from vv_ai.config import VVAIConfig, load_vv_ai_config
 from vv_ai.local_store import generate_local_workflow_id
+from vv_ai.provider import ResolvedProvider, resolve_provider
 from vv_ai.resolve import ResolvedCommand
-
-ProviderSource = Literal["explicit", "config"]
-
-_PROVIDER_SECRET_NAMES: dict[ProviderName, str] = {
-    "codex": "VV_OPENAI_API_KEY",
-    "claude": "VV_ANTHROPIC_API_KEY",
-}
+from vv_ai.session import ResolvedSession
 
 
 class PreflightError(Exception):
@@ -26,10 +21,6 @@ class PreflightError(Exception):
 
 class AuthorizationError(PreflightError):
     """認可に失敗したことを表す例外。"""
-
-
-class ProviderResolutionError(PreflightError):
-    """provider 解決に失敗したことを表す例外。"""
 
 
 class SilentSkip(BaseModel):
@@ -47,9 +38,19 @@ class ReadyExecution(BaseModel):
 
     command: ResolvedCommand
     config: VVAIConfig
-    provider: ProviderName
-    provider_source: ProviderSource
+    resolved_provider: ResolvedProvider
+    resolved_session: ResolvedSession | None = None
     workflow_id: str | None = None
+
+    @property
+    def provider(self) -> str:
+        """確認表示用の provider 名。"""
+        return self.resolved_provider.name
+
+    @property
+    def provider_source(self) -> str:
+        """確認表示用の provider 解決元。"""
+        return self.resolved_provider.source
 
 
 def run_preflight(
@@ -64,12 +65,10 @@ def run_preflight(
     if authorization_result is not None:
         return authorization_result
 
-    provider, provider_source = _resolve_provider(resolved_command, config, env)
     return ReadyExecution(
         command=resolved_command,
         config=config,
-        provider=provider,
-        provider_source=provider_source,
+        resolved_provider=resolve_provider(resolved_command, config, env),
         workflow_id=_resolve_workflow_id(resolved_command),
     )
 
@@ -97,63 +96,6 @@ def _authorize_actor(
         )
 
     return None
-
-
-def _resolve_provider(
-    resolved_command: ResolvedCommand,
-    config: VVAIConfig,
-    env: Mapping[str, str],
-) -> tuple[ProviderName, ProviderSource]:
-    """利用する provider を確定する。"""
-    if resolved_command.provider is not None:
-        _ensure_provider_available(resolved_command.provider, env)
-        return resolved_command.provider, "explicit"
-
-    for provider in _iter_provider_priority(config.provider_priority):
-        if _has_provider_secret(provider, env):
-            return provider, "config"
-
-    required_secrets = ", ".join(
-        _PROVIDER_SECRET_NAMES[provider]
-        for provider in _iter_provider_priority(config.provider_priority)
-    )
-    raise ProviderResolutionError(
-        "利用可能な provider を選べませんでした。"
-        f" 次のいずれかの環境変数を設定してください: {required_secrets}"
-    )
-
-
-def _iter_provider_priority(
-    provider_priority: list[ProviderName],
-) -> tuple[ProviderName, ...]:
-    """定義順を保ったまま重複を除く。"""
-    return tuple(dict.fromkeys(provider_priority))
-
-
-def _ensure_provider_available(
-    provider: ProviderName,
-    env: Mapping[str, str],
-) -> None:
-    """指定 provider の秘密値が存在することを確認する。"""
-    if _has_provider_secret(provider, env):
-        return
-
-    secret_name = _PROVIDER_SECRET_NAMES[provider]
-    raise ProviderResolutionError(
-        f"`{provider}` を使うには環境変数 `{secret_name}` が必要です"
-    )
-
-
-def _has_provider_secret(
-    provider: ProviderName,
-    env: Mapping[str, str],
-) -> bool:
-    """provider 用の秘密値が空でないかを確認する。"""
-    secret_name = _PROVIDER_SECRET_NAMES[provider]
-    secret_value = env.get(secret_name)
-    return secret_value is not None and secret_value.strip() != ""
-
-
 def _resolve_workflow_id(resolved_command: ResolvedCommand) -> str | None:
     """local 実行時だけ workflow_id を採番する。"""
     if resolved_command.event_name != "local":
