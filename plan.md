@@ -3,15 +3,15 @@
 ## 運用ルール
 
 1. `requirements.md`を読む
-2. 過去のレポートを読む
+2. 過去の日誌を読む
 3. `plan.md` を読む
 4. 先頭の未チェックタスクを次の作業対象にする
 5. そのタスク専用の短い Plan を考える
 6. タスクを実行する
-7. ユーザーにレビューを依頼する
+7. ユーザーにレビューを依頼する（ということをPlan内に含める）
 8. レビューで問題があれば`3.`に戻る
 9. 完了したら `plan.md` の該当タスクにチェックを入れる
-10. `reports/YYYYMMDD-HHMMSS.md` にレポートを作成する
+10. `diary/YYYYMMDD-HHMMSS.md` に日誌を作成する
 11. 終了する
 
 ## タスクリスト
@@ -25,7 +25,7 @@
 
 - [x] `vv-ai.yml` の設定モデルを定義する
 - [x] CLI / event payload を受ける入力モデルを定義する
-- [ ] `RawInput` から `ResolvedCommand` への正規化を実装する
+- [x] `RawInput` から `ResolvedCommand` への正規化を実装する
 - [ ] `allowed_users` と provider 優先順位の解決を実装する
 
 ### 3. Target / Backend 解決

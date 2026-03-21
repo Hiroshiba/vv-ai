@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from pydantic import ValidationError
 
 from vv_ai.input import CLIInput, InputError, build_raw_input_from_cli
+from vv_ai.resolve import ResolutionError, resolve_raw_input
 
 def build_parser() -> argparse.ArgumentParser:
     """最小の CLI パーサーを構築する。"""
@@ -76,8 +77,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         cli_input = CLIInput.model_validate(vars(namespace))
-        build_raw_input_from_cli(cli_input)
-    except (ValidationError, InputError) as exc:
+        raw_input = build_raw_input_from_cli(cli_input)
+        resolve_raw_input(raw_input)
+    except (ValidationError, InputError, ResolutionError) as exc:
         print(f"入力エラー: {exc}", file=sys.stderr)
         return 2
 
