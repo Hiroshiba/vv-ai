@@ -24,6 +24,8 @@ class ResolvedTarget(BaseModel):
     backend: BackendName
     kind: TargetType
     canonical_id: str
+    local_id: str | None = None
+    path: str | None = None
     repository_full_name: str | None = None
     number: int | None = None
     url: str | None = None

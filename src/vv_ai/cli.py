@@ -19,7 +19,7 @@ from vv_ai.preflight import (
     run_preflight,
 )
 from vv_ai.resolve import ResolutionError, resolve_raw_input
-from vv_ai.target import TargetResolutionError, resolve_github_target
+from vv_ai.target import TargetResolutionError, resolve_target
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -93,7 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         repo_root = find_repo_root(Path.cwd())
         preflight_result = run_preflight(repo_root, resolved_command, os.environ)
         if isinstance(preflight_result, ReadyExecution):
-            resolved_target_command = resolve_github_target(preflight_result.command)
+            resolved_target_command = resolve_target(repo_root, preflight_result.command)
             preflight_result = preflight_result.model_copy(
                 update={"command": resolved_target_command}
             )

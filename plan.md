@@ -31,9 +31,9 @@
 ### 3. Target / Backend 解決
 
 - [x] GitHub URL を target として解決できるようにする
-- [ ] ローカルパスを target として解決できるようにする
-- [ ] Issue / PR / local target の共通表現を定義する
-- [ ] target 不足時と入力不正時のエラー処理を実装する
+- [x] ローカルパスを target として解決できるようにする
+- [x] Issue / PR / local target の共通表現を定義する
+- [x] target 不足時と入力不正時のエラー処理を実装する
 
 ### 4. ローカルデータ構造
 
