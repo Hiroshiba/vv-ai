@@ -23,7 +23,7 @@
 
 ### 2. 設定と入力正規化
 
-- [ ] `vv-ai.yml` の設定モデルを定義する
+- [x] `vv-ai.yml` の設定モデルを定義する
 - [ ] CLI / event payload を受ける入力モデルを定義する
 - [ ] `RawInput` から `ResolvedCommand` への正規化を実装する
 - [ ] `allowed_users` と provider 優先順位の解決を実装する

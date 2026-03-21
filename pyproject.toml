@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "GitHub Actions とローカル実行を対象にした AI 自動化ツールキット"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+]
 
 [project.scripts]
 vv-ai = "vv_ai.cli:main"
