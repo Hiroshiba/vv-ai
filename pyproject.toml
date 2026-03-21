@@ -1,0 +1,11 @@
+[project]
+name = "vv-ai"
+version = "0.1.0"
+description = "GitHub Actions とローカル実行を対象にした AI 自動化ツールキット"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.9.22,<0.10.0"]
+build-backend = "uv_build"
