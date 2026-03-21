@@ -2,14 +2,31 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 from vv_ai.input import CommandName, EventName, RawInput, SessionMode, TargetType
 from vv_ai.config import ProviderName
 
+BackendName = Literal["github", "local"]
+
 
 class ResolutionError(Exception):
     """入力正規化に失敗したことを表す例外。"""
+
+
+class ResolvedTarget(BaseModel):
+    """後続処理で共通利用する target 表現。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    backend: BackendName
+    kind: TargetType
+    canonical_id: str
+    repository_full_name: str | None = None
+    number: int | None = None
+    url: str | None = None
 
 
 class ResolvedCommand(BaseModel):
@@ -33,6 +50,7 @@ class ResolvedCommand(BaseModel):
     comment_id: int | None = None
     comment_author: str | None = None
     comment_body: str | None = None
+    target: ResolvedTarget | None = None
 
 
 def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
