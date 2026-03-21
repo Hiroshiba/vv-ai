@@ -37,10 +37,10 @@
 
 ### 4. ローカルデータ構造
 
-- [ ] `.vv-ai/issues` と `.vv-ai/prs` の管理構造を実装する
-- [ ] `meta.json` の最小スキーマを実装する
-- [ ] ローカル comments 保存形式を実装する
-- [ ] workflow_id の生成ルールを実装する
+- [x] `.vv-ai/issues` と `.vv-ai/prs` の管理構造を実装する
+- [x] `meta.json` の最小スキーマを実装する
+- [x] ローカル comments 保存形式を実装する
+- [x] workflow_id の生成ルールを実装する
 
 ### 5. Provider / Session
 

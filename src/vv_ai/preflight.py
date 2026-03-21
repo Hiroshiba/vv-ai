@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from vv_ai.config import ProviderName, VVAIConfig, load_vv_ai_config
+from vv_ai.local_store import generate_local_workflow_id
 from vv_ai.resolve import ResolvedCommand
 
 ProviderSource = Literal["explicit", "config"]
@@ -48,6 +49,7 @@ class ReadyExecution(BaseModel):
     config: VVAIConfig
     provider: ProviderName
     provider_source: ProviderSource
+    workflow_id: str | None = None
 
 
 def run_preflight(
@@ -68,6 +70,7 @@ def run_preflight(
         config=config,
         provider=provider,
         provider_source=provider_source,
+        workflow_id=_resolve_workflow_id(resolved_command),
     )
 
 
@@ -149,3 +152,10 @@ def _has_provider_secret(
     secret_name = _PROVIDER_SECRET_NAMES[provider]
     secret_value = env.get(secret_name)
     return secret_value is not None and secret_value.strip() != ""
+
+
+def _resolve_workflow_id(resolved_command: ResolvedCommand) -> str | None:
+    """local 実行時だけ workflow_id を採番する。"""
+    if resolved_command.event_name != "local":
+        return None
+    return generate_local_workflow_id()

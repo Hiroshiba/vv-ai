@@ -130,8 +130,16 @@ def _format_ready_message(result: ReadyExecution) -> str:
         f"command={result.command.command}, "
         f"provider={result.provider}, "
         f"provider_source={result.provider_source}"
+        f"{_format_workflow_id_suffix(result)}"
         f"{_format_target_suffix(result)}"
     )
+
+
+def _format_workflow_id_suffix(result: ReadyExecution) -> str:
+    """local workflow_id があれば確認用メッセージへ含める。"""
+    if result.workflow_id is None:
+        return ""
+    return f", workflow_id={result.workflow_id}"
 
 
 def _format_target_suffix(result: ReadyExecution) -> str:
