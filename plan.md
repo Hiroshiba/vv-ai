@@ -53,7 +53,7 @@
 ### 6. Artifact / Metrics / Report
 
 - [x] session artifact の保存形式を実装する
-- [ ] metrics artifact の保存形式を実装する
+- [x] metrics artifact の保存形式を実装する
 - [ ] report artifact の保存形式を実装する
 - [ ] `age` による暗号化 / 復号処理を実装する
 - [ ] report の Markdown テンプレートを実装する
