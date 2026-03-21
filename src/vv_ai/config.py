@@ -68,3 +68,21 @@ def load_vv_ai_config(repo_root: Path) -> VVAIConfig:
         return VVAIConfig.model_validate(raw_data)
     except ValidationError as exc:
         raise VVAIConfigError(f"`{config_path}` の設定値が不正です") from exc
+
+
+def find_repo_root(start_path: Path) -> Path:
+    """現在位置から `vv-ai.yml` または `.git` を基準にリポジトリルートを探す。"""
+    current = start_path.resolve()
+    if current.is_file():
+        current = current.parent
+
+    git_root: Path | None = None
+    for candidate in (current, *current.parents):
+        if (candidate / "vv-ai.yml").is_file():
+            return candidate
+        if git_root is None and (candidate / ".git").exists():
+            git_root = candidate
+
+    if git_root is not None:
+        return git_root
+    return current

@@ -26,7 +26,7 @@
 - [x] `vv-ai.yml` の設定モデルを定義する
 - [x] CLI / event payload を受ける入力モデルを定義する
 - [x] `RawInput` から `ResolvedCommand` への正規化を実装する
-- [ ] `allowed_users` と provider 優先順位の解決を実装する
+- [x] `allowed_users` と provider 優先順位の解決を実装する
 
 ### 3. Target / Backend 解決
 

@@ -3,13 +3,23 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from pydantic import ValidationError
 
+from vv_ai.config import VVAIConfigError, find_repo_root
 from vv_ai.input import CLIInput, InputError, build_raw_input_from_cli
+from vv_ai.preflight import (
+    PreflightError,
+    ReadyExecution,
+    SilentSkip,
+    run_preflight,
+)
 from vv_ai.resolve import ResolutionError, resolve_raw_input
+
 
 def build_parser() -> argparse.ArgumentParser:
     """最小の CLI パーサーを構築する。"""
@@ -78,10 +88,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         cli_input = CLIInput.model_validate(vars(namespace))
         raw_input = build_raw_input_from_cli(cli_input)
-        resolve_raw_input(raw_input)
-    except (ValidationError, InputError, ResolutionError) as exc:
+        resolved_command = resolve_raw_input(raw_input)
+        repo_root = find_repo_root(Path.cwd())
+        preflight_result = run_preflight(repo_root, resolved_command, os.environ)
+    except (
+        ValidationError,
+        InputError,
+        ResolutionError,
+        VVAIConfigError,
+        PreflightError,
+    ) as exc:
         print(f"入力エラー: {exc}", file=sys.stderr)
         return 2
 
-    print("vv-ai CLI は初期化済みです。詳細なコマンド実装はこれから追加します。")
+    if isinstance(preflight_result, SilentSkip):
+        return _handle_silent_skip(preflight_result)
+
+    print(_format_ready_message(preflight_result))
     return 0
+
+
+def _handle_silent_skip(result: SilentSkip) -> int:
+    """silent skip を処理する。"""
+    if result.reason != "unauthorized_comment":
+        raise AssertionError(f"未対応の silent skip 理由です: {result.reason}")
+    return 0
+
+
+def _format_ready_message(result: ReadyExecution) -> str:
+    """preflight 成功時の確認用メッセージを組み立てる。"""
+    return (
+        "preflight 解決完了: "
+        f"event={result.command.event_name}, "
+        f"command={result.command.command}, "
+        f"provider={result.provider}, "
+        f"provider_source={result.provider_source}"
+    )
