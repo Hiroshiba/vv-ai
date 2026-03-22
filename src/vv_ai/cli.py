@@ -115,6 +115,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 preflight_result.workflow_id,
                 resolved_target_command,
                 preflight_result.resolved_provider,
+                os.environ,
             )
             preflight_result = preflight_result.model_copy(
                 update={

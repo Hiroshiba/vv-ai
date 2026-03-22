@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 import subprocess
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -79,6 +80,18 @@ class SavedSessionArtifact(BaseModel):
     manifest_path: str
 
 
+class RestoredSessionArtifact(BaseModel):
+    """復元した session artifact の参照情報。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_name: str
+    artifact_path: str
+    restored_dir: str
+    provider_session_path: str | None
+    meta: SessionArtifactMeta
+
+
 def capture_git_snapshot(repo_root: Path) -> GitSnapshot:
     """保存対象の Git 状態を取得する。"""
     branch_name = _run_git_command(
@@ -119,6 +132,14 @@ def build_session_artifact_name(session_key: SessionKey, workflow_id: str) -> st
         f"vv-ai-session__{target_name}__{provider_name}__{lane_name}"
         f"__{workflow_name}"
     )
+
+
+def build_session_artifact_prefix(session_key: SessionKey) -> str:
+    """workflow_id を除いた session artifact prefix を返す。"""
+    target_name = _sanitize_name(session_key.target_key)
+    provider_name = _sanitize_name(session_key.provider)
+    lane_name = _sanitize_name(session_key.lane)
+    return f"vv-ai-session__{target_name}__{provider_name}__{lane_name}__"
 
 
 def save_session_artifact(
@@ -243,6 +264,74 @@ def load_session_artifact_meta(artifact_dir: Path) -> SessionArtifactMeta:
         raise SessionArtifactError(f"`{meta_path}` の値が不正です") from exc
 
 
+def restore_downloaded_session_artifact(
+    repo_root: Path,
+    workflow_id: str,
+    artifact_name: str,
+    downloaded_zip_path: Path,
+    age_secret_key: str,
+) -> RestoredSessionArtifact:
+    """download 済み artifact zip を展開して session を復元する。"""
+    restored_root = (
+        repo_root
+        / ".vv-ai"
+        / "artifacts"
+        / workflow_id
+        / "restored-sessions"
+        / artifact_name
+    )
+    temp_root = restored_root.parent / f".{artifact_name}.tmp"
+    if restored_root.exists():
+        raise SessionArtifactError(f"`{restored_root}` は既に存在します")
+    if temp_root.exists():
+        raise SessionArtifactError(f"`{temp_root}` が残っています")
+
+    try:
+        temp_root.mkdir(parents=True, exist_ok=False)
+        extracted_zip_dir = temp_root / "zip"
+        extracted_zip_dir.mkdir()
+        _extract_zip_archive(downloaded_zip_path, extracted_zip_dir)
+        encrypted_artifact_path = temp_root / f"{artifact_name}.tar.age"
+        source_artifact_path = _find_single_encrypted_artifact(extracted_zip_dir)
+        shutil.copy2(source_artifact_path, encrypted_artifact_path)
+        restored_dir = decrypt_session_artifact(
+            encrypted_artifact_path,
+            temp_root / "session",
+            age_secret_key,
+        )
+        meta = load_session_artifact_meta(restored_dir)
+        provider_session_path = _resolve_provider_session_path(restored_dir)
+        temp_root.replace(restored_root)
+    except OSError as exc:
+        _cleanup_directory(temp_root)
+        raise SessionArtifactError(
+            f"`{artifact_name}` の復元に失敗しました"
+        ) from exc
+    except shutil.Error as exc:
+        _cleanup_directory(temp_root)
+        raise SessionArtifactError(
+            f"`{artifact_name}` の復元に失敗しました"
+        ) from exc
+    except SessionArtifactError:
+        _cleanup_directory(temp_root)
+        raise
+
+    final_artifact_path = restored_root / f"{artifact_name}.tar.age"
+    final_restored_dir = restored_root / "session"
+    final_provider_session_path = _resolve_provider_session_path(final_restored_dir)
+    return RestoredSessionArtifact(
+        artifact_name=artifact_name,
+        artifact_path=str(final_artifact_path),
+        restored_dir=str(final_restored_dir),
+        provider_session_path=(
+            str(final_provider_session_path)
+            if final_provider_session_path is not None
+            else None
+        ),
+        meta=meta,
+    )
+
+
 def _build_session_artifact_meta(
     *,
     workflow_id: str,
@@ -315,6 +404,45 @@ def _copy_untracked_files(
         destination_path = untracked_root / relative_path
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_path, destination_path)
+
+
+def _extract_zip_archive(source_path: Path, destination_dir: Path) -> None:
+    """zip archive を directory へ展開する。"""
+    if not source_path.is_file():
+        raise SessionArtifactError(f"`{source_path}` が見つかりません")
+    try:
+        with zipfile.ZipFile(source_path) as archive:
+            archive.extractall(destination_dir)
+    except OSError as exc:
+        raise SessionArtifactError(f"`{source_path}` の展開に失敗しました") from exc
+    except zipfile.BadZipFile as exc:
+        raise SessionArtifactError(f"`{source_path}` は zip として不正です") from exc
+
+
+def _find_single_encrypted_artifact(extracted_zip_dir: Path) -> Path:
+    """展開済み zip から唯一の session artifact を返す。"""
+    candidates = sorted(
+        path
+        for path in extracted_zip_dir.rglob("*.tar.age")
+        if path.is_file()
+    )
+    if not candidates:
+        raise SessionArtifactError("zip 内に `*.tar.age` が見つかりません")
+    if len(candidates) != 1:
+        raise SessionArtifactError("zip 内の `*.tar.age` は 1 件だけである必要があります")
+    return candidates[0]
+
+
+def _resolve_provider_session_path(restored_dir: Path) -> Path | None:
+    """復元済み provider session directory を返す。"""
+    provider_session_path = restored_dir / "provider-session"
+    if not provider_session_path.exists():
+        return None
+    if not provider_session_path.is_dir():
+        raise SessionArtifactError(
+            f"`{provider_session_path}` は session directory ではありません"
+        )
+    return provider_session_path
 
 
 def _run_git_command(repo_root: Path, *args: str) -> str:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import UTC, datetime
+from pathlib import Path
 from collections.abc import Callable, Sequence
 from typing import Literal
 
@@ -15,6 +17,7 @@ IssueState = Literal["OPEN", "CLOSED"]
 PullRequestState = Literal["OPEN", "CLOSED", "MERGED"]
 GitHubReactionContent = Literal["eyes", "confused"]
 GhTextRunner = Callable[[Sequence[str]], str]
+GhBinaryRunner = Callable[[Sequence[str]], bytes]
 
 
 class GitHubClientError(Exception):
@@ -85,14 +88,30 @@ class GitHubPullRequest(BaseModel):
     maintainer_can_modify: bool
 
 
+class GitHubArtifact(BaseModel):
+    """GitHub Actions artifact を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+    created_at: str
+    archive_download_url: str
+
+
 type GitHubTargetDetails = GitHubIssue | GitHubPullRequest
 
 
 class GitHubClient:
     """`gh` を使って GitHub 情報を操作する。"""
 
-    def __init__(self, text_runner: GhTextRunner) -> None:
+    def __init__(
+        self,
+        text_runner: GhTextRunner,
+        binary_runner: GhBinaryRunner,
+    ) -> None:
         self._text_runner = text_runner
+        self._binary_runner = binary_runner
 
     def get_issue(self, repository_full_name: str, number: int) -> GitHubIssue:
         """Issue を取得する。"""
@@ -160,6 +179,71 @@ class GitHubClient:
             comments.extend(_build_comment_list(page))
         return comments
 
+    def list_repository_artifacts(
+        self,
+        repository_full_name: str,
+    ) -> list[GitHubArtifact]:
+        """repository 全体の artifact 一覧を取得する。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--paginate",
+                "--slurp",
+                f"repos/{repository_full_name}/actions/artifacts?per_page=100",
+            ]
+        )
+        if not isinstance(payload, list):
+            raise GitHubClientError("artifact 一覧取得結果の JSON 形式が不正です")
+
+        artifacts: list[GitHubArtifact] = []
+        for page in payload:
+            if not isinstance(page, dict):
+                raise GitHubClientError("artifact 一覧取得結果のページ形式が不正です")
+            artifacts.extend(_build_artifact_page(page))
+        return artifacts
+
+    def find_latest_repository_artifact_by_prefix(
+        self,
+        repository_full_name: str,
+        prefix: str,
+    ) -> GitHubArtifact | None:
+        """prefix に一致する最新 artifact を返す。"""
+        matches = [
+            artifact
+            for artifact in self.list_repository_artifacts(repository_full_name)
+            if artifact.name.startswith(prefix)
+        ]
+        if not matches:
+            return None
+        matches.sort(key=_artifact_sort_key, reverse=True)
+        return matches[0]
+
+    def download_repository_artifact(
+        self,
+        repository_full_name: str,
+        artifact_id: int,
+        destination_path: Path,
+    ) -> None:
+        """artifact zip を file として保存する。"""
+        if artifact_id <= 0:
+            raise GitHubClientError("artifact_id は 1 以上である必要があります")
+        if destination_path.exists():
+            raise GitHubClientError(f"`{destination_path}` は既に存在します")
+        try:
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = self._binary_runner(
+                [
+                    "gh",
+                    "api",
+                    f"repos/{repository_full_name}/actions/artifacts/{artifact_id}/zip",
+                ]
+            )
+            destination_path.write_bytes(payload)
+        except OSError as exc:
+            raise GitHubClientError(
+                f"`{destination_path}` への artifact 保存に失敗しました"
+            ) from exc
+
     def add_issue_comment_reaction(
         self,
         repository_full_name: str,
@@ -222,7 +306,7 @@ class GitHubClient:
 
 def build_github_client() -> GitHubClient:
     """標準の `gh` 実行器を使う client を返す。"""
-    return GitHubClient(run_gh_text)
+    return GitHubClient(run_gh_text, run_gh_binary)
 
 
 def run_gh_text(args: Sequence[str]) -> str:
@@ -249,6 +333,29 @@ def run_gh_text(args: Sequence[str]) -> str:
     )
 
 
+def run_gh_binary(args: Sequence[str]) -> bytes:
+    """`gh` を実行して標準出力 bytes を返す。"""
+    try:
+        completed = subprocess.run(
+            args,
+            check=False,
+            capture_output=True,
+            text=False,
+        )
+    except OSError as exc:
+        raise GitHubClientError(f"`gh` の実行に失敗しました: {exc}") from exc
+
+    if completed.returncode == 0:
+        return completed.stdout
+
+    stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+    if stderr:
+        raise GitHubClientError(f"`gh` の実行に失敗しました: {stderr}")
+    raise GitHubClientError(
+        f"`gh` の実行に失敗しました。終了コード: {completed.returncode}"
+    )
+
+
 def _require_github_target(target: ResolvedTarget) -> tuple[str, int]:
     """GitHub target に必要な識別子を返す。"""
     if target.backend != "github":
@@ -258,6 +365,48 @@ def _require_github_target(target: ResolvedTarget) -> tuple[str, int]:
     if target.number is None:
         raise GitHubClientError("GitHub target に番号がありません")
     return target.repository_full_name, target.number
+
+
+def _build_artifact_page(raw_page: dict[str, object]) -> list[GitHubArtifact]:
+    """artifact 一覧ページから artifact 群を構築する。"""
+    raw_artifacts = raw_page.get("artifacts")
+    if not isinstance(raw_artifacts, list):
+        raise GitHubClientError("artifact 一覧取得結果の `artifacts` が不正です")
+    return [_build_artifact(raw_artifact) for raw_artifact in raw_artifacts]
+
+
+def _build_artifact(raw_artifact: object) -> GitHubArtifact:
+    """artifact JSON を model へ変換する。"""
+    if not isinstance(raw_artifact, dict):
+        raise GitHubClientError("artifact 一覧の要素形式が不正です")
+    try:
+        return GitHubArtifact.model_validate(
+            {
+                "id": raw_artifact["id"],
+                "name": raw_artifact["name"],
+                "created_at": raw_artifact["created_at"],
+                "archive_download_url": raw_artifact["archive_download_url"],
+            }
+        )
+    except KeyError as exc:
+        raise GitHubClientError(
+            f"artifact 一覧の必須項目が不足しています: {exc.args[0]}"
+        ) from exc
+    except ValidationError as exc:
+        raise GitHubClientError("artifact 一覧の値が不正です") from exc
+
+
+def _artifact_sort_key(artifact: GitHubArtifact) -> tuple[datetime, int]:
+    """artifact の新しさ比較に使うキーを返す。"""
+    return (_parse_github_datetime(artifact.created_at), artifact.id)
+
+
+def _parse_github_datetime(value: str) -> datetime:
+    """GitHub の UTC timestamp を比較可能な datetime に直す。"""
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError as exc:
+        raise GitHubClientError(f"artifact の日時形式が不正です: {value}") from exc
 
 
 def _build_issue(repository_full_name: str, raw_issue: dict[str, object]) -> GitHubIssue:
