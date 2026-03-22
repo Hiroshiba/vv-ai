@@ -73,7 +73,7 @@
 
 - [x] `gh` ベースの GitHub 操作ラッパーを実装する
 - [x] Issue / PR / コメント取得を実装する
-- [ ] comment reaction の付与 / 解除を実装する
+- [x] comment reaction の付与 / 解除を実装する
 - [ ] artifact の検索と復元を実装する
 - [ ] Issue / PR / コメント作成を実装する
 

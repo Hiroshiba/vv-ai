@@ -1,4 +1,4 @@
-"""`gh` を使う GitHub 読み取り API。"""
+"""`gh` を使う GitHub 操作 API。"""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from vv_ai.resolve import ResolvedTarget
 
 IssueState = Literal["OPEN", "CLOSED"]
 PullRequestState = Literal["OPEN", "CLOSED", "MERGED"]
+GitHubReactionContent = Literal["eyes", "confused"]
 GhTextRunner = Callable[[Sequence[str]], str]
 
 
@@ -39,6 +40,16 @@ class GitHubComment(BaseModel):
     created_at: str
     updated_at: str
     url: str
+
+
+class GitHubReaction(BaseModel):
+    """Issue comment reaction を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    content: GitHubReactionContent
+    user: GitHubActor
 
 
 class GitHubIssue(BaseModel):
@@ -78,7 +89,7 @@ type GitHubTargetDetails = GitHubIssue | GitHubPullRequest
 
 
 class GitHubClient:
-    """`gh` を使って GitHub 情報を取得する。"""
+    """`gh` を使って GitHub 情報を操作する。"""
 
     def __init__(self, text_runner: GhTextRunner) -> None:
         self._text_runner = text_runner
@@ -148,6 +159,48 @@ class GitHubClient:
                 raise GitHubClientError("コメント取得結果のページ形式が不正です")
             comments.extend(_build_comment_list(page))
         return comments
+
+    def add_issue_comment_reaction(
+        self,
+        repository_full_name: str,
+        comment_id: int,
+        content: GitHubReactionContent,
+    ) -> GitHubReaction:
+        """Issue comment へ reaction を付与する。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--method",
+                "POST",
+                _build_issue_comment_reactions_path(repository_full_name, comment_id),
+                "-f",
+                f"content={content}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("reaction 付与結果の JSON 形式が不正です")
+        return _build_reaction(payload)
+
+    def remove_issue_comment_reaction(
+        self,
+        repository_full_name: str,
+        comment_id: int,
+        reaction_id: int,
+    ) -> None:
+        """Issue comment から reaction を解除する。"""
+        self._text_runner(
+            [
+                "gh",
+                "api",
+                "--method",
+                "DELETE",
+                _build_issue_comment_reaction_path(
+                    repository_full_name,
+                    comment_id,
+                    reaction_id,
+                ),
+            ]
+        )
 
     def get_target_details(self, target: ResolvedTarget) -> GitHubTargetDetails:
         """GitHub target に対応する本体を取得する。"""
@@ -263,6 +316,16 @@ def _build_comment_list(raw_comments: list[object]) -> list[GitHubComment]:
     return comments
 
 
+def _build_reaction(raw_reaction: dict[str, object]) -> GitHubReaction:
+    """reaction JSON を model へ変換する。"""
+    payload = {
+        "id": raw_reaction.get("id"),
+        "content": raw_reaction.get("content"),
+        "user": _build_rest_comment_author(raw_reaction.get("user")),
+    }
+    return _validate_model(GitHubReaction, payload, "reaction")
+
+
 def _build_actor(raw_actor: object) -> GitHubActor:
     """`gh issue view` 系の actor を変換する。"""
     if not isinstance(raw_actor, dict):
@@ -295,6 +358,46 @@ def _build_head_repository_full_name(raw_repo: object) -> str | None:
     if not isinstance(name_with_owner, str) or not name_with_owner:
         raise GitHubClientError("headRepository.nameWithOwner が不正です")
     return name_with_owner
+
+
+def _build_issue_comment_reactions_path(
+    repository_full_name: str,
+    comment_id: int,
+) -> str:
+    """Issue comment reactions endpoint を返す。"""
+    return (
+        f"repos/{_require_repository_full_name(repository_full_name)}"
+        f"/issues/comments/{_require_positive_id(comment_id, 'comment_id')}/reactions"
+    )
+
+
+def _build_issue_comment_reaction_path(
+    repository_full_name: str,
+    comment_id: int,
+    reaction_id: int,
+) -> str:
+    """Issue comment reaction endpoint を返す。"""
+    return (
+        f"{_build_issue_comment_reactions_path(repository_full_name, comment_id)}"
+        f"/{_require_positive_id(reaction_id, 'reaction_id')}"
+    )
+
+
+def _require_repository_full_name(repository_full_name: str) -> str:
+    """org/repo 形式の repository 名を返す。"""
+    if repository_full_name.count("/") != 1:
+        raise GitHubClientError("repository_full_name は `org/repo` 形式で指定してください")
+    owner, repo = repository_full_name.split("/")
+    if owner == "" or repo == "":
+        raise GitHubClientError("repository_full_name は `org/repo` 形式で指定してください")
+    return repository_full_name
+
+
+def _require_positive_id(value: int, field_name: str) -> int:
+    """正の整数 ID を返す。"""
+    if value <= 0:
+        raise GitHubClientError(f"`{field_name}` は 1 以上である必要があります")
+    return value
 
 
 def _coerce_text(value: object) -> str:
