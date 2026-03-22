@@ -5,13 +5,25 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections.abc import Sequence
+import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from vv_ai.config import VVAIConfigError, find_repo_root
+from vv_ai.execution import (
+    ExecutionArtifactError,
+    ExecutionResult,
+    save_execution_artifacts,
+)
 from vv_ai.input import CLIInput, InputError, build_raw_input_from_cli
+from vv_ai.metrics_artifact import (
+    MetricsBehavior,
+    MetricsUsage,
+    ProviderSpecificMetrics,
+    StepMetric,
+)
 from vv_ai.preflight import (
     PreflightError,
     ReadyExecution,
@@ -19,8 +31,9 @@ from vv_ai.preflight import (
     run_preflight,
 )
 from vv_ai.provider import ProviderResolutionError
+from vv_ai.report_artifact import ReportSections
 from vv_ai.resolve import ResolutionError, resolve_raw_input
-from vv_ai.session import SessionResolutionError, resolve_session
+from vv_ai.session import SessionResolutionError, SessionStateRef, resolve_session
 from vv_ai.target import TargetResolutionError, resolve_target
 
 
@@ -85,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI を起動し、終了コードを返す。"""
+    started_at = time.perf_counter()
     parser = build_parser()
     namespace = parser.parse_args(argv)
 
@@ -124,8 +138,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if isinstance(preflight_result, SilentSkip):
         return _handle_silent_skip(preflight_result)
 
-    print(_format_ready_message(preflight_result))
-    return 0
+    return _run_ready_execution(
+        repo_root,
+        preflight_result,
+        os.environ,
+        preflight_duration_seconds=time.perf_counter() - started_at,
+    )
 
 
 def _handle_silent_skip(result: SilentSkip) -> int:
@@ -178,3 +196,207 @@ def _format_session_suffix(result: ReadyExecution) -> str:
         f"session_key={session.key.canonical_key}, "
         f"session_restore={restore_suffix}"
     )
+
+
+def _run_ready_execution(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    env: Mapping[str, str],
+    *,
+    preflight_duration_seconds: float,
+) -> int:
+    """実行本体と artifact 保存を行う。"""
+    ready_message = _format_ready_message(ready_execution)
+    execution_started_at = time.perf_counter()
+    execution_result: ExecutionResult
+    runtime_error: BaseException | None = None
+    exit_code = 0
+
+    try:
+        execution_result = _build_success_result(
+            ready_execution,
+            ready_message,
+            preflight_duration_seconds,
+            execution_duration_seconds=time.perf_counter() - execution_started_at,
+        )
+    except KeyboardInterrupt as exc:
+        runtime_error = exc
+        exit_code = 130
+        execution_result = _build_cancelled_result(
+            ready_execution,
+            preflight_duration_seconds,
+            execution_duration_seconds=time.perf_counter() - execution_started_at,
+        )
+    except Exception as exc:
+        runtime_error = exc
+        exit_code = 1
+        execution_result = _build_failure_result(
+            ready_execution,
+            exc,
+            preflight_duration_seconds,
+            execution_duration_seconds=time.perf_counter() - execution_started_at,
+        )
+
+    try:
+        save_execution_artifacts(
+            repo_root,
+            ready_execution,
+            env,
+            execution_result,
+        )
+    except ExecutionArtifactError as exc:
+        print(f"artifact 保存エラー: {exc}", file=sys.stderr)
+        return 1
+
+    if runtime_error is None:
+        print(ready_message)
+        return 0
+    if isinstance(runtime_error, KeyboardInterrupt):
+        print("実行を中断しました", file=sys.stderr)
+        return exit_code
+
+    print(f"実行エラー: {_format_exception(runtime_error)}", file=sys.stderr)
+    return exit_code
+
+
+def _build_success_result(
+    ready_execution: ReadyExecution,
+    ready_message: str,
+    preflight_duration_seconds: float,
+    execution_duration_seconds: float,
+) -> ExecutionResult:
+    """現在の実装範囲における成功結果を返す。"""
+    return ExecutionResult(
+        status="success",
+        report_sections=ReportSections(
+            summary=(
+                f"`{ready_execution.command.command}` の実行準備を解決し、"
+                "artifact 保存まで完了した。"
+            ),
+            changes=(
+                "入力正規化、preflight、target 解決、session 解決を実行し、"
+                "その結果を session / metrics / report artifact として保存した。"
+            ),
+            decisions=(
+                "provider 実行と GitHub 反映は未実装のため、この段階では"
+                "現在の CLI が保証できる範囲を成功として保存した。"
+            ),
+            validation=(
+                f"CLI の ready message を生成した。内容: {ready_message}"
+            ),
+            risks_open_questions=(
+                "provider 実行本体、GitHub 連携、workflow 側の always 実行は"
+                "まだ未接続。"
+            ),
+            next_actions=(
+                "次は GitHub 連携か provider 実行ラッパーを実装し、"
+                "この保存ハーネスへ実行結果を流し込む。"
+            ),
+            notes=(
+                "現在の success は preflight 完了と artifact 保存完了を意味する。"
+            ),
+        ),
+        usage=MetricsUsage(),
+        behavior=MetricsBehavior(active_time_seconds=execution_duration_seconds),
+        tools={},
+        steps=_build_steps(
+            preflight_duration_seconds,
+            execution_duration_seconds,
+        ),
+        provider_specific=ProviderSpecificMetrics(),
+        state_ref=SessionStateRef(),
+        provider_session_path=None,
+        allow_edits_notice_posted=False,
+    )
+
+
+def _build_cancelled_result(
+    ready_execution: ReadyExecution,
+    preflight_duration_seconds: float,
+    execution_duration_seconds: float,
+) -> ExecutionResult:
+    """中断時の保存結果を返す。"""
+    return ExecutionResult(
+        status="cancelled",
+        report_sections=ReportSections(
+            summary=f"`{ready_execution.command.command}` 実行中に処理を中断した。",
+            changes="preflight と実行準備までは完了しており、中断時点の状態を保存した。",
+            decisions="中断でも後続調査に使えるよう 3 種 artifact の保存を優先した。",
+            validation="KeyboardInterrupt を cancel として扱った。",
+            risks_open_questions=(
+                "GitHub Actions 上で job 自体が停止された場合の後処理は"
+                "workflow 側実装が必要。"
+            ),
+            next_actions="workflow の always 実行と provider 実行本体を接続する。",
+            notes="provider session は未保存である。",
+        ),
+        usage=MetricsUsage(),
+        behavior=MetricsBehavior(active_time_seconds=execution_duration_seconds),
+        tools={},
+        steps=_build_steps(
+            preflight_duration_seconds,
+            execution_duration_seconds,
+        ),
+        provider_specific=ProviderSpecificMetrics(),
+        state_ref=SessionStateRef(),
+        provider_session_path=None,
+        allow_edits_notice_posted=False,
+    )
+
+
+def _build_failure_result(
+    ready_execution: ReadyExecution,
+    error: Exception,
+    preflight_duration_seconds: float,
+    execution_duration_seconds: float,
+) -> ExecutionResult:
+    """失敗時の保存結果を返す。"""
+    detail = _format_exception(error)
+    return ExecutionResult(
+        status="failure",
+        report_sections=ReportSections(
+            summary=f"`{ready_execution.command.command}` 実行中に失敗した。",
+            changes="preflight と実行準備までは完了しており、失敗時点の状態を保存した。",
+            decisions="失敗でも session / metrics / report を残す方針を優先した。",
+            validation=f"失敗要因: {detail}",
+            risks_open_questions=detail,
+            next_actions=(
+                "失敗要因を解消したうえで再実行し、provider 実行本体へ接続する。"
+            ),
+            notes="provider session は未保存である。",
+        ),
+        usage=MetricsUsage(),
+        behavior=MetricsBehavior(
+            failed_turns=1,
+            success_rate=0.0,
+            active_time_seconds=execution_duration_seconds,
+        ),
+        tools={},
+        steps=_build_steps(
+            preflight_duration_seconds,
+            execution_duration_seconds,
+        ),
+        provider_specific=ProviderSpecificMetrics(),
+        state_ref=SessionStateRef(),
+        provider_session_path=None,
+        allow_edits_notice_posted=False,
+    )
+
+
+def _build_steps(
+    preflight_duration_seconds: float,
+    execution_duration_seconds: float,
+) -> dict[str, StepMetric]:
+    """最低限の step metrics を返す。"""
+    return {
+        "preflight": StepMetric(duration_seconds=preflight_duration_seconds),
+        "execution": StepMetric(duration_seconds=execution_duration_seconds),
+    }
+
+
+def _format_exception(error: BaseException) -> str:
+    """例外を短い文字列に整形する。"""
+    message = str(error).strip()
+    if message == "":
+        return error.__class__.__name__
+    return f"{error.__class__.__name__}: {message}"

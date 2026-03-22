@@ -351,8 +351,20 @@ def _list_untracked_files(repo_root: Path) -> list[str]:
         path = repo_root / candidate
         if path.is_dir():
             continue
+        if _is_artifact_path(path, repo_root):
+            continue
         files.append(candidate)
     return files
+
+
+def _is_artifact_path(path: Path, repo_root: Path) -> bool:
+    """保存済み artifact 配下の path かどうかを返す。"""
+    artifacts_root = repo_root / ".vv-ai" / "artifacts"
+    try:
+        path.relative_to(artifacts_root)
+    except ValueError:
+        return False
+    return True
 
 
 def _sanitize_name(value: str) -> str:
