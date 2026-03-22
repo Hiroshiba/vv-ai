@@ -179,6 +179,82 @@ class GitHubClient:
             comments.extend(_build_comment_list(page))
         return comments
 
+    def create_issue_comment(
+        self,
+        repository_full_name: str,
+        number: int,
+        body: str,
+    ) -> GitHubComment:
+        """Issue または PR へ comment を投稿する。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--method",
+                "POST",
+                _build_issue_comments_path(repository_full_name, number),
+                "-f",
+                f"body={_require_non_empty_text(body, 'body')}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("コメント作成結果の JSON 形式が不正です")
+        return _build_comment(payload)
+
+    def create_issue(
+        self,
+        repository_full_name: str,
+        title: str,
+        body: str,
+    ) -> GitHubIssue:
+        """Issue を作成する。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--method",
+                "POST",
+                _build_issues_path(repository_full_name),
+                "-f",
+                f"title={_require_non_empty_text(title, 'title')}",
+                "-f",
+                f"body={body}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("Issue 作成結果の JSON 形式が不正です")
+        return _build_issue_from_rest(repository_full_name, payload)
+
+    def create_pull_request(
+        self,
+        repository_full_name: str,
+        title: str,
+        body: str,
+        head_branch: str,
+        base_branch: str,
+        maintainer_can_modify: bool,
+    ) -> GitHubPullRequest:
+        """Pull Request を作成する。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--method",
+                "POST",
+                _build_pulls_path(repository_full_name),
+                "-f",
+                f"title={_require_non_empty_text(title, 'title')}",
+                "-f",
+                f"body={body}",
+                "-f",
+                f"head={_require_non_empty_text(head_branch, 'head_branch')}",
+                "-f",
+                f"base={_require_non_empty_text(base_branch, 'base_branch')}",
+                "-F",
+                f"maintainer_can_modify={maintainer_can_modify}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("Pull Request 作成結果の JSON 形式が不正です")
+        return _build_pull_request_from_rest(repository_full_name, payload)
+
     def list_repository_artifacts(
         self,
         repository_full_name: str,
@@ -423,6 +499,23 @@ def _build_issue(repository_full_name: str, raw_issue: dict[str, object]) -> Git
     return _validate_model(GitHubIssue, payload, "Issue")
 
 
+def _build_issue_from_rest(
+    repository_full_name: str,
+    raw_issue: dict[str, object],
+) -> GitHubIssue:
+    """REST Issue JSON を model へ変換する。"""
+    payload = {
+        "repository_full_name": repository_full_name,
+        "number": raw_issue.get("number"),
+        "title": raw_issue.get("title"),
+        "body": _coerce_text(raw_issue.get("body")),
+        "state": _normalize_issue_state(raw_issue.get("state")),
+        "author": _build_rest_user(raw_issue.get("user")),
+        "url": raw_issue.get("html_url"),
+    }
+    return _validate_model(GitHubIssue, payload, "Issue")
+
+
 def _build_pull_request(
     repository_full_name: str,
     raw_pr: dict[str, object],
@@ -447,22 +540,50 @@ def _build_pull_request(
     return _validate_model(GitHubPullRequest, payload, "Pull Request")
 
 
+def _build_pull_request_from_rest(
+    repository_full_name: str,
+    raw_pr: dict[str, object],
+) -> GitHubPullRequest:
+    """REST Pull Request JSON を model へ変換する。"""
+    head = _require_mapping(raw_pr.get("head"), "head")
+    payload = {
+        "repository_full_name": repository_full_name,
+        "number": raw_pr.get("number"),
+        "title": raw_pr.get("title"),
+        "body": _coerce_text(raw_pr.get("body")),
+        "state": _normalize_pull_request_state(raw_pr.get("state")),
+        "author": _build_rest_user(raw_pr.get("user")),
+        "url": raw_pr.get("html_url"),
+        "head_ref_name": head.get("ref"),
+        "base_ref_name": _build_pull_request_base_ref_name(raw_pr.get("base")),
+        "head_repository_full_name": _build_pull_request_head_repository_full_name(head),
+        "is_cross_repository": _build_is_cross_repository(repository_full_name, head),
+        "maintainer_can_modify": raw_pr.get("maintainer_can_modify"),
+    }
+    return _validate_model(GitHubPullRequest, payload, "Pull Request")
+
+
 def _build_comment_list(raw_comments: list[object]) -> list[GitHubComment]:
     """comment 配列 JSON を model 配列へ変換する。"""
     comments: list[GitHubComment] = []
     for raw_comment in raw_comments:
-        if not isinstance(raw_comment, dict):
-            raise GitHubClientError("コメント要素の JSON 形式が不正です")
-        payload = {
-            "id": raw_comment.get("id"),
-            "body": _coerce_text(raw_comment.get("body")),
-            "author": _build_rest_comment_author(raw_comment.get("user")),
-            "created_at": raw_comment.get("created_at"),
-            "updated_at": raw_comment.get("updated_at"),
-            "url": raw_comment.get("html_url"),
-        }
-        comments.append(_validate_model(GitHubComment, payload, "コメント"))
+        comments.append(_build_comment(raw_comment))
     return comments
+
+
+def _build_comment(raw_comment: object) -> GitHubComment:
+    """comment JSON を model へ変換する。"""
+    if not isinstance(raw_comment, dict):
+        raise GitHubClientError("コメント要素の JSON 形式が不正です")
+    payload = {
+        "id": raw_comment.get("id"),
+        "body": _coerce_text(raw_comment.get("body")),
+        "author": _build_rest_user(raw_comment.get("user")),
+        "created_at": raw_comment.get("created_at"),
+        "updated_at": raw_comment.get("updated_at"),
+        "url": raw_comment.get("html_url"),
+    }
+    return _validate_model(GitHubComment, payload, "コメント")
 
 
 def _build_reaction(raw_reaction: dict[str, object]) -> GitHubReaction:
@@ -470,7 +591,7 @@ def _build_reaction(raw_reaction: dict[str, object]) -> GitHubReaction:
     payload = {
         "id": raw_reaction.get("id"),
         "content": raw_reaction.get("content"),
-        "user": _build_rest_comment_author(raw_reaction.get("user")),
+        "user": _build_rest_user(raw_reaction.get("user")),
     }
     return _validate_model(GitHubReaction, payload, "reaction")
 
@@ -486,15 +607,55 @@ def _build_actor(raw_actor: object) -> GitHubActor:
     )
 
 
-def _build_rest_comment_author(raw_user: object) -> GitHubActor:
-    """REST comment user を変換する。"""
+def _build_rest_user(raw_user: object) -> GitHubActor:
+    """REST user を変換する。"""
     if not isinstance(raw_user, dict):
-        raise GitHubClientError("comment user の JSON 形式が不正です")
+        raise GitHubClientError("REST user の JSON 形式が不正です")
     return _validate_model(
         GitHubActor,
         {"login": raw_user.get("login")},
-        "comment user",
+        "REST user",
     )
+
+
+def _build_pull_request_base_ref_name(raw_base: object) -> str:
+    """REST Pull Request base.ref を返す。"""
+    base = _require_mapping(raw_base, "base")
+    return _require_string(base.get("ref"), "base.ref")
+
+
+def _build_pull_request_head_repository_full_name(raw_head: dict[str, object]) -> str:
+    """REST Pull Request head.repo.full_name を返す。"""
+    raw_repo = raw_head.get("repo")
+    repo = _require_mapping(raw_repo, "head.repo")
+    return _require_string(repo.get("full_name"), "head.repo.full_name")
+
+
+def _build_is_cross_repository(
+    repository_full_name: str,
+    raw_head: dict[str, object],
+) -> bool:
+    """REST Pull Request の cross repository 判定を返す。"""
+    head_repository_full_name = _build_pull_request_head_repository_full_name(raw_head)
+    return head_repository_full_name != _require_repository_full_name(
+        repository_full_name
+    )
+
+
+def _normalize_issue_state(raw_state: object) -> IssueState:
+    """REST Issue state を model 用の値へ変換する。"""
+    normalized = _require_string(raw_state, "state").upper()
+    if normalized not in {"OPEN", "CLOSED"}:
+        raise GitHubClientError(f"Issue state が不正です: {raw_state}")
+    return normalized
+
+
+def _normalize_pull_request_state(raw_state: object) -> PullRequestState:
+    """REST Pull Request state を model 用の値へ変換する。"""
+    normalized = _require_string(raw_state, "state").upper()
+    if normalized not in {"OPEN", "CLOSED", "MERGED"}:
+        raise GitHubClientError(f"Pull Request state が不正です: {raw_state}")
+    return normalized
 
 
 def _build_head_repository_full_name(raw_repo: object) -> str | None:
@@ -518,6 +679,24 @@ def _build_issue_comment_reactions_path(
         f"repos/{_require_repository_full_name(repository_full_name)}"
         f"/issues/comments/{_require_positive_id(comment_id, 'comment_id')}/reactions"
     )
+
+
+def _build_issue_comments_path(repository_full_name: str, number: int) -> str:
+    """Issue comments endpoint を返す。"""
+    return (
+        f"repos/{_require_repository_full_name(repository_full_name)}"
+        f"/issues/{_require_positive_id(number, 'number')}/comments"
+    )
+
+
+def _build_issues_path(repository_full_name: str) -> str:
+    """Issues endpoint を返す。"""
+    return f"repos/{_require_repository_full_name(repository_full_name)}/issues"
+
+
+def _build_pulls_path(repository_full_name: str) -> str:
+    """Pulls endpoint を返す。"""
+    return f"repos/{_require_repository_full_name(repository_full_name)}/pulls"
 
 
 def _build_issue_comment_reaction_path(
@@ -546,6 +725,27 @@ def _require_positive_id(value: int, field_name: str) -> int:
     """正の整数 ID を返す。"""
     if value <= 0:
         raise GitHubClientError(f"`{field_name}` は 1 以上である必要があります")
+    return value
+
+
+def _require_non_empty_text(value: str, field_name: str) -> str:
+    """空でない文字列を返す。"""
+    if value.strip() == "":
+        raise GitHubClientError(f"`{field_name}` は空文字にできません")
+    return value
+
+
+def _require_mapping(value: object, field_name: str) -> dict[str, object]:
+    """dict 形式の JSON object を返す。"""
+    if not isinstance(value, dict):
+        raise GitHubClientError(f"{field_name} の JSON 形式が不正です")
+    return value
+
+
+def _require_string(value: object, field_name: str) -> str:
+    """空でない文字列を返す。"""
+    if not isinstance(value, str) or value == "":
+        raise GitHubClientError(f"{field_name} が不正です")
     return value
 
 

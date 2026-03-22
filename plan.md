@@ -75,7 +75,7 @@
 - [x] Issue / PR / コメント取得を実装する
 - [x] comment reaction の付与 / 解除を実装する
 - [x] artifact の検索と復元を実装する
-- [ ] Issue / PR / コメント作成を実装する
+- [x] Issue / PR / コメント作成を実装する
 
 ### 8. Provider 実行
 
