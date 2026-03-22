@@ -65,7 +65,7 @@
 - [x] session artifact の保存形式を実装する
 - [x] metrics artifact の保存形式を実装する
 - [x] report artifact の保存形式を実装する
-- [ ] `age` による暗号化 / 復号処理を実装する
+- [x] `age` による暗号化 / 復号処理を実装する
 - [x] report の Markdown テンプレートを実装する
 - [ ] success / failure / cancel で必ず保存する処理を実装する
 

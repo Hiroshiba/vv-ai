@@ -9,8 +9,13 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
+from vv_ai.artifact_crypto import (
+    ArtifactCryptoError,
+    decrypt_directory,
+    encrypt_directory,
+)
 from vv_ai.provider import ResolvedProvider
 from vv_ai.resolve import BackendName, ResolvedCommand
 from vv_ai.session import (
@@ -71,7 +76,6 @@ class SavedSessionArtifact(BaseModel):
 
     artifact_name: str
     artifact_path: str
-    meta_path: str
     manifest_path: str
 
 
@@ -124,6 +128,7 @@ def save_session_artifact(
     resolved_provider: ResolvedProvider,
     resolved_session: ResolvedSession,
     state_ref: SessionStateRef,
+    age_public_key: str,
     *,
     provider_session_path: Path | None = None,
     allow_edits_notice_posted: bool = False,
@@ -134,7 +139,7 @@ def save_session_artifact(
     current = _normalize_datetime(saved_at)
     artifact_name = build_session_artifact_name(resolved_session.key, workflow_id)
     sessions_root = repo_root / ".vv-ai" / "artifacts" / workflow_id / "sessions"
-    artifact_path = sessions_root / artifact_name
+    artifact_path = sessions_root / f"{artifact_name}.tar.age"
     temp_artifact_path = sessions_root / f".{artifact_name}.tmp"
     if artifact_path.exists():
         raise SessionArtifactError(f"`{artifact_path}` は既に存在します")
@@ -160,7 +165,7 @@ def save_session_artifact(
         _write_text(temp_artifact_path / "git-status.txt", snapshot.git_status)
         _copy_untracked_files(repo_root, temp_artifact_path, snapshot.untracked_files)
         _copy_provider_session_dir(provider_session_path, temp_artifact_path)
-        temp_artifact_path.replace(artifact_path)
+        encrypt_directory(temp_artifact_path, artifact_path, age_public_key)
     except OSError as exc:
         _cleanup_directory(temp_artifact_path)
         raise SessionArtifactError(
@@ -174,25 +179,68 @@ def save_session_artifact(
     except SessionArtifactError:
         _cleanup_directory(temp_artifact_path)
         raise
+    except ArtifactCryptoError as exc:
+        _cleanup_directory(temp_artifact_path)
+        raise SessionArtifactError(str(exc)) from exc
+    finally:
+        _cleanup_directory(temp_artifact_path)
 
+    manifest_state_ref = state_ref.model_copy(
+        update={"artifact_hint": str(artifact_path)}
+    )
     try:
         manifest_path = save_session_manifest(
             repo_root,
             workflow_id,
             resolved_session.key,
-            state_ref,
+            manifest_state_ref,
             saved_at=current,
         )
     except Exception as exc:
-        _cleanup_directory(artifact_path)
+        _cleanup_file(artifact_path)
         raise SessionArtifactError("session manifest の保存に失敗しました") from exc
 
     return SavedSessionArtifact(
         artifact_name=artifact_name,
         artifact_path=str(artifact_path),
-        meta_path=str(artifact_path / "meta.json"),
         manifest_path=str(manifest_path),
     )
+
+
+def decrypt_session_artifact(
+    artifact_path: Path,
+    destination_dir: Path,
+    age_secret_key: str,
+) -> Path:
+    """暗号化済み session artifact を復号して返す。"""
+    try:
+        decrypt_directory(artifact_path, destination_dir, age_secret_key)
+        load_session_artifact_meta(destination_dir)
+    except ArtifactCryptoError as exc:
+        raise SessionArtifactError(str(exc)) from exc
+    except SessionArtifactError:
+        _cleanup_directory(destination_dir)
+        raise
+    return destination_dir
+
+
+def load_session_artifact_meta(artifact_dir: Path) -> SessionArtifactMeta:
+    """展開済み session artifact から metadata を読み込む。"""
+    meta_path = artifact_dir / "meta.json"
+    if not meta_path.is_file():
+        raise SessionArtifactError(f"`{meta_path}` が見つかりません")
+
+    try:
+        raw_data = json.loads(meta_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise SessionArtifactError(f"`{meta_path}` の読み込みに失敗しました") from exc
+    except json.JSONDecodeError as exc:
+        raise SessionArtifactError(f"`{meta_path}` は JSON として不正です") from exc
+
+    try:
+        return SessionArtifactMeta.model_validate(raw_data)
+    except ValidationError as exc:
+        raise SessionArtifactError(f"`{meta_path}` の値が不正です") from exc
 
 
 def _build_session_artifact_meta(
@@ -340,3 +388,9 @@ def _cleanup_directory(path: Path) -> None:
     """途中生成した directory を削除する。"""
     if path.exists():
         shutil.rmtree(path, ignore_errors=True)
+
+
+def _cleanup_file(path: Path) -> None:
+    """途中生成した file を削除する。"""
+    if path.exists():
+        path.unlink()

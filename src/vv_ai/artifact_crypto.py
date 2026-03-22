@@ -1,0 +1,262 @@
+"""age を使う artifact 暗号化と復号。"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import tarfile
+import tempfile
+from collections.abc import Mapping
+from pathlib import Path
+
+AGE_PUBLIC_KEY_ENV = "VV_AI_AGE_PUBLIC_KEY"
+AGE_SECRET_KEY_ENV = "VV_AI_AGE_SECRET_KEY"
+
+
+class ArtifactCryptoError(Exception):
+    """artifact 暗号化と復号の失敗を表す例外。"""
+
+
+def resolve_age_public_key(env: Mapping[str, str]) -> str:
+    """暗号化用の公開鍵を環境変数から返す。"""
+    return _resolve_required_secret(env, AGE_PUBLIC_KEY_ENV)
+
+
+def resolve_age_secret_key(env: Mapping[str, str]) -> str:
+    """復号用の秘密鍵を環境変数から返す。"""
+    return _resolve_required_secret(env, AGE_SECRET_KEY_ENV)
+
+
+def encrypt_file(
+    source_path: Path,
+    destination_path: Path,
+    age_public_key: str,
+) -> None:
+    """単一 file を age で暗号化する。"""
+    _ensure_age_command()
+    if not source_path.is_file():
+        raise ArtifactCryptoError(f"`{source_path}` は暗号化対象の file ではありません")
+    if destination_path.exists():
+        raise ArtifactCryptoError(f"`{destination_path}` は既に存在します")
+
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_destination_path = destination_path.parent / f".{destination_path.name}.tmp"
+    if temp_destination_path.exists():
+        raise ArtifactCryptoError(f"`{temp_destination_path}` が残っています")
+
+    try:
+        _run_age_command(
+            [
+                "age",
+                "--encrypt",
+                "--recipient",
+                _normalize_secret(age_public_key, AGE_PUBLIC_KEY_ENV),
+                "--output",
+                str(temp_destination_path),
+                str(source_path),
+            ]
+        )
+        temp_destination_path.replace(destination_path)
+    except Exception:
+        _cleanup_path(temp_destination_path)
+        raise
+
+
+def decrypt_file(
+    source_path: Path,
+    destination_path: Path,
+    age_secret_key: str,
+) -> None:
+    """暗号化済み file を復号する。"""
+    _ensure_age_command()
+    if not source_path.is_file():
+        raise ArtifactCryptoError(f"`{source_path}` は復号対象の file ではありません")
+    if destination_path.exists():
+        raise ArtifactCryptoError(f"`{destination_path}` は既に存在します")
+
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_destination_path = destination_path.parent / f".{destination_path.name}.tmp"
+    if temp_destination_path.exists():
+        raise ArtifactCryptoError(f"`{temp_destination_path}` が残っています")
+
+    with _temporary_identity_file(age_secret_key) as identity_path:
+        try:
+            _run_age_command(
+                [
+                    "age",
+                    "--decrypt",
+                    "--identity",
+                    str(identity_path),
+                    "--output",
+                    str(temp_destination_path),
+                    str(source_path),
+                ]
+            )
+            temp_destination_path.replace(destination_path)
+        except Exception:
+            _cleanup_path(temp_destination_path)
+            raise
+
+
+def encrypt_directory(
+    source_dir: Path,
+    destination_path: Path,
+    age_public_key: str,
+) -> None:
+    """directory を tar bundle 化して age で暗号化する。"""
+    if not source_dir.is_dir():
+        raise ArtifactCryptoError(f"`{source_dir}` は暗号化対象の directory ではありません")
+
+    with tempfile.TemporaryDirectory(prefix="vv-ai-age-encrypt-") as temp_root:
+        archive_path = Path(temp_root) / f"{source_dir.name}.tar"
+        _create_tar_archive(source_dir, archive_path)
+        encrypt_file(archive_path, destination_path, age_public_key)
+
+
+def decrypt_directory(
+    source_path: Path,
+    destination_dir: Path,
+    age_secret_key: str,
+) -> None:
+    """暗号化済み tar bundle を復号して directory へ展開する。"""
+    if destination_dir.exists():
+        raise ArtifactCryptoError(f"`{destination_dir}` は既に存在します")
+
+    with tempfile.TemporaryDirectory(prefix="vv-ai-age-decrypt-") as temp_root:
+        archive_path = Path(temp_root) / "artifact.tar"
+        decrypt_file(source_path, archive_path, age_secret_key)
+        temp_destination_dir = destination_dir.parent / f".{destination_dir.name}.tmp"
+        if temp_destination_dir.exists():
+            raise ArtifactCryptoError(f"`{temp_destination_dir}` が残っています")
+        try:
+            temp_destination_dir.mkdir(parents=True, exist_ok=False)
+            _extract_tar_archive(archive_path, temp_destination_dir)
+            temp_destination_dir.replace(destination_dir)
+        except Exception:
+            _cleanup_path(temp_destination_dir)
+            raise
+
+
+def decrypt_file_text(
+    source_path: Path,
+    age_secret_key: str,
+) -> str:
+    """暗号化済み text file を UTF-8 文字列へ復号する。"""
+    with tempfile.TemporaryDirectory(prefix="vv-ai-age-text-") as temp_root:
+        plaintext_path = Path(temp_root) / "plaintext"
+        decrypt_file(source_path, plaintext_path, age_secret_key)
+        try:
+            return plaintext_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ArtifactCryptoError(
+                f"`{source_path}` の復号結果を読み込めませんでした"
+            ) from exc
+
+
+def _resolve_required_secret(
+    env: Mapping[str, str],
+    env_name: str,
+) -> str:
+    """必須の秘密値を環境変数から返す。"""
+    raw_value = env.get(env_name)
+    if raw_value is None:
+        raise ArtifactCryptoError(f"環境変数 `{env_name}` が必要です")
+    return _normalize_secret(raw_value, env_name)
+
+
+def _normalize_secret(value: str, env_name: str) -> str:
+    """空文字でない秘密値を返す。"""
+    normalized = value.strip()
+    if normalized == "":
+        raise ArtifactCryptoError(f"環境変数 `{env_name}` が空です")
+    return normalized
+
+
+def _ensure_age_command() -> None:
+    """age コマンドが実行可能か確認する。"""
+    if shutil.which("age") is not None:
+        return
+    raise ArtifactCryptoError("`age` コマンドが見つかりません")
+
+
+def _run_age_command(command: list[str]) -> None:
+    """age コマンドを実行する。"""
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return
+
+    stderr = result.stderr.strip()
+    detail = f": {stderr}" if stderr else ""
+    raise ArtifactCryptoError(
+        f"`{' '.join(command[:2])}` の実行に失敗しました{detail}"
+    )
+
+
+def _create_tar_archive(
+    source_dir: Path,
+    archive_path: Path,
+) -> None:
+    """directory から tar archive を作る。"""
+    try:
+        with tarfile.open(archive_path, mode="w") as archive:
+            archive.add(source_dir, arcname=".")
+    except OSError as exc:
+        raise ArtifactCryptoError(f"`{source_dir}` の bundle 化に失敗しました") from exc
+    except tarfile.TarError as exc:
+        raise ArtifactCryptoError(f"`{source_dir}` の bundle 化に失敗しました") from exc
+
+
+def _extract_tar_archive(
+    archive_path: Path,
+    destination_dir: Path,
+) -> None:
+    """tar archive を directory へ展開する。"""
+    try:
+        with tarfile.open(archive_path, mode="r") as archive:
+            archive.extractall(destination_dir, filter="data")
+    except OSError as exc:
+        raise ArtifactCryptoError(f"`{archive_path}` の展開に失敗しました") from exc
+    except tarfile.TarError as exc:
+        raise ArtifactCryptoError(f"`{archive_path}` の展開に失敗しました") from exc
+
+
+class _TemporaryIdentityFile:
+    """age 秘密鍵を一時 file として扱う。"""
+
+    def __init__(self, secret_key: str) -> None:
+        self._secret_key = _normalize_secret(secret_key, AGE_SECRET_KEY_ENV)
+        self._path: Path | None = None
+
+    def __enter__(self) -> Path:
+        file_descriptor, raw_path = tempfile.mkstemp(prefix="vv-ai-age-key-")
+        os.close(file_descriptor)
+        path = Path(raw_path)
+        path.write_text(self._secret_key + "\n", encoding="utf-8")
+        path.chmod(0o600)
+        self._path = path
+        return path
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        if self._path is not None and self._path.exists():
+            self._path.unlink()
+
+
+def _temporary_identity_file(secret_key: str) -> _TemporaryIdentityFile:
+    """秘密鍵用の context manager を返す。"""
+    return _TemporaryIdentityFile(secret_key)
+
+
+def _cleanup_path(path: Path) -> None:
+    """途中生成した path を削除する。"""
+    if not path.exists():
+        return
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+        return
+    path.unlink()

@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import re
+import tempfile
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from vv_ai.artifact_crypto import (
+    ArtifactCryptoError,
+    decrypt_file_text,
+    encrypt_file,
+)
 from vv_ai.session import ResolvedSession, SessionKey
 
 _SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
@@ -96,30 +102,31 @@ def save_report_artifact(
     workflow_id: str,
     resolved_session: ResolvedSession,
     report_sections: ReportSections,
+    age_public_key: str,
 ) -> SavedReportArtifact:
     """report artifact を保存する。"""
     artifact_name = build_report_artifact_name(resolved_session.key, workflow_id)
     reports_root = repo_root / ".vv-ai" / "artifacts" / workflow_id / "reports"
-    artifact_path = reports_root / "report.md"
-    temp_artifact_path = reports_root / ".report.md.tmp"
+    artifact_path = reports_root / "report.md.age"
 
     if artifact_path.exists():
         raise ReportArtifactError(f"`{artifact_path}` は既に存在します")
-    if temp_artifact_path.exists():
-        raise ReportArtifactError(f"`{temp_artifact_path}` が残っています")
 
     try:
         reports_root.mkdir(parents=True, exist_ok=True)
-        temp_artifact_path.write_text(
-            render_report_markdown(report_sections),
-            encoding="utf-8",
-        )
-        temp_artifact_path.replace(artifact_path)
+        with tempfile.TemporaryDirectory(prefix="vv-ai-report-") as temp_root:
+            plaintext_path = Path(temp_root) / "report.md"
+            plaintext_path.write_text(
+                render_report_markdown(report_sections),
+                encoding="utf-8",
+            )
+            encrypt_file(plaintext_path, artifact_path, age_public_key)
     except OSError as exc:
-        _cleanup_file(temp_artifact_path)
         raise ReportArtifactError(
             f"`{artifact_path}` の保存に失敗しました"
         ) from exc
+    except ArtifactCryptoError as exc:
+        raise ReportArtifactError(str(exc)) from exc
 
     return SavedReportArtifact(
         artifact_name=artifact_name,
@@ -134,7 +141,12 @@ def _sanitize_name(value: str) -> str:
     return normalized or "unknown"
 
 
-def _cleanup_file(path: Path) -> None:
-    """途中生成した file を削除する。"""
-    if path.exists():
-        path.unlink()
+def load_report_artifact(
+    artifact_path: Path,
+    age_secret_key: str,
+) -> str:
+    """暗号化済み report artifact を復号して返す。"""
+    try:
+        return decrypt_file_text(artifact_path, age_secret_key)
+    except ArtifactCryptoError as exc:
+        raise ReportArtifactError(str(exc)) from exc

@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
+from pydantic import ValidationError
 
+from vv_ai.artifact_crypto import (
+    ArtifactCryptoError,
+    decrypt_file_text,
+    encrypt_file,
+)
 from vv_ai.provider import ResolvedProvider
 from vv_ai.resolve import BackendName, ResolvedCommand
 from vv_ai.session import ResolvedSession, SessionKey
@@ -178,6 +185,7 @@ def save_metrics_artifact(
     resolved_command: ResolvedCommand,
     resolved_provider: ResolvedProvider,
     resolved_session: ResolvedSession,
+    age_public_key: str,
     *,
     usage: MetricsUsage | None = None,
     behavior: MetricsBehavior | None = None,
@@ -189,7 +197,12 @@ def save_metrics_artifact(
     """metrics artifact を保存する。"""
     artifact_name = build_metrics_artifact_name(resolved_session.key, workflow_id)
     artifact_path = (
-        repo_root / ".vv-ai" / "artifacts" / workflow_id / "metrics" / f"{artifact_name}.json"
+        repo_root
+        / ".vv-ai"
+        / "artifacts"
+        / workflow_id
+        / "metrics"
+        / f"{artifact_name}.json.age"
     )
     if artifact_path.exists():
         raise MetricsArtifactError(f"`{artifact_path}` は既に存在します")
@@ -210,19 +223,38 @@ def save_metrics_artifact(
     )
     try:
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
-        artifact_path.write_text(
-            json.dumps(artifact.model_dump(), ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        with tempfile.TemporaryDirectory(prefix="vv-ai-metrics-") as temp_root:
+            plaintext_path = Path(temp_root) / f"{artifact_name}.json"
+            plaintext_path.write_text(
+                json.dumps(artifact.model_dump(), ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            encrypt_file(plaintext_path, artifact_path, age_public_key)
     except OSError as exc:
         raise MetricsArtifactError(
             f"`{artifact_path}` の書き込みに失敗しました"
         ) from exc
+    except ArtifactCryptoError as exc:
+        raise MetricsArtifactError(str(exc)) from exc
 
     return SavedMetricsArtifact(
         artifact_name=artifact_name,
         artifact_path=str(artifact_path),
     )
+
+
+def load_metrics_artifact(
+    artifact_path: Path,
+    age_secret_key: str,
+) -> MetricsArtifact:
+    """暗号化済み metrics artifact を復号して返す。"""
+    try:
+        plaintext = decrypt_file_text(artifact_path, age_secret_key)
+        return MetricsArtifact.model_validate_json(plaintext)
+    except ArtifactCryptoError as exc:
+        raise MetricsArtifactError(str(exc)) from exc
+    except ValidationError as exc:
+        raise MetricsArtifactError(f"`{artifact_path}` の値が不正です") from exc
 
 
 def _build_summary(
