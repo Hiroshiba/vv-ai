@@ -1,320 +1,316 @@
-# Nullable とデフォルト引数の整理方針
+# Nullable とデフォルト値の整理仕様
 
 ## 前提
 
-- この文書は、`| None` と不要なデフォルト引数を減らすための詳細なリファクタリング方針をまとめたもの
-- この段階ではコードを変更しない
-- 互換性は考慮しない
-- 実装時に既存の曖昧な構造を守る必要はない
-- 欠損を救済するフォールバックは原則としてバグの温床とみなす
+- この文書は nullable と不要なデフォルト値を整理する実装仕様
+- この段階ではコードを書き換えない
+- 実装はこの文書に従って進める
+- requirements に書かれた product behavior は維持する
+- requirements に書かれていない救済 fallback は増やさない
 - 欠損は入力境界でだけ扱い、内部では型で前提条件を表現する
 
-## 目的
+## この整理で維持する仕様
 
-- `None` と空文字とデフォルト値で欠損を表す設計をやめる
-- `is None` `or None` `== ""` で成り立っている後段の分岐をなくす
-- 内部モデルを読めば必須値が分かる状態にする
-- 想定外の入力や中途半端な状態を即例外にする
-- 型を合わせるためだけの救済ロジックをなくす
+- command 省略時は `reply`
+- `session` 省略時は `inherit`
+- `dry_run` 省略時は `false`
+- provider 明示指定が最優先
+- provider 自動選択は `vv-ai.yml` の `provider_priority` を優先し、未指定なら `codex` `claude`
+- provider 自動選択は優先順を先頭から調べ、秘密値がある最初の provider を選ぶ
+- `issue` の `--repo` は GitHub event では未指定なら workflow の repo、local event では未指定なら local backend
+- `target_url` は `target_type` と `target_number` より優先
+- 未許可 `issue_comment` は完全サイレント
+- `workflow_dispatch` は `Hiroshiba` だけが通る
+- `workflow_dispatch` の `reply` `plan` `implement` `review` は workflow が置かれた repo だけを対象にする
+- local replay の GitHub event は synthetic な workflow ID を使える
+- Issue から PR を作る `implement` は Issue の main session を PR の main session へ fork する
+- `compact` では fork 前に compact をかけた state を複製する
+- `new` では PR 側を新規 session にする
 
-## ゴール
+## 削除対象と例外
 
-- 外部入力モデル以外で不要な `| None` が残っていない
-- class のフィールド定義にある不要なデフォルト値が消えている
-- 通常関数の引数にある不要なデフォルト値が消えている
-- `== ""` `!= ""` `or {}` `or False` のような後段救済が消えている
-- 各 nullable に対して、なぜ必要かを一行で説明できる
-- 各デフォルト引数に対して、なぜ不可避かを一行で説明できる
-
-## 基本方針
-
-- 欠損を扱ってよい層を限定する
-- command 差分、backend 差分、provider 差分は nullable ではなく型で表現する
-- 空文字を未指定扱いする正規化は外部入力直後に閉じ込める
-- 後段では空文字も `None` も救済しない
-- 必須かどうかを boolean 補助フラグで持たず、型で表す
-- 呼び出し側が決めるべき値を callee 側で補完しない
-- 互換のための余分なフィールドは残さない
-
-## 何を残してよいか
-
-- `None` を残してよいのは次だけ
-- 外部入力の生データ
-- 判別 union の未選択側
-- 永続化上、本当に省略可能と定義した構造
-- デフォルト値を残してよいのは次だけ
-- `argparse` のように外部 API の都合で必要なもの
-- 外部ライブラリの制約で避けられないもの
-
-## 何を削除対象にするか
-
+- 削除対象
 - `field: T | None = None`
 - `arg: T | None = None`
 - `value or fallback`
 - `value.strip() or None`
 - `if value is None: return fallback`
 - `if value == "": return fallback`
-- `repo or repository_full_name`
 - `usage or MetricsUsage()`
 - `tools or {}`
 - `steps or {}`
 - `dry_run or False`
-- `slug_hint or body or "comment"` のような多段フォールバック
+- `repo or repository_full_name`
+- `slug_hint or body or "comment"`
+- 残してよい `None`
+- 外部入力の生データ
+- 永続化上、本当に省略可能と定義した構造
+- 残してよい default
+- `argparse` が要求する parser default
+- schema version の固定値
+- 判別用の固定 literal
+- 外部ライブラリ都合で避けられない値
+- 残さない default
+- product behavior を暗黙に補う field default
+- 現在時刻の暗黙補完
+- body から slug を補う値
+- status の初期値のような生成時挙動
 
-## 現状の問題
+## runtime 文脈
 
-- 入力層で許した欠損が、そのまま内部層へ流れ込んでいる
-- 単一モデルに複数の command や backend の事情を押し込んでいる
-- GitHub target と local target のような別概念が同じモデルに入っている
-- session 関連で、状態差分を `None` 判定に依存している
-- artifact と metrics の保存モデルが nullable の集合になっている
-- 現在時刻や slug のような値を関数内デフォルトで補完している
-- 空文字が未指定の代用品として使われている
-- `has_target` のような補助フラグが、型で表せる情報を重複保持している
+- `GitHubRunContext`
+- GitHub Actions 上の実行
+- `GITHUB_RUN_ID` と `GITHUB_RUN_ATTEMPT` を使う
+- `GitHubReplayContext`
+- local で GitHub event payload を再現する実行
+- debug 用の synthetic workflow ID を使う
+- `LocalRunContext`
+- local CLI 直実行
+- local workflow ID を使う
 
-## 層ごとの整理方針
+## 層ごとの責務
 
 ### 入力層
 
-- CLI 引数と GitHub event payload は未指定や欠損を受け入れる
-- ただし、空文字や空白だけの文字列はこの層で処理を終える
-- 片側だけ指定された target 情報はここで落とすか、直後の正規化層で落とす
-- この層の責務は、受理と最小限の字句変換までに限定する
-- この層の nullable は後段へ広げない
+- CLI 引数、GitHub event payload、`vv-ai.yml` を受ける
+- 空文字と空白だけの文字列はこの層で処理を終える
+- event-file の event 判定のような字句的補助はこの層で完結させる
+- nullable を後段へ持ち込まない
 
 ### 正規化層
 
-- 外部入力から内部実行モデルへ変換する責務を明確にする
-- command ごとの必須条件をここで確定する
-- ここを超えたら、内部モデルには不要な `None` を持ち込まない
-- 空文字から未指定への変換や option の補完はここまでで終える
-- `has_target` のような補助フラグは、型で置き換えられるなら削除する
+- product behavior の既定値をここで明示的に確定する
+- command 別、event 別、target 入力別、provider 選択別の内部 model へ分解する
+- `has_target` のような補助フラグは使わない
+- `repo or repository_full_name` のような後段 fallback はここで置き換える
 
 ### 実行層
 
-- command 差分を union へ分解する
-- backend 差分を union へ分解する
-- provider 差分を union へ分解する
-- mode 差分を union へ分解する
-- 実行コードは `None` 判定ではなく型分岐で書ける形にする
+- 完成済みの内部 model だけを受け取る
+- `None` 判定ではなく型分岐で処理する
+- event 差分、backend 差分、provider 差分、session mode 差分を union で表現する
 
 ### 永続化層
 
 - 保存 JSON に不要な `null` を残さない
-- backend ごとに形が違うならサブモデルを分ける
-- provider ごとに形が違うならサブモデルを分ける
-- 集計未実施と値 0 を混同しない
-- 呼び出し時点で保存対象を完成させ、保存関数内で補完しない
+- backend 別 provider 別に shape を分ける
+- 保存関数は完成済み model だけを受け取る
 
-## モジュール別の詳細方針
+## 仕様で保持する既定値の置き場所
+
+- `reply` 既定は parser 後の command 正規化で確定する
+- `inherit` 既定は session 入力正規化で確定する
+- `false` 既定は dry-run 入力正規化で確定する
+- provider 既定順は provider 選択入力の生成時に `codex` `claude` を明示的に埋める
+- GitHub event の `issue` repo 既定は issue destination 正規化で workflow repo を埋める
+- local event の `issue` repo 省略は `LocalIssueDestination` を選ぶことで表す
+- status の初期値は `create_local_issue` `create_local_pr` の呼び出し側で明示する
+- synthetic workflow ID は replay context の生成で明示する
+
+## 内部 model の分割方針
+
+### command と event
+
+- `ResolvedCommand` は廃止する
+- command は少なくとも `ReplyCommand` `PlanCommand` `ImplementCommand` `ReviewCommand` `IssueCommand` に分ける
+- event は少なくとも `IssueCommentEventCommand` `WorkflowDispatchCommand` `LocalCommand` に分ける
+- `actor` `comment_id` `comment_author` `comment_body` を共通 optional field に置かない
+- `issue_comment` は target を必ず持つ event model にする
+- `workflow_dispatch` は target 省略可の event model にする
+- local は GitHub comment metadata を持たない event model にする
+- `workflow_dispatch` の通常コマンドは workflow repo 外の GitHub target を弾く
+
+### target 入力
+
+- `target_url` に GitHub URL と local path を同居させない
+- 正規化層で少なくとも次に分ける
+- `GitHubUrlTargetInput`
+- `LocalPathTargetInput`
+- `LocalDirectoryTargetInput`
+- `LocalDocumentTargetInput`
+- `GitHubNumberTargetInput`
+- 対象なしは command 側の型で表す
+- `target_url` 優先は正規化層で分岐順として固定する
+- `workflow_dispatch` の通常コマンドでは GitHub target の repo が workflow repo と一致することを正規化層で検証する
+- local target は directory と markdown file の両方を受ける
+
+### issue の行き先
+
+- `issue` の行き先は専用型へ分ける
+- `ExplicitIssueRepoDestination`
+- `WorkflowRepositoryIssueDestination`
+- `LocalIssueDestination`
+- 後段は destination 型だけを見る
+
+### provider
+
+- provider 未確定の入力と provider 確定後の入力を分ける
+- provider source は少なくとも次に分ける
+- `ExplicitProviderSelection`
+- `ConfigPriorityProviderSelection`
+- `DefaultPriorityProviderSelection`
+- 明示指定では指定 provider だけを検証する
+- 自動選択では優先順を先頭から順に見て、使える最初の provider を選ぶ
+- 先頭が使えないときは次へ進む
+
+### session
+
+- `ResolvedSession` は廃止する
+- 少なくとも `NewSession` `InheritedSession` `CompactSession` に分ける
+- `restore_manifest` と `state_ref` を optional field にしない
+- session scope は target あり command、GitHub issue 作成、local issue 作成で別型にする
+- Issue から PR を作る経路は通常の target 変更と分けて `ForkedSession` のような専用遷移型で表す
+- fork 元の Issue session key と fork 先の PR session key の関係を型に残す
+
+### persistence
+
+- summary と meta は backend 別に分ける
+- provider 固有 metrics は provider 別に分ける
+- session manifest の一覧取得とキー指定取得は API を分ける
+- artifact 名の正規化は空文字 fallback を使わず、正規化後に空なら例外にする
+
+## モジュール別の決定
 
 ### `src/vv_ai/input.py`
 
-- `CLIInput` は外部入力モデルなので nullable を許容してよい
-- `RawInput` は長く生かさず、内部モデルへ変換するためだけの短命な中間表現にする
-- `CommentInvocation` も command 差分を一つに押し込めない
-- `_coerce_optional_str` `_coerce_optional_int` `_coerce_optional_bool` `_coerce_optional_literal` は、外部入力受理専用の関数として閉じ込める
-- 空文字を `None` に変える処理はここで完結させる
-- 文字列項目は `""` を有効値として扱わない
-- option の片側指定を許さない
-- ここで受理した nullable をそのまま `resolve.py` 以後へ流さない
+- `CLIInput` は外部入力なので nullable を許容してよい
+- `RawInput` は削る
+- `CommentInvocation` も command 別 model に寄せる
+- `_coerce_optional_*` は入力層専用として残してよい
+- `parse_comment_invocation` の command 省略 `reply` は仕様として維持する
+- `event_file` の event 自動判定は入力層の補助として扱う
+- `dry_run` の既定 `false` は parser 後の正規化で確定する
+
+### `src/vv_ai/config.py`
+
+- `VVAIConfig.provider_priority` の field default は削る
+- config model は設定ファイルに書かれた値だけを表す
+- built-in の `codex` `claude` は config model ではなく provider 選択入力の生成で埋める
+- `find_repo_root` の探索順は `vv-ai.yml`、`.git`、現在地で固定し、repo root 解決の仕様として明記する
 
 ### `src/vv_ai/resolve.py`
 
-- `ResolvedCommand` を単一モデルで持たない
-- command 別 union へ分解する
-- 少なくとも以下の違いを型で表す
-- instruction 必須か
-- target 必須か
-- repo 必須か
-- session 設定を持ちうるか
-- target 情報が URL 由来か番号指定由来か
-- `has_target` は削除候補
-- `instruction: str | None` は削除候補
-- `target_url: str | None` `target_type: TargetType | None` `target_number: int | None` は同居させない
-- `repo or repository_full_name` のようなフォールバックをやめる
-- `issue` command で repo が必須なら必須型にする
-- `reply` `issue` の instruction 必須条件は、例外判定でなく型で表現する
+- `ResolvedTarget` を `resolve.py` に置かない
+- command の必須条件は command 別 model で表す
+- `instruction: str | None`
+- `provider: ProviderName | None`
+- `session_mode: SessionMode | None`
+- `repo: str | None`
+- `target_url: str | None`
+- `target_type: TargetType | None`
+- `target_number: int | None`
+- `has_target`
+- 上記の共通 optional field は削除対象
 
 ### `src/vv_ai/target.py`
 
-- `ResolvedTarget` を単一モデルで持たない
-- `GitHubTarget` と `LocalTarget` に分割する
-- GitHub 側だけが持つ `repository_full_name` `number` `url` を local 側に持たせない
-- local 側だけが持つ `local_id` `path` を GitHub 側に持たせない
-- target がない状態を `ResolvedTarget | None` で持つのではなく、command 側の型で表す
-- `None` を返す補助関数は、対象なしを扱う責務と対象解決責務が混ざっているので分離する
-- URL からの target 解決と field からの target 解決は、戻り型を明確に分ける
+- `GitHubTarget` と `LocalTarget` に分ける
+- GitHub URL 判定と local path 判定を input 型の段階で終える
+- `startswith("https://github.com/")` のような文字列判定を後段へ残さない
+- local target path の許可範囲は `.vv-ai/issues/<id>` `.vv-ai/issues/<id>/issue.md` `.vv-ai/prs/<id>` `.vv-ai/prs/<id>/pr.md` に固定する
 
-### `src/vv_ai/session.py`
+### `src/vv_ai/provider.py`
 
-- `SessionStateRef` は provider 差分を見直す
-- `provider_session_id` が必要な経路では必須型にする
-- `summary_path` `artifact_hint` が本当に省略可能かを個別に判断する
-- `ResolvedSession` も mode ごとに分ける
-- `new` `inherit` `compact` の違いを nullable で表さない
-- `restore_manifest` があるかないかを `None` で持たない
-- `state_ref` があるかないかも mode 別型で表す
-- `restore_strategy` と `mode` の重複関係も見直す
-
-### `src/vv_ai/session_store.py`
-
-- `saved_at: datetime | None = None` は削除対象
-- 時刻は呼び出し側で確定して渡す
-- `session_key: SessionKey | None = None` で絞り込みの有無を持つ API は再設計する
-- 全件取得とキー指定取得を別関数に分ける
-- 保存 JSON の manifest でも不要な nullable をやめる
-- manifest は、その mode で必須な情報だけを持つ構造にする
-
-### `src/vv_ai/session_artifact.py`
-
-- `SessionArtifactMeta` の target 関連 nullable を整理する
-- backend によって構造が違うなら別サブモデルに分ける
-- `provider_session_id` が必須な保存物なら必須型にする
-- `provider_session_path: Path | None = None` は削除対象
-- 保存対象に provider session directory があるなら、呼び出し側が明示的に渡す
-- `saved_at: datetime | None = None` は削除対象
-- `allow_edits_notice_posted` が常に必要な値ならデフォルト値を持たせない
-- Git 状態、target 状態、session 状態を平坦な一つの model に押し込めすぎない
-
-### `src/vv_ai/metrics_artifact.py`
-
-- `MetricsSummary` の target 関連 nullable を backend ごとに再設計する
-- `MetricsUsage` の各項目が nullable の羅列になっている構造を見直す
-- `MetricsBehavior` も同様
-- `ToolMetric` `StepMetric` も未集計を nullable で持つ必要があるか再検討する
-- provider 固有 metrics を `codex: ... | None` `claude: ... | None` で並べるのをやめる
-- provider ごとに別構造へ分ける
-- `save_metrics_artifact` の `usage=None` `behavior=None` `tools=None` `steps=None` `provider_specific=None` `saved_at=None` は削除対象
-- 保存関数は完成済みモデルだけを受け取る
-- 「未集計」と「0」は別概念として定義する
-
-### `src/vv_ai/local_store.py`
-
-- `generate_local_workflow_id(now: datetime | None = None)` は削除対象
-- 現在時刻を使うなら、呼び出し側が明示的に渡す
-- `create_local_issue` `create_local_pr` の `created_at=None` は削除対象
-- `append_local_comment` の `slug_hint=None` `created_at=None` は削除対象
-- slug を body から補完する挙動も再考する
-- slug が必要なら呼び出し側が決める
-- body が空でも fallback で comment にするような多段補完はやめる
-- 現在時刻生成と保存処理を分離する
+- `resolve_provider` の入力を command 全体ではなく provider 選択入力へ絞る
+- `ProviderSource` は `explicit` `config` `default` に分ける
+- required secrets のエラーメッセージは最終的な優先順から組み立てる
 
 ### `src/vv_ai/preflight.py`
 
-- `ReadyExecution` の `resolved_session: ResolvedSession | None` は削除候補
-- preflight の途中状態と session 解決後の状態を分ける
-- 完成済み状態と未完成状態を同じ model に載せない
-- `_normalize_optional_env_value` は環境変数入力の正規化なので許容候補
-- ただし空文字を後段へ流さない責務を明記する
+- `ReadyExecution.resolved_session: ResolvedSession | None` は削除する
+- preflight 完了状態と session 解決後状態を分ける
+- 認可は event 別 model を受けて行い、`actor is None` を見ない
+- unauthorized `issue_comment` の silent skip は専用 result 型で維持する
+- `workflow_dispatch` の `Hiroshiba` 制約は preflight 仕様として維持する
+- workflow ID は runtime context 型から解決する
+
+### `src/vv_ai/session.py`
+
+- `SessionStateRef` は provider 別に再設計する
+- `provider_session_id` が必要な経路では必須にする
+- `summary_path` `artifact_hint` の必要性を個別に判断する
+- `restore_strategy` と `mode` の重複をなくす
+- Issue → PR fork の入力と結果を専用型で表し、通常の `inherit` `compact` `new` と合流させる位置を明示する
+
+### `src/vv_ai/session_store.py`
+
+- `saved_at: datetime | None = None` は削除する
+- `session_key: SessionKey | None = None` の API は分離する
+- filename 生成はそのままでもよいが、入力は完成済み `SessionKey` だけにする
+
+### `src/vv_ai/local_store.py`
+
+- `generate_local_workflow_id(now: datetime | None = None)` は削除する
+- `create_local_issue` `create_local_pr` の `created_at=None` は削除する
+- `append_local_comment` の `slug_hint=None` `created_at=None` は削除する
+- `LocalIssueMeta.status = "open"` `LocalPRMeta.status = "open"` は生成側で明示し、field default に置かない
+- `kind` と `backend` の固定 literal は判別用定数として残してよい
+- `_slugify(..., fallback=...)` は fallback をやめ、空なら例外にする
+
+### `src/vv_ai/session_artifact.py`
+
+- `SessionArtifactMeta` は backend 別に分ける
+- `provider_session_path: Path | None = None` は削除する
+- `saved_at: datetime | None = None` は削除する
+- `allow_edits_notice_posted` は本当に常時必要なら呼び出し側で明示する
+- `_resolve_repository_full_name` の文字列 fallback は destination 型と target 型から解決する形へ置き換える
+- `_sanitize_name` の `"unknown"` fallback は削除する
+
+### `src/vv_ai/metrics_artifact.py`
+
+- `MetricsSummary` は backend 別に分ける
+- `MetricsUsage` `MetricsBehavior` `ToolMetric` `StepMetric` の nullable 羅列を見直す
+- `ProviderSpecificMetrics` は provider 別 union に置き換える
+- `save_metrics_artifact` の optional 引数は削除する
+- `_resolve_repository_full_name` の文字列 fallback は destination 型と target 型から解決する形へ置き換える
+- `_sanitize_name` の `"item"` fallback は削除する
 
 ### `src/vv_ai/cli.py`
 
 - `main(argv: Sequence[str] | None = None)` は CLI 慣習として例外扱い
-- それ以外の通常関数で同様のデフォルト引数を増やさない
-- CLI parser の default は外部ライブラリ都合として扱う
-- ただし parser から受けた値を内部モデルへ流す時点で整理を終える
+- parser default は外部 API 都合として残してよい
+- parser の出力を内部 model へ流すまでに product behavior の既定値を確定する
+- `preflight_result` の再代入で異なる状態を同じ変数に入れない
 
-## 型設計の具体案
+## トレーサビリティ確認項目
 
-### command の分割案
+- requirements にある既定動作が文書へ 1 行ずつ書かれている
+- repo に残る `| None` すべてに理由がある
+- repo に残る field default すべてに理由がある
+- repo に残る function default すべてに理由がある
+- `or` fallback が入力境界以外から消えている
+- event 差分が型へ出ている
+- backend 差分が型へ出ている
+- provider 差分が型へ出ている
+- session mode 差分が型へ出ている
+- runtime 文脈の違いが型へ出ている
 
-- `ReplyCommand`
-- `PlanCommand`
-- `ImplementCommand`
-- `ReviewCommand`
-- `IssueCommand`
+## 実装順
 
-### target の分割案
+- まず `input.py` `config.py` `resolve.py` の入力境界を固定する
+- 次に `target.py` `provider.py` `preflight.py` の分岐を型へ移す
+- 次に `session.py` `session_store.py` を分割する
+- 次に `local_store.py` の hidden fallback を消す
+- 次に `session_artifact.py` `metrics_artifact.py` を backend 別 provider 別へ寄せる
+- 最後に `cli.py` の状態遷移を整理する
 
-- `GitHubTarget`
-- `LocalTarget`
+## 最小限の手動確認
 
-### session の分割案
+- CLI 直入力で command 省略時に `reply` になる
+- `session` 省略時に `inherit` になる
+- `dry_run` 省略時に `false` になる
+- explicit provider は config の優先順が無くても成立する
+- implicit provider は下位優先 provider に落ちられる
+- GitHub event の `issue` は repo 未指定で workflow repo になる
+- local event の `issue` は repo 未指定で local backend になる
+- unauthorized `issue_comment` は silent skip のまま
+- `workflow_dispatch` の actor 制約が保たれる
+- `target_url` 優先と GitHub URL / local path 分岐が保たれる
+- replay context で synthetic workflow ID が作られる
+- artifact と metrics の保存 JSON に不要な `null` が残らない
 
-- `NewSession`
-- `InheritedSession`
-- `CompactSession`
+## 完了条件
 
-### provider metrics の分割案
-
-- `CodexMetricsArtifact`
-- `ClaudeMetricsArtifact`
-
-### backend summary の分割案
-
-- `GitHubMetricsSummary`
-- `LocalMetricsSummary`
-
-## デフォルト引数の扱い
-
-### 禁止対象
-
-- 通常関数の `arg: T | None = None`
-- 通常関数の `arg: bool = False` を未指定扱いに使う設計
-- class フィールドの `field: T | None = None`
-- class フィールドの `field: T = <fallback>` が実質的に未指定救済になっている設計
-- 空辞書、空 list、空 model を暗黙に補う設計
-- 現在時刻の暗黙補完
-- body から slug を暗黙に補完する設計
-
-### 例外候補
-
-- `argparse` の API が要求する default
-- 外部ライブラリとの接続面で不可避な default
-
-### 置き換え方
-
-- 呼び出し側で値を確定してから渡す
-- 生成責務を専用関数へ分離する
-- union へ分割して未指定状態を型から消す
-- 一覧取得 API と単一取得 API を分ける
-
-## `None` と空文字の扱い
-
-- `None` は「構造上その値が存在しない」場合だけに使う
-- 空文字は有効値として扱わない
-- 空文字を未指定へ変換するなら入力境界だけで行う
-- 後段の `return stripped or None` は削除対象
-- `value == ""` で欠損判定する構造は削除対象
-- `value not in (None, False)` のような疑似未指定判定も削除対象
-
-## 実装順の提案
-
-- まず入力境界を固定する
-- 次に command と target の内部モデルを分割する
-- 次に session の mode 差分を型で表現する
-- 次に artifact と metrics の保存モデルを分割する
-- 最後に補助関数の `None` とデフォルト引数を掃除する
-- 仕上げに、残した nullable と残した default の理由を一覧化する
-
-## 実装時のレビュー観点
-
-- その `None` は本当に構造上必要か
-- その default は本当に外部 API の制約か
-- command ごとの差が型に出ているか
-- backend ごとの差が型に出ているか
-- provider ごとの差が型に出ているか
-- mode ごとの差が型に出ているか
-- 空文字救済が入力境界の外へ漏れていないか
-- `or` によるフォールバックが残っていないか
-- boolean 補助フラグで型の弱さを補っていないか
-
-## 実装後の最小限の手動確認
-
-- CLI 直入力で不足項目が即例外になること
-- `issue_comment` payload で空文字 instruction や不完全な target 指定が即例外になること
-- `workflow_dispatch` payload で空文字や片側だけの指定を受け入れないこと
-- `reply` `plan` `implement` `review` `issue` の各 command で、不要な `None` 判定なしに実行前状態まで進めること
-- GitHub target と local target が別モデルとして扱われること
-- session mode ごとの差分が `None` 判定でなく構造で扱われること
-- artifact と metrics の保存 JSON に不要な `null` が残らないこと
-
-## 完了の定義
-
-- 後段処理が nullable 救済に依存していない
-- 型だけで前提条件が追える
-- 残存 nullable の理由が説明できる
-- 残存 default の理由が説明できる
-- 実装者がこの文書だけで改修順と判断基準を決められる
-
+- この文書だけで実装者が型分割と既定動作の置き場を決められる
+- requirements と衝突する余地が残っていない
+- repo にある nullable、default、fallback の処遇がすべて文書化されている
