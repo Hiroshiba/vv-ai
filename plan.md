@@ -12,7 +12,8 @@
 8. レビューで問題があれば`3.`に戻る
 9. 完了したら `plan.md` の該当タスクにチェックを入れる
 10. `diary/YYYYMMDD-HHMMSS.md` に日誌を作成する
-11. 終了する
+11. 追加したファイルを全てgit add && git commitする
+12. 終了する
 
 ## 日誌
 
@@ -63,9 +64,9 @@
 
 - [x] session artifact の保存形式を実装する
 - [x] metrics artifact の保存形式を実装する
-- [ ] report artifact の保存形式を実装する
+- [x] report artifact の保存形式を実装する
 - [ ] `age` による暗号化 / 復号処理を実装する
-- [ ] report の Markdown テンプレートを実装する
+- [x] report の Markdown テンプレートを実装する
 - [ ] success / failure / cancel で必ず保存する処理を実装する
 
 ### 7. GitHub 連携
