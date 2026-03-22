@@ -54,6 +54,11 @@
 - [x] session の保存対象と復元対象を実装する
 - [x] `inherit` / `compact` / `new` の振る舞いを実装する
 
+### 5.5. コードリファクタリング
+
+- [ ] `refactoring.md`をひたすらブラッシュアップし、ゴールが完全に達成できるまで計画を練る
+- [ ] 実行する
+
 ### 6. Artifact / Metrics / Report
 
 - [x] session artifact の保存形式を実装する
