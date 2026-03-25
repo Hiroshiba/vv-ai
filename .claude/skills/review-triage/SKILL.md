@@ -1,6 +1,5 @@
 ---
-name: review-triage
-description: PR のレビューコメントを収集し、ローカルコードで検証して MUST-FIX と DISCUSS と SKIP に分類し、MUST-FIX を実装して返信と resolve まで進める skill。レビュー指摘を鵜呑みにせず裏取りして扱うときに使う。
+description: PR のレビューコメントを収集し、ローカルコードで検証して MUST-FIX / DISCUSS / SKIP に分類し、MUST-FIX を実装して返信と resolve まで進める。レビュー指摘を鵜呑みにせず裏取りして扱うときに使う。
 ---
 
 # レビュー反映プロンプト
@@ -39,7 +38,7 @@ PR のレビューコメントを反映する。ただし鵜呑みにせず、�
 
 ## 実装の方針
 
-レビュー指摘は局所修正しない。AGENTS.md の規約に従い:
+レビュー指摘は局所修正しない。リポジトリの規約に従い:
 
 - 指摘が属する契約面を 1 つ決める
 - 同じ契約面の success / failure / resume / local / remote を洗い出す
