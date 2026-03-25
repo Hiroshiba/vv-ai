@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 import time
 import uuid
 from collections.abc import Mapping
@@ -14,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from vv_ai.execution import ExecutionResult
 from vv_ai.metrics_artifact import (
     ClaudeProviderMetrics,
+    CodexProviderMetrics,
     MetricsBehavior,
     MetricsUsage,
     ProviderSpecificMetrics,
@@ -24,6 +26,7 @@ from vv_ai.report_artifact import ReportSections
 from vv_ai.session import SessionStateRef
 
 _API_KEY_HELPER_ENV = "VV_AI_API_KEY_HELPER_PATH"
+_CODEX_OPENAI_API_KEY_ENV = "VV_OPENAI_API_KEY"
 
 _ALLOWED_ENV_KEYS = frozenset(
     [
@@ -51,6 +54,18 @@ _DENY_READ_PATHS = [
 
 class ProviderExecutionError(Exception):
     """provider 実行に失敗したことを表す例外。"""
+
+
+class _CodexOutput(BaseModel):
+    """Codex CLI 実行結果のサマリ。"""
+
+    model_config = ConfigDict(extra="allow")
+
+    result: str
+    thread_id: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_turns: int | None = None
 
 
 class _ClaudeUsage(BaseModel):
@@ -88,12 +103,209 @@ def execute_provider(
     """provider CLI を実行して ExecutionResult を返す。"""
     provider_name = ready_execution.resolved_provider.name
     if provider_name == "codex":
-        raise ProviderExecutionError("codex の実行は未実装です")
+        return _execute_codex(
+            repo_root, ready_execution, env, preflight_duration_seconds
+        )
     if provider_name == "claude":
         return _execute_claude(
             repo_root, ready_execution, env, preflight_duration_seconds
         )
     raise AssertionError(f"未対応の provider です: {provider_name}")
+
+
+def _execute_codex(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    env: Mapping[str, str],
+    preflight_duration_seconds: float,
+) -> ExecutionResult:
+    """Codex CLI を実行して ExecutionResult を返す。"""
+    with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+        output_file = Path(f.name)
+
+    try:
+        command = _build_codex_command(ready_execution, output_file)
+        codex_env = _build_codex_env(env)
+
+        execution_started_at = time.perf_counter()
+        proc = subprocess.run(
+            command,
+            cwd=repo_root,
+            env=codex_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        execution_duration_seconds = time.perf_counter() - execution_started_at
+
+        if proc.returncode != 0:
+            stderr = proc.stderr.strip()
+            raise ProviderExecutionError(
+                f"Codex が終了コード {proc.returncode} で失敗しました"
+                + (f": {stderr}" if stderr else "")
+            )
+
+        file_content = output_file.read_text()
+        result_text = file_content if file_content else proc.stdout
+        codex_output = _parse_codex_jsonl(proc.stdout, result_text)
+        return _build_codex_execution_result(
+            ready_execution,
+            codex_output,
+            preflight_duration_seconds,
+            execution_duration_seconds,
+        )
+    finally:
+        output_file.unlink(missing_ok=True)
+
+
+def _build_codex_command(
+    ready_execution: ReadyExecution,
+    output_file: Path,
+) -> list[str]:
+    """Codex CLI のコマンドリストを返す。"""
+    session = ready_execution.resolved_session
+    session_mode = session.mode if session is not None else "new"
+    state_ref = session.state_ref if session is not None else None
+
+    instruction = ready_execution.command.instruction
+    prompt = instruction if instruction is not None else ready_execution.command.command
+
+    base_options: list[str] = [
+        "--full-auto",
+        "--json",
+        "-o",
+        str(output_file),
+    ]
+
+    if (
+        session_mode != "new"
+        and state_ref is not None
+        and state_ref.provider_session_id is not None
+    ):
+        # TODO: compact は inherit と同じ動作になる（Codex に compact 相当の API がないため）
+        return [
+            "codex",
+            "exec",
+            "resume",
+            state_ref.provider_session_id,
+            *base_options,
+            "--",
+            prompt,
+        ]
+
+    return ["codex", "exec", *base_options, "--", prompt]
+
+
+def _build_codex_env(env: Mapping[str, str]) -> dict[str, str]:
+    """Codex プロセスに渡す環境変数を構築する。"""
+    # TODO: セクション 11 で shell_environment_policy を設定し、
+    #       OPENAI_API_KEY が Codex の子プロセスに伝播しないよう制御する
+    api_key = env.get(_CODEX_OPENAI_API_KEY_ENV, "").strip()
+    if not api_key:
+        raise ProviderExecutionError(
+            f"Codex の認証に必要な環境変数 `{_CODEX_OPENAI_API_KEY_ENV}` が設定されていません"
+        )
+    sanitized = _build_sanitized_env(env)
+    sanitized["OPENAI_API_KEY"] = api_key
+    return sanitized
+
+
+def _parse_codex_jsonl(jsonl_stdout: str, result_text: str) -> _CodexOutput:
+    """Codex CLI の JSONL 出力を解析してサマリを返す。"""
+    # TODO: 実際の JSONL スキーマを確認後にフィールド抽出を更新する
+    thread_id: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_turns: int | None = None
+
+    for line in jsonl_stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+
+        if thread_id is None:
+            for key in ("session_id", "thread_id"):
+                val = event.get(key)
+                if val and isinstance(val, str):
+                    thread_id = val
+                    break
+
+        for usage_key in ("usage", "token_usage"):
+            usage = event.get(usage_key)
+            if isinstance(usage, dict):
+                if input_tokens is None:
+                    input_tokens = usage.get("input_tokens")
+                if output_tokens is None:
+                    output_tokens = usage.get("output_tokens")
+
+    return _CodexOutput(
+        result=result_text,
+        thread_id=thread_id,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_turns=total_turns,
+    )
+
+
+def _build_codex_execution_result(
+    ready_execution: ReadyExecution,
+    codex_output: _CodexOutput,
+    preflight_duration_seconds: float,
+    execution_duration_seconds: float,
+) -> ExecutionResult:
+    """Codex 出力から ExecutionResult を組み立てる。"""
+    usage = MetricsUsage(
+        input_tokens=codex_output.input_tokens,
+        cached_input_tokens=None,
+        output_tokens=codex_output.output_tokens,
+        cost_usd=None,
+    )
+
+    behavior = MetricsBehavior(
+        total_turns=codex_output.total_turns,
+        active_time_seconds=None,
+    )
+
+    codex_metrics = CodexProviderMetrics(
+        thread_id=codex_output.thread_id,
+        input_tokens=codex_output.input_tokens,
+        cached_input_tokens=None,
+        output_tokens=codex_output.output_tokens,
+    )
+
+    command_name = ready_execution.command.command
+    result_text = codex_output.result
+    report_sections = ReportSections(
+        summary=f"`{command_name}` を Codex で実行した。",
+        changes=result_text[:500] if result_text else "出力なし。",
+        decisions="Codex の判断に基づいて実行した。",
+        validation="Codex が正常終了した。",
+        risks_open_questions="GitHub への反映は別途 workflow ステップで行う。",
+        next_actions="実行結果をレビューし、必要に応じて追加対応を行う。",
+        notes=f"thread_id={codex_output.thread_id}",
+    )
+
+    return ExecutionResult(
+        status="success",
+        report_sections=report_sections,
+        usage=usage,
+        behavior=behavior,
+        tools={},
+        steps={
+            "preflight": StepMetric(duration_seconds=preflight_duration_seconds),
+            "execution": StepMetric(duration_seconds=execution_duration_seconds),
+        },
+        provider_specific=ProviderSpecificMetrics(codex=codex_metrics),
+        state_ref=SessionStateRef(provider_session_id=codex_output.thread_id),
+        provider_session_path=None,
+        allow_edits_notice_posted=False,
+    )
 
 
 def _execute_claude(
