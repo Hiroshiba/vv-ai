@@ -11,7 +11,7 @@
 7. `plan.md` の該当タスクにチェックを入れる
 8. ユーザーにレビューを依頼する（ということをPlan内に含める）
 9. レビューで問題があれば`5.`に戻る
-10. `diary/YYYYMMDD-HHMMSS.md` に日誌を作成する
+10. dateコマンドを実行して日時を取得し、`diary/YYYYMMDD-HHMMSS.md` に日誌を作成する
 11. 追加したファイルを全てgit add && git commitする
 12. 終了する
 
@@ -83,9 +83,9 @@
 ### 8. Provider 実行
 
 - [ ] Codex CLI 実行ラッパーを実装する
-- [ ] Claude Code CLI 実行ラッパーを実装する
-- [ ] provider ごとの metrics 収集を実装する
-- [ ] provider 実行時のセキュリティ前提をコードに落とす
+- [x] Claude Code CLI 実行ラッパーを実装する
+- [x] provider ごとの metrics 収集を実装する
+- [x] provider 実行時のセキュリティ前提をコードに落とす
 
 ### 9. コマンド実装
 

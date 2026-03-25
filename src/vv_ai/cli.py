@@ -31,6 +31,7 @@ from vv_ai.preflight import (
     run_preflight,
 )
 from vv_ai.provider import ProviderResolutionError
+from vv_ai.provider_execution import execute_provider
 from vv_ai.report_artifact import ReportSections
 from vv_ai.resolve import ResolutionError, resolve_raw_input
 from vv_ai.session import SessionResolutionError, SessionStateRef, resolve_session
@@ -42,8 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vv-ai",
         description=(
-            "GitHub Actions とローカル実行の両方に対応する "
-            "vv-ai CLI の起動入口です。"
+            "GitHub Actions とローカル実行の両方に対応する vv-ai CLI の起動入口です。"
         ),
     )
     parser.add_argument(
@@ -62,7 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="実行コマンドを指定します。",
     )
     parser.add_argument("--instruction", help="自然言語の指示本文です。")
-    parser.add_argument("--target-url", help="対象の Issue / PR URL またはローカルパスです。")
+    parser.add_argument(
+        "--target-url", help="対象の Issue / PR URL またはローカルパスです。"
+    )
     parser.add_argument(
         "--target-type",
         choices=["issue", "pr"],
@@ -109,7 +111,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         repo_root = find_repo_root(Path.cwd())
         preflight_result = run_preflight(repo_root, resolved_command, os.environ)
         if isinstance(preflight_result, ReadyExecution):
-            resolved_target_command = resolve_target(repo_root, preflight_result.command)
+            resolved_target_command = resolve_target(
+                repo_root, preflight_result.command
+            )
             resolved_session = resolve_session(
                 repo_root,
                 preflight_result.workflow_id,
@@ -214,11 +218,11 @@ def _run_ready_execution(
     exit_code = 0
 
     try:
-        execution_result = _build_success_result(
+        execution_result = execute_provider(
+            repo_root,
             ready_execution,
-            ready_message,
+            env,
             preflight_duration_seconds,
-            execution_duration_seconds=time.perf_counter() - execution_started_at,
         )
     except KeyboardInterrupt as exc:
         runtime_error = exc
@@ -251,64 +255,13 @@ def _run_ready_execution(
 
     if runtime_error is None:
         print(ready_message)
-        return 0
+        return 0 if execution_result.status == "success" else 1
     if isinstance(runtime_error, KeyboardInterrupt):
         print("実行を中断しました", file=sys.stderr)
         return exit_code
 
     print(f"実行エラー: {_format_exception(runtime_error)}", file=sys.stderr)
     return exit_code
-
-
-def _build_success_result(
-    ready_execution: ReadyExecution,
-    ready_message: str,
-    preflight_duration_seconds: float,
-    execution_duration_seconds: float,
-) -> ExecutionResult:
-    """現在の実装範囲における成功結果を返す。"""
-    return ExecutionResult(
-        status="success",
-        report_sections=ReportSections(
-            summary=(
-                f"`{ready_execution.command.command}` の実行準備を解決し、"
-                "artifact 保存まで完了した。"
-            ),
-            changes=(
-                "入力正規化、preflight、target 解決、session 解決を実行し、"
-                "その結果を session / metrics / report artifact として保存した。"
-            ),
-            decisions=(
-                "provider 実行と GitHub 反映は未実装のため、この段階では"
-                "現在の CLI が保証できる範囲を成功として保存した。"
-            ),
-            validation=(
-                f"CLI の ready message を生成した。内容: {ready_message}"
-            ),
-            risks_open_questions=(
-                "provider 実行本体、GitHub 連携、workflow 側の always 実行は"
-                "まだ未接続。"
-            ),
-            next_actions=(
-                "次は GitHub 連携か provider 実行ラッパーを実装し、"
-                "この保存ハーネスへ実行結果を流し込む。"
-            ),
-            notes=(
-                "現在の success は preflight 完了と artifact 保存完了を意味する。"
-            ),
-        ),
-        usage=MetricsUsage(),
-        behavior=MetricsBehavior(active_time_seconds=execution_duration_seconds),
-        tools={},
-        steps=_build_steps(
-            preflight_duration_seconds,
-            execution_duration_seconds,
-        ),
-        provider_specific=ProviderSpecificMetrics(),
-        state_ref=SessionStateRef(),
-        provider_session_path=None,
-        allow_edits_notice_posted=False,
-    )
 
 
 def _build_cancelled_result(
