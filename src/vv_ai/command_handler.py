@@ -19,6 +19,10 @@ from vv_ai.provider_execution import execute_provider
 from vv_ai.resolve import ResolvedTarget
 
 
+class CommandError(Exception):
+    """コマンド実行の前提条件エラー。"""
+
+
 def run_command(
     repo_root: Path,
     ready_execution: ReadyExecution,
@@ -28,6 +32,10 @@ def run_command(
     """コマンド固有の前処理・provider 実行・後処理を行って ExecutionResult を返す。"""
     command = ready_execution.command
     target = command.target
+
+    if command.command == "review" and (target is None or target.kind != "pr"):
+        raise CommandError("`review` コマンドは PR を対象に指定してください")
+
     github_client = build_github_client() if _is_github_target(target) else None
 
     eyes_reaction_id: int | None = None
@@ -106,7 +114,7 @@ def _handle_post_execution(
 ) -> None:
     """コマンド固有の後処理を行う。"""
     command_name = ready_execution.command.command
-    if command_name in ("reply", "plan"):
+    if command_name in ("reply", "plan", "review"):
         _post_response_comment(ready_execution, execution_result, github_client)
 
 
@@ -115,7 +123,7 @@ def _post_response_comment(
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
 ) -> None:
-    """reply / plan の応答テキストをコメント投稿する。"""
+    """reply / plan / review の応答テキストをコメント投稿する。"""
     command = ready_execution.command
     response_text = execution_result.response_text
     if response_text is None:
