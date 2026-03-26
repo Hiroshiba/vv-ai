@@ -31,7 +31,7 @@ from vv_ai.preflight import (
     run_preflight,
 )
 from vv_ai.provider import ProviderResolutionError
-from vv_ai.provider_execution import execute_provider
+from vv_ai.command_handler import run_command
 from vv_ai.report_artifact import ReportSections
 from vv_ai.resolve import ResolutionError, resolve_raw_input
 from vv_ai.session import SessionResolutionError, SessionStateRef, resolve_session
@@ -218,7 +218,7 @@ def _run_ready_execution(
     exit_code = 0
 
     try:
-        execution_result = execute_provider(
+        execution_result = run_command(
             repo_root,
             ready_execution,
             env,
@@ -295,6 +295,7 @@ def _build_cancelled_result(
         state_ref=SessionStateRef(),
         provider_session_path=None,
         allow_edits_notice_posted=False,
+        response_text=None,
     )
 
 
@@ -334,6 +335,7 @@ def _build_failure_result(
         state_ref=SessionStateRef(),
         provider_session_path=None,
         allow_edits_notice_posted=False,
+        response_text=None,
     )
 
 

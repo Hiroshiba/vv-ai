@@ -55,6 +55,7 @@ class ExecutionResult(BaseModel):
     state_ref: SessionStateRef
     provider_session_path: Path | None
     allow_edits_notice_posted: bool
+    response_text: str | None
 
 
 class SavedExecutionArtifacts(BaseModel):
@@ -75,7 +76,9 @@ def save_execution_artifacts(
 ) -> SavedExecutionArtifacts:
     """実行結果に対応する 3 種 artifact を保存する。"""
     if ready_execution.resolved_session is None:
-        raise ExecutionArtifactError("artifact 保存に必要な session が解決されていません")
+        raise ExecutionArtifactError(
+            "artifact 保存に必要な session が解決されていません"
+        )
 
     try:
         age_public_key = resolve_age_public_key(env)

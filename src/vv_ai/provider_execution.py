@@ -99,16 +99,17 @@ def execute_provider(
     ready_execution: ReadyExecution,
     env: Mapping[str, str],
     preflight_duration_seconds: float,
+    provider_prompt: str,
 ) -> ExecutionResult:
     """provider CLI を実行して ExecutionResult を返す。"""
     provider_name = ready_execution.resolved_provider.name
     if provider_name == "codex":
         return _execute_codex(
-            repo_root, ready_execution, env, preflight_duration_seconds
+            repo_root, ready_execution, env, preflight_duration_seconds, provider_prompt
         )
     if provider_name == "claude":
         return _execute_claude(
-            repo_root, ready_execution, env, preflight_duration_seconds
+            repo_root, ready_execution, env, preflight_duration_seconds, provider_prompt
         )
     raise AssertionError(f"未対応の provider です: {provider_name}")
 
@@ -118,13 +119,14 @@ def _execute_codex(
     ready_execution: ReadyExecution,
     env: Mapping[str, str],
     preflight_duration_seconds: float,
+    provider_prompt: str,
 ) -> ExecutionResult:
     """Codex CLI を実行して ExecutionResult を返す。"""
     with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
         output_file = Path(f.name)
 
     try:
-        command = _build_codex_command(ready_execution, output_file)
+        command = _build_codex_command(ready_execution, output_file, provider_prompt)
         codex_env = _build_codex_env(env)
 
         execution_started_at = time.perf_counter()
@@ -161,14 +163,12 @@ def _execute_codex(
 def _build_codex_command(
     ready_execution: ReadyExecution,
     output_file: Path,
+    provider_prompt: str,
 ) -> list[str]:
     """Codex CLI のコマンドリストを返す。"""
     session = ready_execution.resolved_session
     session_mode = session.mode if session is not None else "new"
     state_ref = session.state_ref if session is not None else None
-
-    instruction = ready_execution.command.instruction
-    prompt = instruction if instruction is not None else ready_execution.command.command
 
     base_options: list[str] = [
         "--full-auto",
@@ -190,10 +190,10 @@ def _build_codex_command(
             state_ref.provider_session_id,
             *base_options,
             "--",
-            prompt,
+            provider_prompt,
         ]
 
-    return ["codex", "exec", *base_options, "--", prompt]
+    return ["codex", "exec", *base_options, "--", provider_prompt]
 
 
 def _build_codex_env(env: Mapping[str, str]) -> dict[str, str]:
@@ -305,6 +305,7 @@ def _build_codex_execution_result(
         state_ref=SessionStateRef(provider_session_id=codex_output.thread_id),
         provider_session_path=None,
         allow_edits_notice_posted=False,
+        response_text=codex_output.result,
     )
 
 
@@ -313,9 +314,10 @@ def _execute_claude(
     ready_execution: ReadyExecution,
     env: Mapping[str, str],
     preflight_duration_seconds: float,
+    provider_prompt: str,
 ) -> ExecutionResult:
     """Claude Code CLI を実行して ExecutionResult を返す。"""
-    command = _build_claude_command(ready_execution, env)
+    command = _build_claude_command(ready_execution, env, provider_prompt)
     sanitized_env = _build_sanitized_env(env)
 
     execution_started_at = time.perf_counter()
@@ -348,6 +350,7 @@ def _execute_claude(
 def _build_claude_command(
     ready_execution: ReadyExecution,
     env: Mapping[str, str],
+    provider_prompt: str,
 ) -> list[str]:
     """Claude Code CLI のコマンドリストを返す。"""
     settings_json = _build_claude_settings(env)
@@ -379,9 +382,7 @@ def _build_claude_command(
         #       compact は現時点では inherit と同じ動作になる
         command.extend(["--resume", state_ref.provider_session_id])
 
-    instruction = ready_execution.command.instruction
-    prompt = instruction if instruction is not None else ready_execution.command.command
-    command.append(prompt)
+    command.append(provider_prompt)
     return command
 
 
@@ -496,4 +497,5 @@ def _build_execution_result(
         state_ref=SessionStateRef(provider_session_id=claude_output.session_id),
         provider_session_path=None,
         allow_edits_notice_posted=False,
+        response_text=claude_output.result,
     )
