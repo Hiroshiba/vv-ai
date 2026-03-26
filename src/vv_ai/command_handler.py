@@ -6,7 +6,14 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-from vv_ai.execution import ExecutionResult
+from vv_ai.execution import ExecutionResult, ExecutionStatus
+from vv_ai.git_ops import (
+    GitOpsError,
+    create_and_checkout_branch,
+    generate_implement_branch_name,
+    get_default_branch,
+    push_branch,
+)
 from vv_ai.github import (
     GitHubClient,
     GitHubClientError,
@@ -54,32 +61,52 @@ def run_command(
         )
 
     past_vvai_comments = _fetch_past_vvai_comments(github_client, target)
-    provider_prompt = build_provider_prompt(ready_execution, past_vvai_comments)
-    execution_result = execute_provider(
-        repo_root,
-        ready_execution,
-        env,
-        preflight_duration_seconds,
-        provider_prompt,
-    )
 
-    _handle_post_execution(ready_execution, execution_result, github_client)
+    implement_branch_name: str | None = None
+    execution_result: ExecutionResult | None = None
+    finalize_status: ExecutionStatus = "failure"
+    try:
+        if command.command == "implement" and target is not None and target.kind == "issue":
+            assert target.number is not None
+            implement_branch_name = generate_implement_branch_name(target.number)
+            try:
+                create_and_checkout_branch(repo_root, implement_branch_name)
+            except GitOpsError as exc:
+                raise CommandError(str(exc)) from exc
 
-    if (
-        github_client is not None
-        and not command.dry_run
-        and command.comment_id is not None
-    ):
-        assert target is not None
-        assert target.repository_full_name is not None
-        _finalize_reactions(
-            github_client,
-            target.repository_full_name,
-            command.comment_id,
-            eyes_reaction_id,
-            execution_result.status,
+        provider_prompt = build_provider_prompt(
+            ready_execution, past_vvai_comments, implement_branch_name
+        )
+        execution_result = execute_provider(
+            repo_root,
+            ready_execution,
+            env,
+            preflight_duration_seconds,
+            provider_prompt,
         )
 
+        _handle_post_execution(
+            repo_root, ready_execution, execution_result, github_client, implement_branch_name
+        )
+        assert execution_result is not None
+        finalize_status = execution_result.status
+    finally:
+        if (
+            github_client is not None
+            and not command.dry_run
+            and command.comment_id is not None
+        ):
+            assert target is not None
+            assert target.repository_full_name is not None
+            _finalize_reactions(
+                github_client,
+                target.repository_full_name,
+                command.comment_id,
+                eyes_reaction_id,
+                finalize_status,
+            )
+
+    assert execution_result is not None
     return execution_result
 
 
@@ -108,14 +135,73 @@ def _fetch_past_vvai_comments(
 
 
 def _handle_post_execution(
+    repo_root: Path,
     ready_execution: ReadyExecution,
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
+    implement_branch_name: str | None,
 ) -> None:
     """コマンド固有の後処理を行う。"""
     command_name = ready_execution.command.command
     if command_name in ("reply", "plan", "review"):
         _post_response_comment(ready_execution, execution_result, github_client)
+    elif command_name == "implement" and implement_branch_name is not None:
+        _handle_implement_issue_post_execution(
+            repo_root, ready_execution, execution_result, github_client, implement_branch_name
+        )
+
+
+def _handle_implement_issue_post_execution(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
+    github_client: GitHubClient | None,
+    implement_branch_name: str,
+) -> None:
+    """implement + Issue 起点の後処理（push + PR 作成）を行う。"""
+    command = ready_execution.command
+    target = command.target
+
+    if execution_result.status != "success":
+        return
+
+    if command.dry_run or not _is_github_target(target):
+        print(f"[dry-run/local] push と PR 作成をスキップします。ブランチ: {implement_branch_name}")
+        return
+
+    assert target is not None
+    assert target.repository_full_name is not None
+    assert target.number is not None
+    assert github_client is not None
+
+    try:
+        push_branch(repo_root, implement_branch_name)
+    except GitOpsError as exc:
+        raise CommandError(str(exc)) from exc
+
+    try:
+        issue = github_client.get_issue(target.repository_full_name, target.number)
+    except GitHubClientError as exc:
+        raise CommandError(str(exc)) from exc
+    pr_title = issue.title
+    pr_body = f"Closes #{target.number}"
+    try:
+        base_branch = get_default_branch(repo_root)
+    except GitOpsError as exc:
+        raise CommandError(str(exc)) from exc
+
+    try:
+        pr = github_client.create_pull_request(
+            target.repository_full_name,
+            pr_title,
+            pr_body,
+            implement_branch_name,
+            base_branch,
+            maintainer_can_modify=True,
+        )
+    except GitHubClientError as exc:
+        raise CommandError(str(exc)) from exc
+    print(f"PR を作成しました: {pr.url}")
 
 
 def _post_response_comment(

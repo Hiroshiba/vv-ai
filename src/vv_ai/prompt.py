@@ -17,17 +17,22 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
         "この PR をレビューし、指摘・改善提案をコメントで返してください。"
         "あなたの出力テキストがそのままコメントとして投稿されます。"
     ),
+    "implement": (
+        "以下の Issue の内容を実装してください。"
+        "変更は git commit してください。push は別途行うため、push は不要です。"
+    ),
 }
 
 
 def build_provider_prompt(
     ready_execution: ReadyExecution,
     past_vvai_comments: list[str],
+    implement_branch_name: str | None,
 ) -> str:
     """コンテキストと指示を組み合わせたプロンプト文字列を返す。"""
     sections: list[str] = []
 
-    sections.append(_build_header(ready_execution))
+    sections.append(_build_header(ready_execution, implement_branch_name))
 
     if ready_execution.resolved_session is not None:
         restore_manifest = ready_execution.resolved_session.restore_manifest
@@ -51,7 +56,10 @@ def build_provider_prompt(
     return "\n\n".join(sections)
 
 
-def _build_header(ready_execution: ReadyExecution) -> str:
+def _build_header(
+    ready_execution: ReadyExecution,
+    implement_branch_name: str | None,
+) -> str:
     """定型ヘッダ文字列を返す。"""
     command = ready_execution.command
     target = command.target
@@ -70,4 +78,8 @@ def _build_header(ready_execution: ReadyExecution) -> str:
         "git 追跡ファイルはブランチの内容が永続します（push/commit されたものが正）。",
         "未追跡ファイルは原則永続しません（毎回クリーンアップされる想定）。必要なら git 管理に入れてください。",
     ]
+    if implement_branch_name is not None:
+        lines.append(
+            f"現在のブランチ: `{implement_branch_name}`。このブランチ上でコミットしてください。"
+        )
     return "\n".join(lines)
