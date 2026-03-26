@@ -77,6 +77,7 @@ class ResolvedSession(BaseModel):
     state_ref: SessionStateRef | None = None
     restored_artifact_dir: str | None = None
     restored_provider_session_path: str | None = None
+    allow_edits_notice_posted: bool = False
 
 
 def resolve_session(
@@ -151,6 +152,11 @@ def resolve_session(
             restored_artifact.provider_session_path
             if restored_artifact is not None
             else None
+        ),
+        allow_edits_notice_posted=(
+            restored_artifact.meta.allow_edits_notice_posted
+            if restored_artifact is not None
+            else False
         ),
     )
 

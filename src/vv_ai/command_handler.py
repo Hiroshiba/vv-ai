@@ -9,15 +9,20 @@ from pathlib import Path
 from vv_ai.execution import ExecutionResult, ExecutionStatus
 from vv_ai.git_ops import (
     GitOpsError,
+    checkout_fork_pr,
     create_and_checkout_branch,
     fetch_and_checkout_branch,
     generate_implement_branch_name,
+    generate_patch,
     get_default_branch,
+    get_head_sha,
     push_branch,
+    try_push_current_branch,
 )
 from vv_ai.github import (
     GitHubClient,
     GitHubClientError,
+    GitHubPullRequest,
     GitHubReactionContent,
     build_github_client,
 )
@@ -64,6 +69,8 @@ def run_command(
     past_vvai_comments = _fetch_past_vvai_comments(github_client, target)
 
     implement_branch_name: str | None = None
+    pr_info: GitHubPullRequest | None = None
+    head_sha_before: str | None = None
     execution_result: ExecutionResult | None = None
     finalize_status: ExecutionStatus = "failure"
     try:
@@ -86,14 +93,22 @@ def run_command(
                 )
             except GitHubClientError as exc:
                 raise CommandError(str(exc)) from exc
-            # TODO: fork PR の implement は別タスクで実装
-            if pr_info.is_cross_repository:
-                raise CommandError("fork PR への implement は未対応です")
             implement_branch_name = pr_info.head_ref_name
-            try:
-                fetch_and_checkout_branch(repo_root, implement_branch_name)
-            except GitOpsError as exc:
-                raise CommandError(str(exc)) from exc
+            if pr_info.is_cross_repository:
+                try:
+                    checkout_fork_pr(
+                        repo_root, target.repository_full_name, target.number
+                    )
+                except GitOpsError as exc:
+                    raise CommandError(str(exc)) from exc
+            else:
+                try:
+                    fetch_and_checkout_branch(repo_root, implement_branch_name)
+                except GitOpsError as exc:
+                    raise CommandError(str(exc)) from exc
+
+        if pr_info is not None and pr_info.is_cross_repository:
+            head_sha_before = get_head_sha(repo_root)
 
         provider_prompt = build_provider_prompt(
             ready_execution, past_vvai_comments, implement_branch_name
@@ -107,7 +122,13 @@ def run_command(
         )
 
         _handle_post_execution(
-            repo_root, ready_execution, execution_result, github_client, implement_branch_name
+            repo_root,
+            ready_execution,
+            execution_result,
+            github_client,
+            implement_branch_name,
+            pr_info,
+            head_sha_before,
         )
         assert execution_result is not None
         finalize_status = execution_result.status
@@ -161,6 +182,8 @@ def _handle_post_execution(
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
     implement_branch_name: str | None,
+    pr_info: GitHubPullRequest | None,
+    head_sha_before: str | None,
 ) -> None:
     """コマンド固有の後処理を行う。"""
     command_name = ready_execution.command.command
@@ -170,7 +193,13 @@ def _handle_post_execution(
         target = ready_execution.command.target
         if target is not None and target.kind == "pr":
             _handle_implement_pr_post_execution(
-                repo_root, ready_execution, execution_result, implement_branch_name
+                repo_root,
+                ready_execution,
+                execution_result,
+                github_client,
+                implement_branch_name,
+                pr_info,
+                head_sha_before,
             )
         else:
             _handle_implement_issue_post_execution(
@@ -235,9 +264,12 @@ def _handle_implement_pr_post_execution(
     repo_root: Path,
     ready_execution: ReadyExecution,
     execution_result: ExecutionResult,
+    github_client: GitHubClient | None,
     implement_branch_name: str,
+    pr_info: GitHubPullRequest | None,
+    head_sha_before: str | None,
 ) -> None:
-    """implement + PR 起点の後処理（push のみ）を行う。"""
+    """implement + PR 起点の後処理（push / patch fallback）を行う。"""
     command = ready_execution.command
     target = command.target
 
@@ -248,11 +280,91 @@ def _handle_implement_pr_post_execution(
         print(f"[dry-run/local] push をスキップします。ブランチ: {implement_branch_name}")
         return
 
+    if pr_info is None or not pr_info.is_cross_repository:
+        try:
+            push_branch(repo_root, implement_branch_name)
+        except GitOpsError as exc:
+            raise CommandError(str(exc)) from exc
+        print(f"ブランチ `{implement_branch_name}` を push しました。")
+        return
+
+    assert target is not None
+    assert target.repository_full_name is not None
+    assert target.number is not None
+
+    if try_push_current_branch(repo_root):
+        print(f"fork ブランチ `{implement_branch_name}` を push しました。")
+        return
+
+    _post_fork_patch_fallback(
+        repo_root,
+        ready_execution,
+        execution_result,
+        github_client,
+        target.repository_full_name,
+        target.number,
+        pr_info,
+        head_sha_before,
+    )
+
+
+def _post_fork_patch_fallback(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
+    github_client: GitHubClient | None,
+    repository_full_name: str,
+    number: int,
+    pr_info: GitHubPullRequest,
+    head_sha_before: str | None,
+) -> None:
+    """fork PR への push 失敗時に patch コメントを投稿する。"""
+    if github_client is None:
+        github_client = build_github_client()
+
+    base_sha = head_sha_before if head_sha_before is not None else "HEAD~1"
     try:
-        push_branch(repo_root, implement_branch_name)
+        patch = generate_patch(repo_root, base_sha)
     except GitOpsError as exc:
-        raise CommandError(str(exc)) from exc
-    print(f"ブランチ `{implement_branch_name}` を push しました。")
+        print(f"patch 生成に失敗しました: {exc}", file=sys.stderr)
+        return
+
+    if not patch.strip():
+        print("fork PR への push に失敗し、patch も空のため投稿をスキップします。")
+        return
+
+    notice_already_posted = _get_allow_edits_notice_posted(ready_execution)
+    notice = ""
+    if not pr_info.maintainer_can_modify and not notice_already_posted:
+        notice = (
+            "\n\n---\n"
+            "**Note**: この PR で \"Allow edits from maintainers\" を有効にすると、"
+            "次回以降 vv-ai が直接修正をプッシュできるようになります。"
+            "PR の右サイドバー下部にあるチェックボックスから設定できます。"
+        )
+        execution_result.allow_edits_notice_posted = True
+
+    truncated = patch[:60000]
+    body = (
+        "fork リポジトリへの push ができなかったため、変更内容を patch として提示します。\n\n"
+        f"```diff\n{truncated}\n```"
+        f"{notice}"
+    )
+
+    try:
+        github_client.create_issue_comment(repository_full_name, number, body)
+    except GitHubClientError as exc:
+        print(f"patch コメント投稿に失敗しました: {exc}", file=sys.stderr)
+        return
+    print("fork PR への push に失敗したため、patch をコメントで投稿しました。")
+
+
+def _get_allow_edits_notice_posted(ready_execution: ReadyExecution) -> bool:
+    """復元済み session から allow_edits_notice_posted を取得する。"""
+    session = ready_execution.resolved_session
+    if session is None:
+        return False
+    return session.allow_edits_notice_posted
 
 
 def _post_response_comment(
