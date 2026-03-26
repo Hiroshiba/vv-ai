@@ -33,6 +33,12 @@ def create_and_checkout_branch(repo_root: Path, branch_name: str) -> None:
     run_git_command(repo_root, "checkout", "-b", branch_name)
 
 
+def fetch_and_checkout_branch(repo_root: Path, branch_name: str) -> None:
+    """リモートブランチを fetch してチェックアウトする。"""
+    run_git_command(repo_root, "fetch", "origin", branch_name)
+    run_git_command(repo_root, "checkout", branch_name)
+
+
 def push_branch(repo_root: Path, branch_name: str) -> None:
     """ブランチを origin へ push する。"""
     run_git_command(repo_root, "push", "-u", "origin", branch_name)

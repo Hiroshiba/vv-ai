@@ -94,7 +94,7 @@
 - [x] `plan` コマンドを実装する
 - [x] `review` コマンドを実装する
 - [x] `implement` の Issue 起点フローを実装する
-- [ ] `implement` の PR 起点フローを実装する
+- [x] `implement` の PR 起点フローを実装する
 - [ ] fork PR での patch fallback と案内制御を実装する
 - [ ] `issue` コマンドを実装する
 

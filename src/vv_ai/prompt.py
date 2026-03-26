@@ -23,6 +23,11 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
     ),
 }
 
+_IMPLEMENT_PR_TASK_DESCRIPTION: str = (
+    "この PR の内容・コメントの指示に基づいて追加実装してください。"
+    "変更は git commit してください。push は別途行うため、push は不要です。"
+)
+
 
 def build_provider_prompt(
     ready_execution: ReadyExecution,
@@ -42,7 +47,10 @@ def build_provider_prompt(
             )
 
     command_name = ready_execution.command.command
-    if command_name in _COMMAND_TASK_DESCRIPTION:
+    target = ready_execution.command.target
+    if command_name == "implement" and target is not None and target.kind == "pr":
+        sections.append(_IMPLEMENT_PR_TASK_DESCRIPTION)
+    elif command_name in _COMMAND_TASK_DESCRIPTION:
         sections.append(_COMMAND_TASK_DESCRIPTION[command_name])
 
     instruction = ready_execution.command.instruction
@@ -79,7 +87,13 @@ def _build_header(
         "未追跡ファイルは原則永続しません（毎回クリーンアップされる想定）。必要なら git 管理に入れてください。",
     ]
     if implement_branch_name is not None:
-        lines.append(
-            f"現在のブランチ: `{implement_branch_name}`。このブランチ上でコミットしてください。"
-        )
+        if target is not None and target.kind == "pr":
+            lines.append(
+                f"現在のブランチ: `{implement_branch_name}`（PR #{target.number} の head ブランチ）。"
+                "このブランチ上でコミットしてください。"
+            )
+        else:
+            lines.append(
+                f"現在のブランチ: `{implement_branch_name}`。このブランチ上でコミットしてください。"
+            )
     return "\n".join(lines)

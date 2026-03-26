@@ -10,6 +10,7 @@ from vv_ai.execution import ExecutionResult, ExecutionStatus
 from vv_ai.git_ops import (
     GitOpsError,
     create_and_checkout_branch,
+    fetch_and_checkout_branch,
     generate_implement_branch_name,
     get_default_branch,
     push_branch,
@@ -71,6 +72,26 @@ def run_command(
             implement_branch_name = generate_implement_branch_name(target.number)
             try:
                 create_and_checkout_branch(repo_root, implement_branch_name)
+            except GitOpsError as exc:
+                raise CommandError(str(exc)) from exc
+        elif command.command == "implement" and target is not None and target.kind == "pr":
+            assert target.repository_full_name is not None
+            assert target.number is not None
+            if not _is_github_target(target):
+                raise CommandError("ローカル PR への implement は未対応です")
+            assert github_client is not None
+            try:
+                pr_info = github_client.get_pull_request(
+                    target.repository_full_name, target.number
+                )
+            except GitHubClientError as exc:
+                raise CommandError(str(exc)) from exc
+            # TODO: fork PR の implement は別タスクで実装
+            if pr_info.is_cross_repository:
+                raise CommandError("fork PR への implement は未対応です")
+            implement_branch_name = pr_info.head_ref_name
+            try:
+                fetch_and_checkout_branch(repo_root, implement_branch_name)
             except GitOpsError as exc:
                 raise CommandError(str(exc)) from exc
 
@@ -146,9 +167,15 @@ def _handle_post_execution(
     if command_name in ("reply", "plan", "review"):
         _post_response_comment(ready_execution, execution_result, github_client)
     elif command_name == "implement" and implement_branch_name is not None:
-        _handle_implement_issue_post_execution(
-            repo_root, ready_execution, execution_result, github_client, implement_branch_name
-        )
+        target = ready_execution.command.target
+        if target is not None and target.kind == "pr":
+            _handle_implement_pr_post_execution(
+                repo_root, ready_execution, execution_result, implement_branch_name
+            )
+        else:
+            _handle_implement_issue_post_execution(
+                repo_root, ready_execution, execution_result, github_client, implement_branch_name
+            )
 
 
 def _handle_implement_issue_post_execution(
@@ -202,6 +229,30 @@ def _handle_implement_issue_post_execution(
     except GitHubClientError as exc:
         raise CommandError(str(exc)) from exc
     print(f"PR を作成しました: {pr.url}")
+
+
+def _handle_implement_pr_post_execution(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
+    implement_branch_name: str,
+) -> None:
+    """implement + PR 起点の後処理（push のみ）を行う。"""
+    command = ready_execution.command
+    target = command.target
+
+    if execution_result.status != "success":
+        return
+
+    if command.dry_run or not _is_github_target(target):
+        print(f"[dry-run/local] push をスキップします。ブランチ: {implement_branch_name}")
+        return
+
+    try:
+        push_branch(repo_root, implement_branch_name)
+    except GitOpsError as exc:
+        raise CommandError(str(exc)) from exc
+    print(f"ブランチ `{implement_branch_name}` を push しました。")
 
 
 def _post_response_comment(
