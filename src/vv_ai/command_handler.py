@@ -106,16 +106,16 @@ def _handle_post_execution(
 ) -> None:
     """コマンド固有の後処理を行う。"""
     command_name = ready_execution.command.command
-    if command_name == "reply":
-        _post_reply_comment(ready_execution, execution_result, github_client)
+    if command_name in ("reply", "plan"):
+        _post_response_comment(ready_execution, execution_result, github_client)
 
 
-def _post_reply_comment(
+def _post_response_comment(
     ready_execution: ReadyExecution,
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
 ) -> None:
-    """reply の応答テキストをコメント投稿する。"""
+    """reply / plan の応答テキストをコメント投稿する。"""
     command = ready_execution.command
     response_text = execution_result.response_text
     if response_text is None:
