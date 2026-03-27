@@ -189,6 +189,8 @@ def _handle_post_execution(
     command_name = ready_execution.command.command
     if command_name in ("reply", "plan", "review"):
         _post_response_comment(ready_execution, execution_result, github_client)
+    elif command_name == "issue":
+        _handle_issue_post_execution(ready_execution, execution_result, github_client)
     elif command_name == "implement" and implement_branch_name is not None:
         target = ready_execution.command.target
         if target is not None and target.kind == "pr":
@@ -365,6 +367,80 @@ def _get_allow_edits_notice_posted(ready_execution: ReadyExecution) -> bool:
     if session is None:
         return False
     return session.allow_edits_notice_posted
+
+
+def _parse_issue_output(response_text: str) -> tuple[str, str]:
+    """AI の出力から Issue タイトルと本文を抽出する。"""
+    lines = response_text.split("\n")
+
+    if not lines or not lines[0].startswith("TITLE:"):
+        raise CommandError(
+            "AI 出力が期待するフォーマットではありません。1行目は `TITLE: <タイトル>` である必要があります"
+        )
+
+    title = lines[0][len("TITLE:"):].strip()
+    if not title:
+        raise CommandError("AI 出力の TITLE が空です")
+
+    if len(lines) < 2 or lines[1].strip() != "BODY:":
+        raise CommandError(
+            "AI 出力が期待するフォーマットではありません。2行目は `BODY:` である必要があります"
+        )
+
+    body = "\n".join(lines[2:])
+    return title, body
+
+
+def _handle_issue_post_execution(
+    ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
+    github_client: GitHubClient | None,
+) -> None:
+    """issue コマンドの後処理（Issue 作成）を行う。"""
+    command = ready_execution.command
+    response_text = execution_result.response_text
+
+    if execution_result.status != "success":
+        return
+
+    if response_text is None:
+        raise CommandError("AI からの応答がありません")
+
+    title, body = _parse_issue_output(response_text)
+    repo = command.repo
+    if repo is None:
+        raise CommandError("Issue 作成先リポジトリが不明です")
+
+    if command.dry_run:
+        print(f"[dry-run] Issue 作成をスキップします。repo: {repo}, title: {title}")
+        return
+
+    if github_client is None:
+        print(f"[local] Issue 作成をスキップします。repo: {repo}, title: {title}")
+        return
+
+    try:
+        issue = github_client.create_issue(repo, title, body)
+    except GitHubClientError as exc:
+        raise CommandError(str(exc)) from exc
+
+    print(f"Issue を作成しました: {issue.url}")
+
+    target = command.target
+    if (
+        command.comment_id is not None
+        and target is not None
+        and target.repository_full_name is not None
+        and target.number is not None
+    ):
+        try:
+            github_client.create_issue_comment(
+                target.repository_full_name,
+                target.number,
+                f"Created: {issue.url}",
+            )
+        except GitHubClientError as exc:
+            print(f"Issue リンクのコメント投稿に失敗しました: {exc}", file=sys.stderr)
 
 
 def _post_response_comment(

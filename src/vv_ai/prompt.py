@@ -21,6 +21,15 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
         "以下の Issue の内容を実装してください。"
         "変更は git commit してください。push は別途行うため、push は不要です。"
     ),
+    "issue": (
+        "以下の指示に基づいて GitHub Issue を作成するための内容を生成してください。\n"
+        "出力は以下のフォーマットに厳密に従ってください:\n"
+        "1行目: TITLE: <タイトル文字列>\n"
+        "2行目: BODY:\n"
+        "3行目以降: Markdown 本文\n"
+        "\n"
+        "タイトルと本文以外の余計な出力は含めないでください。"
+    ),
 }
 
 _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
