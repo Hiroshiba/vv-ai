@@ -11,7 +11,9 @@ from collections.abc import Mapping
 from pathlib import Path
 
 AGE_PUBLIC_KEY_ENV = "VV_AI_AGE_PUBLIC_KEY"
+AGE_PUBLIC_KEY_FILE_ENV = "VV_AI_AGE_PUBLIC_KEY_FILE"
 AGE_SECRET_KEY_ENV = "VV_AI_AGE_SECRET_KEY"
+AGE_SECRET_KEY_FILE_ENV = "VV_AI_AGE_SECRET_KEY_FILE"
 
 
 class ArtifactCryptoError(Exception):
@@ -20,12 +22,12 @@ class ArtifactCryptoError(Exception):
 
 def resolve_age_public_key(env: Mapping[str, str]) -> str:
     """暗号化用の公開鍵を環境変数から返す。"""
-    return _resolve_required_secret(env, AGE_PUBLIC_KEY_ENV)
+    return _resolve_required_secret(env, AGE_PUBLIC_KEY_FILE_ENV, AGE_PUBLIC_KEY_ENV)
 
 
 def resolve_age_secret_key(env: Mapping[str, str]) -> str:
     """復号用の秘密鍵を環境変数から返す。"""
-    return _resolve_required_secret(env, AGE_SECRET_KEY_ENV)
+    return _resolve_required_secret(env, AGE_SECRET_KEY_FILE_ENV, AGE_SECRET_KEY_ENV)
 
 
 def encrypt_file(
@@ -156,13 +158,29 @@ def decrypt_file_text(
 
 def _resolve_required_secret(
     env: Mapping[str, str],
-    env_name: str,
+    file_env: str,
+    value_env: str,
 ) -> str:
-    """必須の秘密値を環境変数から返す。"""
-    raw_value = env.get(env_name)
+    """ファイルパス env 優先、生キー値 env フォールバックで秘密値を返す。"""
+    file_path = env.get(file_env, "").strip()
+    if file_path:
+        path = Path(file_path)
+        if not path.is_file():
+            raise ArtifactCryptoError(
+                f"`{file_env}` で指定されたファイル `{file_path}` が見つかりません"
+            )
+        content = path.read_text(encoding="utf-8").strip()
+        if not content:
+            raise ArtifactCryptoError(
+                f"`{file_env}` で指定されたファイル `{file_path}` が空です"
+            )
+        return content
+    raw_value = env.get(value_env)
     if raw_value is None:
-        raise ArtifactCryptoError(f"環境変数 `{env_name}` が必要です")
-    return _normalize_secret(raw_value, env_name)
+        raise ArtifactCryptoError(
+            f"環境変数 `{file_env}` または `{value_env}` が必要です"
+        )
+    return _normalize_secret(raw_value, value_env)
 
 
 def _normalize_secret(value: str, env_name: str) -> str:

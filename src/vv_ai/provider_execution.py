@@ -25,8 +25,10 @@ from vv_ai.preflight import ReadyExecution
 from vv_ai.report_artifact import ReportSections
 from vv_ai.session import SessionStateRef
 
-_API_KEY_HELPER_ENV = "VV_AI_API_KEY_HELPER_PATH"
 _CODEX_OPENAI_API_KEY_ENV = "VV_OPENAI_API_KEY"
+_CODEX_OPENAI_API_KEY_FILE_ENV = "VV_OPENAI_API_KEY_FILE"
+_ANTHROPIC_API_KEY_ENV = "VV_ANTHROPIC_API_KEY"
+_ANTHROPIC_API_KEY_FILE_ENV = "VV_ANTHROPIC_API_KEY_FILE"
 
 _ALLOWED_ENV_KEYS = frozenset(
     [
@@ -44,6 +46,8 @@ _ALLOWED_ENV_KEYS = frozenset(
         "SHELL",
     ]
 )
+
+_CODEX_SHELL_ENV_ALLOWLIST = ["PATH", "HOME", "USER", "LANG", "TERM", "SHELL", "TMPDIR"]
 
 _DENY_READ_PATHS = [
     "/home/runner/.vv-secrets/**",
@@ -170,9 +174,14 @@ def _build_codex_command(
     session_mode = session.mode if session is not None else "new"
     state_ref = session.state_ref if session is not None else None
 
+    include_only_toml = json.dumps(_CODEX_SHELL_ENV_ALLOWLIST)
     base_options: list[str] = [
         "--full-auto",
         "--json",
+        "-c",
+        "shell_environment_policy.inherit=include_only",
+        "-c",
+        f"shell_environment_policy.include_only={include_only_toml}",
         "-o",
         str(output_file),
     ]
@@ -198,13 +207,7 @@ def _build_codex_command(
 
 def _build_codex_env(env: Mapping[str, str]) -> dict[str, str]:
     """Codex プロセスに渡す環境変数を構築する。"""
-    # TODO: セクション 11 で shell_environment_policy を設定し、
-    #       OPENAI_API_KEY が Codex の子プロセスに伝播しないよう制御する
-    api_key = env.get(_CODEX_OPENAI_API_KEY_ENV, "").strip()
-    if not api_key:
-        raise ProviderExecutionError(
-            f"Codex の認証に必要な環境変数 `{_CODEX_OPENAI_API_KEY_ENV}` が設定されていません"
-        )
+    api_key = _resolve_api_key(env, _CODEX_OPENAI_API_KEY_FILE_ENV, _CODEX_OPENAI_API_KEY_ENV)
     sanitized = _build_sanitized_env(env)
     sanitized["OPENAI_API_KEY"] = api_key
     return sanitized
@@ -317,43 +320,50 @@ def _execute_claude(
     provider_prompt: str,
 ) -> ExecutionResult:
     """Claude Code CLI を実行して ExecutionResult を返す。"""
-    command = _build_claude_command(ready_execution, env, provider_prompt)
-    sanitized_env = _build_sanitized_env(env)
-
-    execution_started_at = time.perf_counter()
-    proc = subprocess.run(
-        command,
-        cwd=repo_root,
-        env=sanitized_env,
-        capture_output=True,
-        text=True,
-        check=False,
+    api_key_file_path, is_temporary = _resolve_api_key_file_path(
+        env, _ANTHROPIC_API_KEY_FILE_ENV, _ANTHROPIC_API_KEY_ENV
     )
-    execution_duration_seconds = time.perf_counter() - execution_started_at
+    try:
+        command = _build_claude_command(ready_execution, api_key_file_path, provider_prompt)
+        sanitized_env = _build_sanitized_env(env)
 
-    if proc.returncode != 0:
-        stderr = proc.stderr.strip()
-        raise ProviderExecutionError(
-            f"Claude Code が終了コード {proc.returncode} で失敗しました"
-            + (f": {stderr}" if stderr else "")
+        execution_started_at = time.perf_counter()
+        proc = subprocess.run(
+            command,
+            cwd=repo_root,
+            env=sanitized_env,
+            capture_output=True,
+            text=True,
+            check=False,
         )
+        execution_duration_seconds = time.perf_counter() - execution_started_at
 
-    claude_output = _parse_claude_json_output(proc.stdout)
-    return _build_execution_result(
-        ready_execution,
-        claude_output,
-        preflight_duration_seconds,
-        execution_duration_seconds,
-    )
+        if proc.returncode != 0:
+            stderr = proc.stderr.strip()
+            raise ProviderExecutionError(
+                f"Claude Code が終了コード {proc.returncode} で失敗しました"
+                + (f": {stderr}" if stderr else "")
+            )
+
+        claude_output = _parse_claude_json_output(proc.stdout)
+        return _build_execution_result(
+            ready_execution,
+            claude_output,
+            preflight_duration_seconds,
+            execution_duration_seconds,
+        )
+    finally:
+        if is_temporary:
+            Path(api_key_file_path).unlink(missing_ok=True)
 
 
 def _build_claude_command(
     ready_execution: ReadyExecution,
-    env: Mapping[str, str],
+    api_key_file_path: str,
     provider_prompt: str,
 ) -> list[str]:
     """Claude Code CLI のコマンドリストを返す。"""
-    settings_json = _build_claude_settings(env)
+    settings_json = _build_claude_settings(api_key_file_path)
     session = ready_execution.resolved_session
     session_mode = session.mode if session is not None else "new"
 
@@ -386,19 +396,16 @@ def _build_claude_command(
     return command
 
 
-def _build_claude_settings(env: Mapping[str, str]) -> str:
+def _build_claude_settings(api_key_file_path: str) -> str:
     """Claude Code 用 settings JSON 文字列を返す。"""
-    api_key_helper_path = env.get(_API_KEY_HELPER_ENV, "").strip()
-    if not api_key_helper_path:
-        raise ProviderExecutionError(
-            f"Claude Code の認証に必要な環境変数 `{_API_KEY_HELPER_ENV}` が設定されていません"
-        )
-
     settings = {
         "apiKeyHelper": {
-            "command": ["cat", api_key_helper_path],
+            "command": ["cat", api_key_file_path],
         },
         "allowUnsandboxedCommands": False,
+        "permissions": {
+            "deny": [f"Read({path})" for path in _DENY_READ_PATHS],
+        },
         "sandbox": {
             "enabled": True,
             "filesystem": {
@@ -407,6 +414,60 @@ def _build_claude_settings(env: Mapping[str, str]) -> str:
         },
     }
     return json.dumps(settings)
+
+
+def _resolve_api_key(
+    env: Mapping[str, str],
+    file_env: str,
+    value_env: str,
+) -> str:
+    """ファイルパス env 優先、生キー値 env フォールバックで API キーを返す。"""
+    file_path = env.get(file_env, "").strip()
+    if file_path:
+        path = Path(file_path)
+        if not path.is_file():
+            raise ProviderExecutionError(
+                f"`{file_env}` で指定されたファイル `{file_path}` が見つかりません"
+            )
+        content = path.read_text(encoding="utf-8").strip()
+        if not content:
+            raise ProviderExecutionError(
+                f"`{file_env}` で指定されたファイル `{file_path}` が空です"
+            )
+        return content
+    value = env.get(value_env, "").strip()
+    if not value:
+        raise ProviderExecutionError(
+            f"認証に必要な環境変数 `{file_env}` または `{value_env}` が設定されていません"
+        )
+    return value
+
+
+def _resolve_api_key_file_path(
+    env: Mapping[str, str],
+    file_env: str,
+    value_env: str,
+) -> tuple[str, bool]:
+    """API キーのファイルパスと一時ファイルかどうかを返す。"""
+    file_path = env.get(file_env, "").strip()
+    if file_path:
+        if not Path(file_path).is_file():
+            raise ProviderExecutionError(
+                f"`{file_env}` で指定されたファイル `{file_path}` が見つかりません"
+            )
+        return file_path, False
+    value = env.get(value_env, "").strip()
+    if not value:
+        raise ProviderExecutionError(
+            f"認証に必要な環境変数 `{file_env}` または `{value_env}` が設定されていません"
+        )
+    tmp = tempfile.NamedTemporaryFile(
+        prefix="vv-ai-key-", suffix=".txt", delete=False, mode="w"
+    )
+    tmp.write(value)
+    tmp.close()
+    Path(tmp.name).chmod(0o400)
+    return tmp.name, True
 
 
 def _build_sanitized_env(env: Mapping[str, str]) -> dict[str, str]:

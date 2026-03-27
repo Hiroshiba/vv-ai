@@ -115,8 +115,6 @@ jobs:
           VV_ANTHROPIC_API_KEY_FILE: /home/runner/.vv-secrets/anthropic_key
           VV_AI_AGE_PUBLIC_KEY_FILE: /home/runner/.vv-secrets/age_public_key
           VV_AI_AGE_SECRET_KEY_FILE: /home/runner/.vv-secrets/age_secret_key
-          # TODO(task11): provider_execution.py 側で上記ファイルパスから API キーを読み込み、
-          # AI サブプロセスには直接渡さない構成を実装する。
         run: |
           uv run vv-ai \
             --event "${{ github.event_name }}" \

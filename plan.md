@@ -108,10 +108,10 @@
 
 ### 11. Dry-run / Security
 
-- [ ] dry-run で GitHub への外部反映を止める制御を実装する
-- [ ] AI プロセスに GitHub token を渡さない構成を実装する
-- [ ] Codex の環境変数伝播制御を実装する
-- [ ] Claude Code の sandbox / denyRead / apiKeyHelper 前提を実装する
+- [x] dry-run で GitHub への外部反映を止める制御を実装する
+- [x] AI プロセスに GitHub token を渡さない構成を実装する
+- [x] Codex の環境変数伝播制御を実装する
+- [x] Claude Code の sandbox / denyRead / apiKeyHelper 前提を実装する
 
 ### 12. テストと検証
 

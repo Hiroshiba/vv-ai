@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -24,6 +25,7 @@ class ProviderSpec(BaseModel):
 
     name: ProviderName
     api_key_env: str
+    api_key_file_env: str
     cli_command: str
     supports_session_resume: bool
     supports_compact: bool
@@ -52,6 +54,7 @@ _PROVIDER_SPECS: dict[ProviderName, ProviderSpec] = {
     "codex": ProviderSpec(
         name="codex",
         api_key_env="VV_OPENAI_API_KEY",
+        api_key_file_env="VV_OPENAI_API_KEY_FILE",
         cli_command="codex",
         supports_session_resume=True,
         supports_compact=True,
@@ -59,6 +62,7 @@ _PROVIDER_SPECS: dict[ProviderName, ProviderSpec] = {
     "claude": ProviderSpec(
         name="claude",
         api_key_env="VV_ANTHROPIC_API_KEY",
+        api_key_file_env="VV_ANTHROPIC_API_KEY_FILE",
         cli_command="claude",
         supports_session_resume=True,
         supports_compact=True,
@@ -83,8 +87,8 @@ def resolve_provider(
             return ResolvedProvider(spec=spec, source="config")
 
     required_secrets = ", ".join(
-        get_provider_spec(provider).api_key_env
-        for provider in _iter_provider_priority(config.provider_priority)
+        f"{get_provider_spec(p).api_key_file_env} / {get_provider_spec(p).api_key_env}"
+        for p in _iter_provider_priority(config.provider_priority)
     )
     raise ProviderResolutionError(
         "利用可能な provider を選べませんでした。"
@@ -113,7 +117,8 @@ def _ensure_provider_available(
         return
 
     raise ProviderResolutionError(
-        f"`{spec.name}` を使うには環境変数 `{spec.api_key_env}` が必要です"
+        f"`{spec.name}` を使うには環境変数 `{spec.api_key_file_env}` または"
+        f" `{spec.api_key_env}` が必要です"
     )
 
 
@@ -121,6 +126,9 @@ def _has_provider_secret(
     spec: ProviderSpec,
     env: Mapping[str, str],
 ) -> bool:
-    """provider 用の秘密値が空でないかを確認する。"""
+    """provider 用の秘密値が利用可能かを確認する。"""
+    file_path = env.get(spec.api_key_file_env, "").strip()
+    if file_path:
+        return Path(file_path).is_file()
     secret_value = env.get(spec.api_key_env)
     return secret_value is not None and secret_value.strip() != ""
