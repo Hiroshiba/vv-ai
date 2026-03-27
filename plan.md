@@ -100,11 +100,11 @@
 
 ### 10. Workflow / Runner
 
-- [ ] `issue_comment` と `workflow_dispatch` を持つ単一 workflow を実装する
-- [ ] `workflow_dispatch` の inputs を requirements に沿って定義する
-- [ ] `concurrency` による同一 target の直列化を実装する
-- [ ] runner セットアップ手順を実装する
-- [ ] secret を分離した workflow step 構成を実装する
+- [x] `issue_comment` と `workflow_dispatch` を持つ単一 workflow を実装する
+- [x] `workflow_dispatch` の inputs を requirements に沿って定義する
+- [x] `concurrency` による同一 target の直列化を実装する
+- [x] runner セットアップ手順を実装する
+- [x] secret を分離した workflow step 構成を実装する
 
 ### 11. Dry-run / Security
 
