@@ -18,14 +18,14 @@ implementer からプラン承認リクエストが来たら、内容を確認�
 
 1. implementer からの完了報告を受けたら、Agent tool で reviewer を spawn する (team_name: "vv-ai-task", name: "reviewer-N")。N はレビュー回数
 2. reviewer に「review-diff スキルを実行してください」と伝える。実装係の変更概要も spawn 時のプロンプトに含める
-3. reviewer からのレビュー結果をユーザーに提示する
+3. reviewer からレビュー結果ファイルのパスを受け取り、ユーザーにパスを提示する
 
 ## レビュー結果の処理
 
 MUST-FIX がある場合:
 
 1. reviewer を shutdown する
-2. implementer にレビュー指摘を SendMessage で伝え、「review-triage スキルを実行して修正してください」と依頼する
+2. implementer にレビュー結果ファイルのパスを SendMessage で伝え、「review-triage スキルを実行して修正してください」と依頼する
 3. implementer のプラン承認リクエストが来たら承認する
 4. implementer 完了後、新しい reviewer-(N+1) を spawn して「review-diff スキルを実行してください」と伝える
 5. ユーザーに再提示する
