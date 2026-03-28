@@ -18,7 +18,7 @@ implementer からプラン承認リクエストが来たら、内容を確認�
 
 implementer からの完了報告を受けたら、以下のループを開始する。N の初期値は 1。
 
-1. reviewer-N を spawn して「review-diff スキルを実行してください」と伝える。実装係の変更概要も spawn 時のプロンプトに含める
+1. reviewer-N を spawn して「review-diff スキルを実行してください」と伝える。
 2. reviewer からファイルパスを受け取り、reviewer を shutdown する
 3. implementer にレビュー結果ファイルのパスを伝え、「review-triage スキルを実行してください。修正するかどうかはあなたが判断してください」と依頼する
 4. implementer のプラン承認リクエストが来たら承認する
