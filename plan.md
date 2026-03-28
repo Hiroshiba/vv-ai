@@ -117,7 +117,7 @@
 
 - [x] 入力正規化と validation の単体テストを実装する
 - [x] target 解決と backend 判定の単体テストを実装する
-- [ ] session / artifact 保存復元のテストを実装する
+- [x] session / artifact 保存復元のテストを実装する
 - [ ] dry-run と finally-save 保証のテストを実装する
 - [ ] local 実行の統合テストを実装する
 - [ ] 主要シナリオの受け入れ確認を行う
