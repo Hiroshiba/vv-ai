@@ -23,7 +23,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """CLI のメインエントリポイント。"""
     parser = argparse.ArgumentParser(prog="onetask")
     parser.add_argument("--repo-root", type=Path, help="リポジトリルートのパス")
-    parser.add_argument("--max-review-loops", type=int, default=5)
+    parser.add_argument("--max-review-loops", type=int, default=3)
     ns = parser.parse_args(argv)
 
     repo_root: Path = ns.repo_root or _find_repo_root(Path.cwd())

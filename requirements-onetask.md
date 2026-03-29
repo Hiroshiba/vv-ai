@@ -23,7 +23,7 @@ Agent Teams の TeamCreate / SendMessage / TaskCreate 等のツールに依存�
 1. implementer が plan モードでタスクのプランを作成する
 2. implementer が acceptEdits モードで実装する
 3. レビューループ: reviewer が review-diff を実行し、implementer が review-triage で対応する
-4. changes_made == false になるまでループする
+4. changes_made == false になるか上限回数に達するまでループする
 5. ユーザーが確認し、問題があればフィードバックを入力 → implementer が修正 → 再レビューのループ
 6. implementer が日誌作成と git commit を行う
 

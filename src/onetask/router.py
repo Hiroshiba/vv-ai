@@ -92,9 +92,6 @@ def _run_flow(
     latest_review_file = ""
     while True:
         review_count += 1
-        if review_count > max_review_loops:
-            raise RouterError(f"レビューループ上限 ({max_review_loops}) を超えました")
-
         latest_review_file = _run_reviewer(
             tmux=tmux,
             work_dir=work_dir,
@@ -114,6 +111,9 @@ def _run_flow(
         )
 
         if not changes_made:
+            break
+        if review_count >= max_review_loops:
+            print(f"レビューループ上限 ({max_review_loops}) に達したため次に進みます")
             break
 
     while True:
@@ -134,9 +134,6 @@ def _run_flow(
             settings_file=settings_file,
         )
         review_count += 1
-        if review_count > max_review_loops:
-            raise RouterError(f"レビューループ上限 ({max_review_loops}) を超えました")
-
         latest_review_file = _run_reviewer(
             tmux=tmux,
             work_dir=work_dir,
@@ -157,6 +154,9 @@ def _run_flow(
 
         if not changes_made:
             continue
+        if review_count >= max_review_loops:
+            print(f"レビューループ上限 ({max_review_loops}) に達したため次に進みます")
+            break
 
     _run_implementer_final(
         tmux=tmux,
