@@ -124,7 +124,7 @@
 
 ### 13. ドキュメント
 
-- [ ] セットアップ手順をまとめる
-- [ ] Secrets / `vv-ai.yml` / ローカル実行方法をまとめる
-- [ ] GitHub Actions からの実行方法をまとめる
-- [ ] 今後 Reusable Workflow に切り出す前提の整理を残す
+- [x] セットアップ手順をまとめる
+- [x] Secrets / `vv-ai.yml` / ローカル実行方法をまとめる
+- [x] GitHub Actions からの実行方法をまとめる
+- [x] 今後 Reusable Workflow に切り出す前提の整理を残す
