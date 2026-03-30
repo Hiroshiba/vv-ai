@@ -47,6 +47,7 @@ class ResolvedCommand(BaseModel):
     session_mode: SessionMode | None = None
     dry_run: bool = False
     repo: str | None = None
+    skip_api_key_check: bool = False
     repository_full_name: str | None = None
     actor: str | None = None
     comment_id: int | None = None
@@ -80,6 +81,7 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
         session_mode=raw_input.session_mode,
         dry_run=raw_input.dry_run,
         repo=repo,
+        skip_api_key_check=raw_input.skip_api_key_check,
         repository_full_name=raw_input.repository_full_name,
         actor=raw_input.actor,
         comment_id=raw_input.comment_id,

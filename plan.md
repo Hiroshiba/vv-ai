@@ -139,7 +139,7 @@ tmux kill-session -t vvai-test 2>/dev/null || true
 
 **セットアップ**
 
-- [ ] `vv-ai.yml` を作成する（.gitignore 対象のためコミット不要）
+- [x] `vv-ai.yml` を作成する（.gitignore 対象のためコミット不要）
   ```yaml
   allowed_users:
     - Hiroshiba
@@ -147,7 +147,7 @@ tmux kill-session -t vvai-test 2>/dev/null || true
     - codex
     - claude
   ```
-- [ ] ローカル Issue フィクスチャを作成する
+- [x] ローカル Issue フィクスチャを作成する
   - `.vv-ai/issues/test-issue-1/comments/`（空ディレクトリ）
   - `.vv-ai/issues/test-issue-1/issue.md`
     ```
@@ -166,7 +166,7 @@ tmux kill-session -t vvai-test 2>/dev/null || true
       "backend": "local"
     }
     ```
-- [ ] ローカル PR フィクスチャを作成する
+- [x] ローカル PR フィクスチャを作成する
   - `.vv-ai/prs/test-pr-1/comments/`（空ディレクトリ）
   - `.vv-ai/prs/test-pr-1/pr.md`
     ```
@@ -187,18 +187,18 @@ tmux kill-session -t vvai-test 2>/dev/null || true
       "base_branch": "main"
     }
     ```
-- [ ] age 鍵ペアを生成する
+- [x] age 鍵ペアを生成する
   ```sh
   age-keygen -o /tmp/vv-ai-age-key.txt
   # public key は出力のコメント行から取得
   ```
-- [ ] 外部ツールが PATH にあることを確認する（codex, claude, age, tmux, gh）
-- [ ] 以下の環境変数を設定する（tmux セッション内で実行）
-  - `VV_OPENAI_API_KEY` または `VV_OPENAI_API_KEY_FILE`
-  - `VV_ANTHROPIC_API_KEY` または `VV_ANTHROPIC_API_KEY_FILE`
+- [x] 外部ツールが PATH にあることを確認する（codex, claude, age, tmux, gh）
+- [x] 以下の環境変数を設定する（tmux セッション内で実行）
+  - `VV_OPENAI_API_KEY` または `VV_OPENAI_API_KEY_FILE`（`--skip-api-key-check` を使うため不要）
+  - `VV_ANTHROPIC_API_KEY` または `VV_ANTHROPIC_API_KEY_FILE`（`--skip-api-key-check` を使うため不要）
   - `VV_AI_AGE_PUBLIC_KEY`（age-keygen の public key）
   - `VV_AI_AGE_SECRET_KEY`（age-keygen の secret key）
-- [ ] `uv run vv-ai --help` が exit 0 で返ることを確認する
+- [x] `uv run vv-ai --help` が exit 0 で返ることを確認する
 
 ### 15. Codex Provider テスト
 
@@ -223,7 +223,7 @@ tmux new-session -d -s vvai-test -x 200 -y 50 -c /Users/kazuyuki_hiroshiba/Githu
   ```
 - [ ] C-03: review で Issue を指定 → exit 1（`review` は PR 専用）
   ```sh
-  uv run vv-ai --command review --target-url .vv-ai/issues/test-issue-1 --provider codex --session new --dry-run
+  uv run vv-ai --command review --target-url .vv-ai/issues/test-issue-1 --provider codex --session new --dry-run --skip-api-key-check
   ```
 
 **正常ケース（dry-run）**
@@ -232,18 +232,18 @@ tmux new-session -d -s vvai-test -x 200 -y 50 -c /Users/kazuyuki_hiroshiba/Githu
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 \
     --instruction "この Issue の内容を一行で要約して" \
-    --provider codex --session new --dry-run
+    --provider codex --session new --dry-run --skip-api-key-check
   ```
 - [ ] C-20: plan ローカル Issue → exit 0
   ```sh
   uv run vv-ai --command plan --target-url .vv-ai/issues/test-issue-1 \
     --instruction "実装方針を出して" \
-    --provider codex --session new --dry-run
+    --provider codex --session new --dry-run --skip-api-key-check
   ```
 - [ ] C-30: implement ローカル Issue → exit 0、`[dry-run/local]` 出力、`vv-ai/issue-` ブランチ作成確認→削除
   ```sh
   uv run vv-ai --command implement --target-url .vv-ai/issues/test-issue-1 \
-    --provider codex --session new --dry-run
+    --provider codex --session new --dry-run --skip-api-key-check
   # 確認後: git checkout main && git branch | grep 'vv-ai/issue-' | xargs git branch -D
   ```
 - [ ] C-40: reply GitHub Issue → exit 0、GitHub への書き込みなし（dry-run）
@@ -251,7 +251,7 @@ tmux new-session -d -s vvai-test -x 200 -y 50 -c /Users/kazuyuki_hiroshiba/Githu
   uv run vv-ai --command reply \
     --target-url https://github.com/VOICEVOX/voicevox_core/issues/1 \
     --instruction "テスト" \
-    --provider codex --session new --dry-run
+    --provider codex --session new --dry-run --skip-api-key-check
   ```
 
 ### 16. Claude Provider テスト
@@ -264,25 +264,25 @@ tmux セッションを再作成する（Phase 15 のセッションを破棄）
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 \
     --instruction "この Issue の内容を一行で要約して" \
-    --provider claude --session new --dry-run
+    --provider claude --session new --dry-run --skip-api-key-check
   ```
 - [ ] D-20: plan ローカル Issue → exit 0
   ```sh
   uv run vv-ai --command plan --target-url .vv-ai/issues/test-issue-1 \
     --instruction "実装方針を出して" \
-    --provider claude --session new --dry-run
+    --provider claude --session new --dry-run --skip-api-key-check
   ```
 - [ ] D-30: implement ローカル Issue → exit 0、`[dry-run/local]` 出力、ブランチ確認→削除
   ```sh
   uv run vv-ai --command implement --target-url .vv-ai/issues/test-issue-1 \
-    --provider claude --session new --dry-run
+    --provider claude --session new --dry-run --skip-api-key-check
   ```
 - [ ] D-40: reply GitHub Issue → exit 0
   ```sh
   uv run vv-ai --command reply \
     --target-url https://github.com/VOICEVOX/voicevox_core/issues/1 \
     --instruction "テスト" \
-    --provider claude --session new --dry-run
+    --provider claude --session new --dry-run --skip-api-key-check
   ```
 
 ### 17. Provider 自動選択テスト
@@ -290,7 +290,7 @@ tmux セッションを再作成する（Phase 15 のセッションを破棄）
 - [ ] A-01: `--provider` 省略時に `provider_priority` の先頭（codex）が選択される
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 \
-    --instruction "テスト" --session new --dry-run
+    --instruction "テスト" --session new --dry-run --skip-api-key-check
   # stdout に provider=codex を含むことを確認
   ```
 

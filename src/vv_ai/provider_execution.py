@@ -107,13 +107,14 @@ def execute_provider(
 ) -> ExecutionResult:
     """provider CLI を実行して ExecutionResult を返す。"""
     provider_name = ready_execution.resolved_provider.name
+    skip = ready_execution.command.skip_api_key_check
     if provider_name == "codex":
         return _execute_codex(
-            repo_root, ready_execution, env, preflight_duration_seconds, provider_prompt
+            repo_root, ready_execution, env, preflight_duration_seconds, provider_prompt, skip
         )
     if provider_name == "claude":
         return _execute_claude(
-            repo_root, ready_execution, env, preflight_duration_seconds, provider_prompt
+            repo_root, ready_execution, env, preflight_duration_seconds, provider_prompt, skip
         )
     raise AssertionError(f"未対応の provider です: {provider_name}")
 
@@ -124,6 +125,7 @@ def _execute_codex(
     env: Mapping[str, str],
     preflight_duration_seconds: float,
     provider_prompt: str,
+    skip_api_key_check: bool,
 ) -> ExecutionResult:
     """Codex CLI を実行して ExecutionResult を返す。"""
     with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
@@ -131,7 +133,7 @@ def _execute_codex(
 
     try:
         command = _build_codex_command(ready_execution, output_file, provider_prompt)
-        codex_env = _build_codex_env(env)
+        codex_env = _build_codex_env(env, skip_api_key_check)
 
         execution_started_at = time.perf_counter()
         proc = subprocess.run(
@@ -205,11 +207,12 @@ def _build_codex_command(
     return ["codex", "exec", *base_options, "--", provider_prompt]
 
 
-def _build_codex_env(env: Mapping[str, str]) -> dict[str, str]:
+def _build_codex_env(env: Mapping[str, str], skip_api_key_check: bool) -> dict[str, str]:
     """Codex プロセスに渡す環境変数を構築する。"""
-    api_key = _resolve_api_key(env, _CODEX_OPENAI_API_KEY_FILE_ENV, _CODEX_OPENAI_API_KEY_ENV)
     sanitized = _build_sanitized_env(env)
-    sanitized["OPENAI_API_KEY"] = api_key
+    if not skip_api_key_check:
+        api_key = _resolve_api_key(env, _CODEX_OPENAI_API_KEY_FILE_ENV, _CODEX_OPENAI_API_KEY_ENV)
+        sanitized["OPENAI_API_KEY"] = api_key
     return sanitized
 
 
@@ -318,11 +321,16 @@ def _execute_claude(
     env: Mapping[str, str],
     preflight_duration_seconds: float,
     provider_prompt: str,
+    skip_api_key_check: bool,
 ) -> ExecutionResult:
     """Claude Code CLI を実行して ExecutionResult を返す。"""
-    api_key_file_path, is_temporary = _resolve_api_key_file_path(
-        env, _ANTHROPIC_API_KEY_FILE_ENV, _ANTHROPIC_API_KEY_ENV
-    )
+    if skip_api_key_check:
+        api_key_file_path = None
+        is_temporary = False
+    else:
+        api_key_file_path, is_temporary = _resolve_api_key_file_path(
+            env, _ANTHROPIC_API_KEY_FILE_ENV, _ANTHROPIC_API_KEY_ENV
+        )
     try:
         command = _build_claude_command(ready_execution, api_key_file_path, provider_prompt)
         sanitized_env = _build_sanitized_env(env)
@@ -359,7 +367,7 @@ def _execute_claude(
 
 def _build_claude_command(
     ready_execution: ReadyExecution,
-    api_key_file_path: str,
+    api_key_file_path: str | None,
     provider_prompt: str,
 ) -> list[str]:
     """Claude Code CLI のコマンドリストを返す。"""
@@ -396,12 +404,9 @@ def _build_claude_command(
     return command
 
 
-def _build_claude_settings(api_key_file_path: str) -> str:
+def _build_claude_settings(api_key_file_path: str | None) -> str:
     """Claude Code 用 settings JSON 文字列を返す。"""
-    settings = {
-        "apiKeyHelper": {
-            "command": ["cat", api_key_file_path],
-        },
+    settings: dict = {
         "allowUnsandboxedCommands": False,
         "permissions": {
             "deny": [f"Read({path})" for path in _DENY_READ_PATHS],
@@ -413,6 +418,8 @@ def _build_claude_settings(api_key_file_path: str) -> str:
             },
         },
     }
+    if api_key_file_path is not None:
+        settings["apiKeyHelper"] = {"command": ["cat", api_key_file_path]}
     return json.dumps(settings)
 
 

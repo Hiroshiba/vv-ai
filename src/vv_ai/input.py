@@ -39,6 +39,7 @@ class CLIInput(BaseModel):
     session: SessionMode | None = None
     dry_run: bool | None = None
     repo: str | None = None
+    skip_api_key_check: bool = False
 
 
 class GitHubRepository(BaseModel):
@@ -113,6 +114,7 @@ class RawInput(BaseModel):
     session_mode: SessionMode | None = None
     dry_run: bool = False
     repo: str | None = None
+    skip_api_key_check: bool = False
     repository_full_name: str | None = None
     actor: str | None = None
     comment_id: int | None = None
@@ -154,6 +156,7 @@ def build_raw_input_from_cli(cli_input: CLIInput) -> RawInput:
             session_mode=cli_input.session,
             dry_run=bool(cli_input.dry_run),
             repo=cli_input.repo,
+            skip_api_key_check=cli_input.skip_api_key_check,
         )
     except ValidationError as exc:
         raise InputError("CLI 引数の値が不正です") from exc

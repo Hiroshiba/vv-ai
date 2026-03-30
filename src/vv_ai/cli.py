@@ -95,6 +95,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--repo",
         help="Issue 作成先のリポジトリを org/repo 形式で指定します。",
     )
+    parser.add_argument(
+        "--skip-api-key-check",
+        action="store_true",
+        default=False,
+        help="API キーの存在確認をスキップします。ローカル環境で provider が自前の認証を持つ場合に使います。",
+    )
     return parser
 
 

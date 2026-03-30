@@ -76,10 +76,18 @@ def resolve_provider(
     env: Mapping[str, str],
 ) -> ResolvedProvider:
     """利用する provider を確定する。"""
+    skip = resolved_command.skip_api_key_check
+
     if resolved_command.provider is not None:
         spec = get_provider_spec(resolved_command.provider)
-        _ensure_provider_available(spec, env)
+        if not skip:
+            _ensure_provider_available(spec, env)
         return ResolvedProvider(spec=spec, source="explicit")
+
+    if skip:
+        priority = _iter_provider_priority(config.provider_priority)
+        spec = get_provider_spec(priority[0])
+        return ResolvedProvider(spec=spec, source="config")
 
     for provider in _iter_provider_priority(config.provider_priority):
         spec = get_provider_spec(provider)
