@@ -6,6 +6,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from onetask.provider import ProviderName
 from onetask.router import RouterError, run_task
 
 
@@ -24,12 +25,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="onetask")
     parser.add_argument("--repo-root", type=Path, help="リポジトリルートのパス")
     parser.add_argument("--max-review-loops", type=int, default=3)
+    parser.add_argument(
+        "--provider",
+        choices=["claude", "codex"],
+        default="claude",
+        help="使用する AI プロバイダー (デフォルト: claude)",
+    )
     ns = parser.parse_args(argv)
 
     repo_root: Path = ns.repo_root or _find_repo_root(Path.cwd())
+    provider: ProviderName = ns.provider
 
     try:
-        run_task(repo_root, max_review_loops=ns.max_review_loops)
+        run_task(repo_root, max_review_loops=ns.max_review_loops, provider=provider)
     except RouterError as exc:
         print(f"エラー: {exc}", file=sys.stderr)
         return 1

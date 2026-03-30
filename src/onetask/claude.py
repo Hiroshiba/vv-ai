@@ -3,30 +3,54 @@ from __future__ import annotations
 
 import json
 import shlex
-import time
 from pathlib import Path
 from typing import TypeVar
 
 from pydantic import BaseModel
 
 from onetask.models import ClaudeResponse
+from onetask.provider import ProviderRunError, RunResult, wait_for_exitcode
 from onetask.tmux import TmuxManager
-
-_POLL_INTERVAL = 2.0
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class ClaudeRunError(Exception):
-    """claude CLI の実行に失敗した。"""
+class ClaudeRunner:
+    """Claude Code CLI の実行ラッパー。"""
 
+    def run(
+        self,
+        *,
+        tmux: TmuxManager,
+        window_name: str,
+        prompt: str,
+        json_schema: str,
+        work_dir: Path,
+        prefix: str,
+        repo_root: Path,
+        session_id: str | None,
+        permission_mode: str,
+        timeout: float,
+        settings_file: Path | None,
+    ) -> RunResult:
+        """tmux ウィンドウ内で claude -p を実行し、結果を返す。"""
+        return run_claude(
+            tmux=tmux,
+            window_name=window_name,
+            prompt=prompt,
+            json_schema=json_schema,
+            work_dir=work_dir,
+            prefix=prefix,
+            repo_root=repo_root,
+            session_id=session_id,
+            permission_mode=permission_mode,
+            timeout=timeout,
+            settings_file=settings_file,
+        )
 
-class ClaudeResult(BaseModel):
-    """claude 実行結果。"""
-
-    session_id: str
-    is_error: bool
-    raw_result: str
+    def parse_structured_output(self, result: RunResult, model: type[T]) -> T:
+        """RunResult の raw_result から structured output をパースする。"""
+        return parse_structured_output(result, model)
 
 
 def run_claude(
@@ -42,7 +66,7 @@ def run_claude(
     permission_mode: str,
     timeout: float,
     settings_file: Path | None,
-) -> ClaudeResult:
+) -> RunResult:
     """tmux ウィンドウ内で claude -p を実行し、結果を返す。"""
     script_file = work_dir / f"{prefix}-script.sh"
     result_file = work_dir / f"{prefix}-result.json"
@@ -73,12 +97,12 @@ def run_claude(
     )
 
 
-def parse_structured_output(result: ClaudeResult, model: type[T]) -> T:
-    """ClaudeResult の raw_result から structured output をパースする。"""
+def parse_structured_output(result: RunResult, model: type[T]) -> T:
+    """RunResult の raw_result から structured output をパースする。"""
     try:
         envelope = json.loads(result.raw_result)
     except json.JSONDecodeError as exc:
-        raise ClaudeRunError(f"JSON パースに失敗: {exc}") from exc
+        raise ProviderRunError(f"JSON パースに失敗: {exc}") from exc
 
     if isinstance(envelope, dict) and "structured_output" in envelope:
         return model.model_validate(envelope["structured_output"])
@@ -140,7 +164,7 @@ def _find_result_event(content: str) -> str:
             continue
         if isinstance(obj, dict) and obj.get("type") == "result":
             return line
-    raise ClaudeRunError("stream-json に result イベントが見つかりません")
+    raise ProviderRunError("stream-json に result イベントが見つかりません")
 
 
 def _wait_for_result(
@@ -148,32 +172,26 @@ def _wait_for_result(
     result_file: Path,
     exitcode_file: Path,
     timeout: float,
-) -> ClaudeResult:
+) -> RunResult:
     """exitcode ファイルが出現するまでポーリングし、結果をパースする。"""
-    deadline = time.monotonic() + timeout
-    while not exitcode_file.exists():
-        if time.monotonic() > deadline:
-            raise ClaudeRunError(f"タイムアウト ({timeout}秒)")
-        time.sleep(_POLL_INTERVAL)
-
-    exitcode = int(exitcode_file.read_text().strip())
+    exitcode = wait_for_exitcode(exitcode_file=exitcode_file, timeout=timeout)
 
     if not result_file.exists():
-        raise ClaudeRunError(f"結果ファイルが見つかりません (exitcode={exitcode})")
+        raise ProviderRunError(f"結果ファイルが見つかりません (exitcode={exitcode})")
 
     raw = result_file.read_text()
     try:
         result_line = _find_result_event(raw)
-    except ClaudeRunError:
-        raise ClaudeRunError(
+    except ProviderRunError:
+        raise ProviderRunError(
             f"claude が終了コード {exitcode} で失敗 (result イベントなし)\n{raw[:500]}"
         )
 
     response = ClaudeResponse.model_validate_json(result_line)
     if response.is_error:
-        raise ClaudeRunError(f"claude がエラーを返しました: {response.result}")
+        raise ProviderRunError(f"claude がエラーを返しました: {response.result}")
 
-    return ClaudeResult(
+    return RunResult(
         session_id=response.session_id,
         is_error=response.is_error,
         raw_result=result_line,

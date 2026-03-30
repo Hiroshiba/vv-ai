@@ -6,11 +6,6 @@ import os
 import tempfile
 from pathlib import Path
 
-from onetask.claude import (
-    ClaudeRunError,
-    parse_structured_output,
-    run_claude,
-)
 from onetask.models import (
     ImplementerFinalResult,
     ImplementerPlanResult,
@@ -18,6 +13,12 @@ from onetask.models import (
     ImplementerTriageResult,
     ReviewerResult,
     schema_json,
+)
+from onetask.provider import (
+    ProviderName,
+    ProviderRunError,
+    ProviderRunner,
+    create_runner,
 )
 from onetask.tmux import TmuxManager
 
@@ -30,7 +31,7 @@ class RouterError(Exception):
     """ルーター処理の失敗。"""
 
 
-def run_task(repo_root: Path, *, max_review_loops: int) -> None:
+def run_task(repo_root: Path, *, max_review_loops: int, provider: ProviderName) -> None:
     """team-task.md のフローを Python で再現する。"""
     work_dir = Path(tempfile.mkdtemp(prefix=f"onetask-{os.getpid()}-"))
     print(f"ワークディレクトリ: {work_dir}")
@@ -52,8 +53,9 @@ def run_task(repo_root: Path, *, max_review_loops: int) -> None:
             work_dir=work_dir,
             repo_root=repo_root,
             max_review_loops=max_review_loops,
+            provider=provider,
         )
-    except ClaudeRunError as exc:
+    except ProviderRunError as exc:
         raise RouterError(str(exc)) from exc
     finally:
         print(f"tmux セッション '{_SESSION_NAME}' は残しています。不要なら: tmux kill-session -t {_SESSION_NAME}")
@@ -65,15 +67,21 @@ def _run_flow(
     work_dir: Path,
     repo_root: Path,
     max_review_loops: int,
+    provider: ProviderName,
 ) -> None:
     """ルーターのメインフロー。"""
-    settings_file = work_dir / "sandbox-settings.json"
-    settings_file.write_text(
-        json.dumps({"sandbox": {"enabled": True, "autoAllowBashIfSandboxed": True}})
-    )
+    runner = create_runner(provider)
 
-    implementer_prompt = _build_implementer_prompt(repo_root)
+    settings_file: Path | None = None
+    if provider == "claude":
+        settings_file = work_dir / "sandbox-settings.json"
+        settings_file.write_text(
+            json.dumps({"sandbox": {"enabled": True, "autoAllowBashIfSandboxed": True}})
+        )
+
+    implementer_prompt = _build_implementer_prompt(repo_root, provider)
     impl_session_id = _run_implementer_plan(
+        runner=runner,
         tmux=tmux,
         work_dir=work_dir,
         repo_root=repo_root,
@@ -81,6 +89,7 @@ def _run_flow(
         settings_file=settings_file,
     )
     _run_implementer_implement(
+        runner=runner,
         tmux=tmux,
         work_dir=work_dir,
         repo_root=repo_root,
@@ -93,14 +102,17 @@ def _run_flow(
     while True:
         review_count += 1
         latest_review_file = _run_reviewer(
+            runner=runner,
             tmux=tmux,
             work_dir=work_dir,
             repo_root=repo_root,
             review_number=review_count,
             settings_file=settings_file,
+            provider=provider,
         )
 
         changes_made = _run_implementer_triage(
+            runner=runner,
             tmux=tmux,
             work_dir=work_dir,
             repo_root=repo_root,
@@ -125,6 +137,7 @@ def _run_flow(
             break
 
         _run_implementer_fix(
+            runner=runner,
             tmux=tmux,
             work_dir=work_dir,
             repo_root=repo_root,
@@ -135,14 +148,17 @@ def _run_flow(
         )
         review_count += 1
         latest_review_file = _run_reviewer(
+            runner=runner,
             tmux=tmux,
             work_dir=work_dir,
             repo_root=repo_root,
             review_number=review_count,
             settings_file=settings_file,
+            provider=provider,
         )
 
         changes_made = _run_implementer_triage(
+            runner=runner,
             tmux=tmux,
             work_dir=work_dir,
             repo_root=repo_root,
@@ -159,6 +175,7 @@ def _run_flow(
             break
 
     _run_implementer_final(
+        runner=runner,
         tmux=tmux,
         work_dir=work_dir,
         repo_root=repo_root,
@@ -189,9 +206,16 @@ def _strip_frontmatter(content: str) -> str:
     return "\n".join(body_lines).strip()
 
 
-def _build_implementer_prompt(repo_root: Path) -> str:
+def _agent_dir(repo_root: Path, provider: ProviderName) -> Path:
+    """provider に対応する agent ファイルのディレクトリを返す。"""
+    if provider == "claude":
+        return repo_root / ".claude" / "agents"
+    return repo_root / ".codex" / "agents"
+
+
+def _build_implementer_prompt(repo_root: Path, provider: ProviderName) -> str:
     """implementer のプラン作成プロンプトを組み立てる。"""
-    agent_file = repo_root / ".claude" / "agents" / "implementer.md"
+    agent_file = _agent_dir(repo_root, provider) / "implementer.md"
 
     parts: list[str] = []
 
@@ -207,9 +231,9 @@ def _build_implementer_prompt(repo_root: Path) -> str:
     return "\n\n".join(parts)
 
 
-def _build_reviewer_prompt(repo_root: Path) -> str:
+def _build_reviewer_prompt(repo_root: Path, provider: ProviderName) -> str:
     """reviewer のプロンプトを組み立てる。"""
-    agent_file = repo_root / ".claude" / "agents" / "reviewer.md"
+    agent_file = _agent_dir(repo_root, provider) / "reviewer.md"
 
     parts: list[str] = []
 
@@ -228,17 +252,18 @@ def _build_reviewer_prompt(repo_root: Path) -> str:
 
 def _run_implementer_plan(
     *,
+    runner: ProviderRunner,
     tmux: TmuxManager,
     work_dir: Path,
     repo_root: Path,
     prompt: str,
-    settings_file: Path,
+    settings_file: Path | None,
 ) -> str:
     """implementer のプランフェーズを実行し、session_id を返す。"""
     tmux.create_window("implementer")
     print("implementer プラン作成中...")
 
-    result = run_claude(
+    result = runner.run(
         tmux=tmux,
         window_name="implementer",
         prompt=prompt,
@@ -252,22 +277,23 @@ def _run_implementer_plan(
         settings_file=settings_file,
     )
 
-    parsed = parse_structured_output(result, ImplementerPlanResult)
+    parsed = runner.parse_structured_output(result, ImplementerPlanResult)
     print(f"implementer プラン完了: {parsed.summary}")
 
     if parsed.status == "error":
-        raise ClaudeRunError(f"implementer プランエラー: {parsed.message}")
+        raise ProviderRunError(f"implementer プランエラー: {parsed.message}")
 
     return result.session_id
 
 
 def _run_implementer_implement(
     *,
+    runner: ProviderRunner,
     tmux: TmuxManager,
     work_dir: Path,
     repo_root: Path,
     session_id: str,
-    settings_file: Path,
+    settings_file: Path | None,
 ) -> None:
     """implementer の実装フェーズを実行する。"""
     prompt = (
@@ -278,7 +304,7 @@ def _run_implementer_implement(
 
     print("implementer 実装中...")
 
-    result = run_claude(
+    result = runner.run(
         tmux=tmux,
         window_name="implementer",
         prompt=prompt,
@@ -292,28 +318,30 @@ def _run_implementer_implement(
         settings_file=settings_file,
     )
 
-    parsed = parse_structured_output(result, ImplementerTaskResult)
+    parsed = runner.parse_structured_output(result, ImplementerTaskResult)
     print(f"implementer 実装完了: {parsed.summary}")
 
     if parsed.status == "error":
-        raise ClaudeRunError(f"implementer 実装エラー: {parsed.message}")
+        raise ProviderRunError(f"implementer 実装エラー: {parsed.message}")
 
 
 def _run_reviewer(
     *,
+    runner: ProviderRunner,
     tmux: TmuxManager,
     work_dir: Path,
     repo_root: Path,
     review_number: int,
-    settings_file: Path,
+    settings_file: Path | None,
+    provider: ProviderName,
 ) -> str:
     """reviewer を起動し、レビュー結果ファイルパスを返す。"""
     window_name = f"reviewer-{review_number}"
     tmux.create_window(window_name)
     print(f"reviewer-{review_number} を起動しています...")
 
-    prompt = _build_reviewer_prompt(repo_root)
-    result = run_claude(
+    prompt = _build_reviewer_prompt(repo_root, provider)
+    result = runner.run(
         tmux=tmux,
         window_name=window_name,
         prompt=prompt,
@@ -327,24 +355,25 @@ def _run_reviewer(
         settings_file=settings_file,
     )
 
-    parsed = parse_structured_output(result, ReviewerResult)
+    parsed = runner.parse_structured_output(result, ReviewerResult)
     print(f"reviewer-{review_number} 完了: {parsed.message}")
 
     if parsed.status == "error":
-        raise ClaudeRunError(f"reviewer エラー: {parsed.message}")
+        raise ProviderRunError(f"reviewer エラー: {parsed.message}")
 
     return parsed.review_file_path
 
 
 def _run_implementer_triage(
     *,
+    runner: ProviderRunner,
     tmux: TmuxManager,
     work_dir: Path,
     repo_root: Path,
     session_id: str,
     review_file_path: str,
     review_number: int,
-    settings_file: Path,
+    settings_file: Path | None,
 ) -> bool:
     """implementer にレビュー結果を渡して triage を実行し、changes_made を返す。"""
     prompt = (
@@ -357,7 +386,7 @@ def _run_implementer_triage(
 
     print("implementer に triage を指示しています...")
 
-    result = run_claude(
+    result = runner.run(
         tmux=tmux,
         window_name="implementer",
         prompt=prompt,
@@ -371,24 +400,25 @@ def _run_implementer_triage(
         settings_file=settings_file,
     )
 
-    parsed = parse_structured_output(result, ImplementerTriageResult)
+    parsed = runner.parse_structured_output(result, ImplementerTriageResult)
     print(f"implementer triage 完了: changes_made={parsed.changes_made}")
 
     if parsed.status == "error":
-        raise ClaudeRunError(f"implementer triage エラー: {parsed.message}")
+        raise ProviderRunError(f"implementer triage エラー: {parsed.message}")
 
     return parsed.changes_made
 
 
 def _run_implementer_fix(
     *,
+    runner: ProviderRunner,
     tmux: TmuxManager,
     work_dir: Path,
     repo_root: Path,
     session_id: str,
     feedback: str,
     fix_number: int,
-    settings_file: Path,
+    settings_file: Path | None,
 ) -> None:
     """ユーザーのフィードバックに基づいて implementer に追加修正を指示する。"""
     prompt = (
@@ -400,7 +430,7 @@ def _run_implementer_fix(
 
     print("implementer にユーザーフィードバックの修正を指示しています...")
 
-    result = run_claude(
+    result = runner.run(
         tmux=tmux,
         window_name="implementer",
         prompt=prompt,
@@ -414,20 +444,21 @@ def _run_implementer_fix(
         settings_file=settings_file,
     )
 
-    parsed = parse_structured_output(result, ImplementerTaskResult)
+    parsed = runner.parse_structured_output(result, ImplementerTaskResult)
     print(f"implementer 修正完了: {parsed.summary}")
 
     if parsed.status == "error":
-        raise ClaudeRunError(f"implementer 修正エラー: {parsed.message}")
+        raise ProviderRunError(f"implementer 修正エラー: {parsed.message}")
 
 
 def _run_implementer_final(
     *,
+    runner: ProviderRunner,
     tmux: TmuxManager,
     work_dir: Path,
     repo_root: Path,
     session_id: str,
-    settings_file: Path,
+    settings_file: Path | None,
 ) -> None:
     """implementer に日誌作成と git commit を指示する。"""
     prompt = (
@@ -440,7 +471,7 @@ def _run_implementer_final(
 
     print("implementer に日誌作成とコミットを指示しています...")
 
-    result = run_claude(
+    result = runner.run(
         tmux=tmux,
         window_name="implementer",
         prompt=prompt,
@@ -454,11 +485,11 @@ def _run_implementer_final(
         settings_file=settings_file,
     )
 
-    parsed = parse_structured_output(result, ImplementerFinalResult)
+    parsed = runner.parse_structured_output(result, ImplementerFinalResult)
     print(f"implementer 最終処理完了: {parsed.message}")
 
     if parsed.status == "error":
-        raise ClaudeRunError(f"implementer 最終処理エラー: {parsed.message}")
+        raise ProviderRunError(f"implementer 最終処理エラー: {parsed.message}")
 
 
 def _user_confirmation(review_file_path: str) -> str | None:
