@@ -260,24 +260,24 @@ tmux セッションを再作成する（Phase 15 のセッションを破棄）
 
 **正常ケース（dry-run）**
 
-- [ ] D-10: reply ローカル Issue → exit 0、stdout に `provider=claude` を含む
+- [x] D-10: reply ローカル Issue → exit 0、stdout に `provider=claude` を含む
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 \
     --instruction "この Issue の内容を一行で要約して" \
     --provider claude --session new --dry-run --skip-api-key-check
   ```
-- [ ] D-20: plan ローカル Issue → exit 0
+- [x] D-20: plan ローカル Issue → exit 0
   ```sh
   uv run vv-ai --command plan --target-url .vv-ai/issues/test-issue-1 \
     --instruction "実装方針を出して" \
     --provider claude --session new --dry-run --skip-api-key-check
   ```
-- [ ] D-30: implement ローカル Issue → exit 0、`[dry-run/local]` 出力、ブランチ確認→削除
+- [x] D-30: implement ローカル Issue → exit 0、`[dry-run/local]` 出力、ブランチ確認→削除
   ```sh
   uv run vv-ai --command implement --target-url .vv-ai/issues/test-issue-1 \
     --provider claude --session new --dry-run --skip-api-key-check
   ```
-- [ ] D-40: reply GitHub Issue → exit 0
+- [x] D-40: reply GitHub Issue → exit 0
   ```sh
   uv run vv-ai --command reply \
     --target-url https://github.com/VOICEVOX/voicevox_core/issues/1 \

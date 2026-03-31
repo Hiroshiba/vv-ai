@@ -383,7 +383,7 @@ def _build_claude_command(
         "json",
         "--bare",
         "--permission-mode",
-        "accept",
+        "acceptEdits",
         "--settings",
         settings_json,
     ]
@@ -414,6 +414,7 @@ def _build_claude_settings(api_key_file_path: str | None) -> str:
         },
         "sandbox": {
             "enabled": True,
+            "autoAllowBashIfSandboxed": True,
             "filesystem": {
                 "denyRead": _DENY_READ_PATHS,
             },
