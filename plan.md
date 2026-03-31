@@ -209,19 +209,19 @@ tmux kill-session -t vvai-test 2>/dev/null || true
 tmux new-session -d -s vvai-test -x 200 -y 50 -c /Users/kazuyuki_hiroshiba/Github/vv-ai
 ```
 
-各テストは `; echo "EXIT=$?"` を末尾に付けて exit code を確認する。
+各テストは `; echo "EXIT=$?"` を末尾に付けて exit code を確認する。エラーが発生した場合はそれ以降のテストを中断し、日誌にエラー内容と原因を記録する。
 
 **エラーケース（provider 実行なし、即座に終了）**
 
-- [ ] C-01: 不正コマンド名 → exit 2
+- [x] C-01: 不正コマンド名 → exit 2
   ```sh
   uv run vv-ai --command invalid
   ```
-- [ ] C-02: reply で instruction なし → exit 2
+- [x] C-02: reply で instruction なし → exit 2
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 --provider codex --session new
   ```
-- [ ] C-03: review で Issue を指定 → exit 1（`review` は PR 専用）
+- [x] C-03: review で Issue を指定 → exit 1（`review` は PR 専用）
   ```sh
   uv run vv-ai --command review --target-url .vv-ai/issues/test-issue-1 --provider codex --session new --dry-run --skip-api-key-check
   ```
@@ -256,7 +256,7 @@ tmux new-session -d -s vvai-test -x 200 -y 50 -c /Users/kazuyuki_hiroshiba/Githu
 
 ### 16. Claude Provider テスト
 
-tmux セッションを再作成する（Phase 15 のセッションを破棄）。
+tmux セッションを再作成する（Phase 15 のセッションを破棄）。エラーが発生した場合はそれ以降のテストを中断し、日誌にエラー内容と原因を記録する。
 
 **正常ケース（dry-run）**
 
