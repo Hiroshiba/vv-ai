@@ -287,7 +287,7 @@ tmux セッションを再作成する（Phase 15 のセッションを破棄）
 
 ### 17. Provider 自動選択テスト
 
-- [ ] A-01: `--provider` 省略時に `provider_priority` の先頭（codex）が選択される
+- [x] A-01: `--provider` 省略時に `provider_priority` の先頭（codex）が選択される
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 \
     --instruction "テスト" --session new --dry-run --skip-api-key-check
@@ -296,8 +296,8 @@ tmux セッションを再作成する（Phase 15 のセッションを破棄）
 
 ### 18. テスト後処理
 
-- [ ] `vv-ai.yml` を削除する
-- [ ] `.vv-ai/` を削除する
-- [ ] age 鍵ファイルを削除する（`/tmp/vv-ai-age-key.txt`）
-- [ ] tmux セッションを削除する（`tmux kill-session -t vvai-test`）
-- [ ] テスト中に作成されたブランチを削除する
+- [x] `vv-ai.yml` を削除する
+- [x] `.vv-ai/` を削除する
+- [x] age 鍵ファイルを削除する（`/tmp/vv-ai-age-key.txt`）
+- [x] tmux セッションを削除する（`tmux kill-session -t vvai-test`）
+- [x] テスト中に作成されたブランチを削除する
