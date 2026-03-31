@@ -228,25 +228,25 @@ tmux new-session -d -s vvai-test -x 200 -y 50 -c /Users/kazuyuki_hiroshiba/Githu
 
 **正常ケース（dry-run）**
 
-- [ ] C-10: reply ローカル Issue → exit 0、応答テキスト出力、`.vv-ai/artifacts/` に保存確認
+- [x] C-10: reply ローカル Issue → exit 0、応答テキスト出力、`.vv-ai/artifacts/` に保存確認
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 \
     --instruction "この Issue の内容を一行で要約して" \
     --provider codex --session new --dry-run --skip-api-key-check
   ```
-- [ ] C-20: plan ローカル Issue → exit 0
+- [x] C-20: plan ローカル Issue → exit 0
   ```sh
   uv run vv-ai --command plan --target-url .vv-ai/issues/test-issue-1 \
     --instruction "実装方針を出して" \
     --provider codex --session new --dry-run --skip-api-key-check
   ```
-- [ ] C-30: implement ローカル Issue → exit 0、`[dry-run/local]` 出力、`vv-ai/issue-` ブランチ作成確認→削除
+- [x] C-30: implement ローカル Issue → exit 0、`[dry-run/local]` 出力、`vv-ai/issue-` ブランチ作成確認→削除
   ```sh
   uv run vv-ai --command implement --target-url .vv-ai/issues/test-issue-1 \
     --provider codex --session new --dry-run --skip-api-key-check
   # 確認後: git checkout main && git branch | grep 'vv-ai/issue-' | xargs git branch -D
   ```
-- [ ] C-40: reply GitHub Issue → exit 0、GitHub への書き込みなし（dry-run）
+- [x] C-40: reply GitHub Issue → exit 0、GitHub への書き込みなし（dry-run）
   ```sh
   uv run vv-ai --command reply \
     --target-url https://github.com/VOICEVOX/voicevox_core/issues/1 \

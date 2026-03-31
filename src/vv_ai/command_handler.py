@@ -75,8 +75,9 @@ def run_command(
     finalize_status: ExecutionStatus = "failure"
     try:
         if command.command == "implement" and target is not None and target.kind == "issue":
-            assert target.number is not None
-            implement_branch_name = generate_implement_branch_name(target.number)
+            issue_identifier = str(target.number) if target.number is not None else target.local_id
+            assert issue_identifier is not None
+            implement_branch_name = generate_implement_branch_name(issue_identifier)
             try:
                 create_and_checkout_branch(repo_root, implement_branch_name)
             except GitOpsError as exc:

@@ -101,7 +101,7 @@ def generate_patch(repo_root: Path, base_sha: str) -> str:
     return run_git_command(repo_root, "format-patch", "--stdout", f"{base_sha}..HEAD")
 
 
-def generate_implement_branch_name(issue_number: int) -> str:
-    """Issue 番号から実装用ブランチ名を生成する。"""
+def generate_implement_branch_name(issue_id: str) -> str:
+    """Issue 識別子から実装用ブランチ名を生成する。"""
     suffix = secrets.token_hex(4)
-    return f"vv-ai/issue-{issue_number}-{suffix}"
+    return f"vv-ai/issue-{issue_id}-{suffix}"

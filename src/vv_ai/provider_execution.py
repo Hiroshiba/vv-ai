@@ -47,7 +47,9 @@ _ALLOWED_ENV_KEYS = frozenset(
     ]
 )
 
-_CODEX_SHELL_ENV_ALLOWLIST = ["PATH", "HOME", "USER", "LANG", "TERM", "SHELL", "TMPDIR"]
+_CODEX_SHELL_ENV_ALLOWLIST = json.dumps(
+    ["PATH", "HOME", "USER", "LANG", "TERM", "SHELL", "TMPDIR"]
+)
 
 _DENY_READ_PATHS = [
     "/home/runner/.vv-secrets/**",
@@ -176,14 +178,13 @@ def _build_codex_command(
     session_mode = session.mode if session is not None else "new"
     state_ref = session.state_ref if session is not None else None
 
-    include_only_toml = json.dumps(_CODEX_SHELL_ENV_ALLOWLIST)
     base_options: list[str] = [
         "--full-auto",
         "--json",
         "-c",
-        "shell_environment_policy.inherit=include_only",
+        'shell_environment_policy.inherit="all"',
         "-c",
-        f"shell_environment_policy.include_only={include_only_toml}",
+        f"shell_environment_policy.include_only={_CODEX_SHELL_ENV_ALLOWLIST}",
         "-o",
         str(output_file),
     ]
