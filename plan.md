@@ -304,10 +304,10 @@ tmux セッションを再作成する（Phase 15 のセッションを破棄）
 
 ### 19. GitHub Actions テスト準備
 
-- [ ] `.gitignore` から `/vv-ai.yml` を削除し、`vv-ai.yml` をコミットする
-- [ ] ワークフローに AI CLI インストールステップを追加する
-- [ ] push する
-- [ ] テスト用 Issue と PR を作成する
+- [x] `.gitignore` から `/vv-ai.yml` を削除し、`vv-ai.yml` をコミットする
+- [x] ワークフローに AI CLI インストールステップを追加する
+- [x] push する
+- [x] テスト用 Issue と PR を作成する（Issue #1、PR #2）
 
 Secrets はユーザーが別途設定する。
 
