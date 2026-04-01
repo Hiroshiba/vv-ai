@@ -1,0 +1,1 @@
+GitHub Actions 統合テスト用フィクスチャ
