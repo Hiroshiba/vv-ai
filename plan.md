@@ -301,3 +301,77 @@ tmux セッションを再作成する（Phase 15 のセッションを破棄）
 - [x] age 鍵ファイルを削除する（`/tmp/vv-ai-age-key.txt`）
 - [x] tmux セッションを削除する（`tmux kill-session -t vvai-test`）
 - [x] テスト中に作成されたブランチを削除する
+
+### 19. GitHub Actions テスト準備
+
+- [ ] `.gitignore` から `/vv-ai.yml` を削除し、`vv-ai.yml` をコミットする
+- [ ] ワークフローに AI CLI インストールステップを追加する
+- [ ] push する
+- [ ] テスト用 Issue と PR を作成する
+
+Secrets はユーザーが別途設定する。
+
+### 20. Claude Provider GitHub テスト
+
+GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` で起動し、`gh run watch` で完了を待ち、conclusion=success を確認する。失敗したら中断して日誌を書く。
+
+テスト用の Issue 番号と PR 番号は、セクション 19 で作成したものを `<ISSUE_NUM>` `<PR_NUM>` に入れる。
+
+- [ ] G-D-10: reply GitHub Issue
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=reply \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/<ISSUE_NUM> \
+    -f instruction="この Issue の内容を一行で要約して" \
+    -f provider=claude -f session_mode=new -f dry_run=true
+  # gh run list --workflow=vv-ai.yml --repo Hiroshiba/vv-ai -L1 で run ID を取得
+  # gh run watch <RUN_ID> --repo Hiroshiba/vv-ai で完了を待つ
+  ```
+- [ ] G-D-20: plan GitHub Issue
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=plan \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/<ISSUE_NUM> \
+    -f instruction="実装方針を出して" \
+    -f provider=claude -f session_mode=new -f dry_run=true
+  ```
+- [ ] G-D-30: review GitHub PR
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=review \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/pull/<PR_NUM> \
+    -f provider=claude -f session_mode=new -f dry_run=true
+  ```
+- [ ] G-D-40: implement GitHub Issue
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=implement \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/<ISSUE_NUM> \
+    -f provider=claude -f session_mode=new -f dry_run=true
+  ```
+- [ ] G-D-50: issue コマンド
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=issue \
+    -f instruction="README の改善案を Issue にして" \
+    -f provider=claude -f session_mode=new -f dry_run=true
+  ```
+
+### 21. Codex Provider GitHub テスト
+
+Claude テスト全通過後、余力があれば実施する。コマンドはセクション 20 と同じで `provider=codex` に変更する。
+
+- [ ] G-C-10: reply GitHub Issue
+- [ ] G-C-20: plan GitHub Issue
+- [ ] G-C-30: review GitHub PR
+
+### 22. テスト後処理
+
+- [ ] テスト用 Issue をクローズする
+  ```sh
+  gh issue close <ISSUE_NUM> --repo Hiroshiba/vv-ai
+  ```
+- [ ] テスト用 PR をクローズしブランチを削除する
+  ```sh
+  gh pr close <PR_NUM> --repo Hiroshiba/vv-ai --delete-branch
+  ```

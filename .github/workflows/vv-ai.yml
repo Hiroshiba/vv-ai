@@ -108,6 +108,11 @@ jobs:
             | tar xz
           sudo mv age/age age/age-keygen /usr/local/bin/
 
+      - name: Install AI CLIs
+        run: |
+          npm install -g @openai/codex
+          npm install -g @anthropic-ai/claude-code
+
       - name: Run vv-ai
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
