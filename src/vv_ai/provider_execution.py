@@ -29,6 +29,7 @@ _CODEX_OPENAI_API_KEY_ENV = "VV_OPENAI_API_KEY"
 _CODEX_OPENAI_API_KEY_FILE_ENV = "VV_OPENAI_API_KEY_FILE"
 _ANTHROPIC_API_KEY_ENV = "VV_ANTHROPIC_API_KEY"
 _ANTHROPIC_API_KEY_FILE_ENV = "VV_ANTHROPIC_API_KEY_FILE"
+_CLAUDE_EXTRA_SETTINGS_ENV = "VV_CLAUDE_SETTINGS"
 
 _ALLOWED_ENV_KEYS = frozenset(
     [
@@ -112,11 +113,21 @@ def execute_provider(
     skip = ready_execution.command.skip_api_key_check
     if provider_name == "codex":
         return _execute_codex(
-            repo_root, ready_execution, env, preflight_duration_seconds, provider_prompt, skip
+            repo_root,
+            ready_execution,
+            env,
+            preflight_duration_seconds,
+            provider_prompt,
+            skip,
         )
     if provider_name == "claude":
         return _execute_claude(
-            repo_root, ready_execution, env, preflight_duration_seconds, provider_prompt, skip
+            repo_root,
+            ready_execution,
+            env,
+            preflight_duration_seconds,
+            provider_prompt,
+            skip,
         )
     raise AssertionError(f"未対応の provider です: {provider_name}")
 
@@ -208,11 +219,15 @@ def _build_codex_command(
     return ["codex", "exec", *base_options, "--", provider_prompt]
 
 
-def _build_codex_env(env: Mapping[str, str], skip_api_key_check: bool) -> dict[str, str]:
+def _build_codex_env(
+    env: Mapping[str, str], skip_api_key_check: bool
+) -> dict[str, str]:
     """Codex プロセスに渡す環境変数を構築する。"""
     sanitized = _build_sanitized_env(env)
     if not skip_api_key_check:
-        api_key = _resolve_api_key(env, _CODEX_OPENAI_API_KEY_FILE_ENV, _CODEX_OPENAI_API_KEY_ENV)
+        api_key = _resolve_api_key(
+            env, _CODEX_OPENAI_API_KEY_FILE_ENV, _CODEX_OPENAI_API_KEY_ENV
+        )
         sanitized["OPENAI_API_KEY"] = api_key
     return sanitized
 
@@ -333,7 +348,12 @@ def _execute_claude(
             env, _ANTHROPIC_API_KEY_FILE_ENV, _ANTHROPIC_API_KEY_ENV
         )
     try:
-        command = _build_claude_command(ready_execution, api_key_file_path, provider_prompt)
+        command = _build_claude_command(
+            ready_execution,
+            api_key_file_path,
+            env.get(_CLAUDE_EXTRA_SETTINGS_ENV),
+            provider_prompt,
+        )
         sanitized_env = _build_sanitized_env(env)
 
         execution_started_at = time.perf_counter()
@@ -369,10 +389,11 @@ def _execute_claude(
 def _build_claude_command(
     ready_execution: ReadyExecution,
     api_key_file_path: str | None,
+    extra_settings_json: str | None,
     provider_prompt: str,
 ) -> list[str]:
     """Claude Code CLI のコマンドリストを返す。"""
-    settings_json = _build_claude_settings(api_key_file_path)
+    settings_json = _build_claude_settings(api_key_file_path, extra_settings_json)
     session = ready_execution.resolved_session
     session_mode = session.mode if session is not None else "new"
 
@@ -405,19 +426,23 @@ def _build_claude_command(
     return command
 
 
-def _build_claude_settings(api_key_file_path: str | None) -> str:
+def _build_claude_settings(
+    api_key_file_path: str | None, extra_settings_json: str | None
+) -> str:
     """Claude Code 用 settings JSON 文字列を返す。"""
-    settings: dict = {
-        "allowUnsandboxedCommands": False,
-        "permissions": {
-            "deny": [f"Read({path})" for path in _DENY_READ_PATHS],
-        },
-        "sandbox": {
-            "enabled": True,
-            "autoAllowBashIfSandboxed": True,
-            "filesystem": {
-                "denyRead": _DENY_READ_PATHS,
-            },
+    # TODO: これだとClaude内のコードから見えてしまうので、真に隠すには他の方法が必要。
+    settings: dict = json.loads(extra_settings_json) if extra_settings_json else {}
+
+    # セキュリティ設定を最後に適用。extra_settings_json による上書きを防ぐ。
+    settings["allowUnsandboxedCommands"] = False
+    settings["permissions"] = {
+        "deny": [f"Read({path})" for path in _DENY_READ_PATHS],
+    }
+    settings["sandbox"] = {
+        "enabled": True,
+        "autoAllowBashIfSandboxed": True,
+        "filesystem": {
+            "denyRead": _DENY_READ_PATHS,
         },
     }
     if api_key_file_path is not None:

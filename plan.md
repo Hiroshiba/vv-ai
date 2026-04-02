@@ -375,3 +375,7 @@ Claude テスト全通過後、余力があれば実施する。コマンドは�
   ```sh
   gh pr close <PR_NUM> --repo Hiroshiba/vv-ai --delete-branch
   ```
+
+### extra. 追加タスク
+
+- [ ] Github WorkflowでのClaudeをlocalhost proxy経由にして完全に秘匿する
