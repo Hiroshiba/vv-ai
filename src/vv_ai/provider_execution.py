@@ -368,10 +368,10 @@ def _execute_claude(
         execution_duration_seconds = time.perf_counter() - execution_started_at
 
         if proc.returncode != 0:
-            stderr = proc.stderr.strip()
+            detail = proc.stderr.strip() or proc.stdout.strip()[:500]
             raise ProviderExecutionError(
                 f"Claude Code が終了コード {proc.returncode} で失敗しました"
-                + (f": {stderr}" if stderr else "")
+                + (f": {detail}" if detail else "")
             )
 
         claude_output = _parse_claude_json_output(proc.stdout)
@@ -446,7 +446,7 @@ def _build_claude_settings(
         },
     }
     if api_key_file_path is not None:
-        settings["apiKeyHelper"] = {"command": ["cat", api_key_file_path]}
+        settings["apiKeyHelper"] = f"cat {api_key_file_path}"
     return json.dumps(settings)
 
 

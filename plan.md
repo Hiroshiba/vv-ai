@@ -317,39 +317,39 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
 
 テスト用の Issue 番号と PR 番号は、セクション 19 で作成したものを `<ISSUE_NUM>` `<PR_NUM>` に入れる。
 
-- [ ] G-D-10: reply GitHub Issue
+- [x] G-D-10: reply GitHub Issue
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=reply \
-    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/<ISSUE_NUM> \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
     -f instruction="この Issue の内容を一行で要約して" \
     -f provider=claude -f session_mode=new -f dry_run=true
   # gh run list --workflow=vv-ai.yml --repo Hiroshiba/vv-ai -L1 で run ID を取得
   # gh run watch <RUN_ID> --repo Hiroshiba/vv-ai で完了を待つ
   ```
-- [ ] G-D-20: plan GitHub Issue
+- [x] G-D-20: plan GitHub Issue
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=plan \
-    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/<ISSUE_NUM> \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
     -f instruction="実装方針を出して" \
     -f provider=claude -f session_mode=new -f dry_run=true
   ```
-- [ ] G-D-30: review GitHub PR
+- [x] G-D-30: review GitHub PR
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=review \
-    -f target_url=https://github.com/Hiroshiba/vv-ai/pull/<PR_NUM> \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/pull/2 \
     -f provider=claude -f session_mode=new -f dry_run=true
   ```
-- [ ] G-D-40: implement GitHub Issue
+- [x] G-D-40: implement GitHub Issue
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=implement \
-    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/<ISSUE_NUM> \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
     -f provider=claude -f session_mode=new -f dry_run=true
   ```
-- [ ] G-D-50: issue コマンド
+- [x] G-D-50: issue コマンド
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=issue \
@@ -369,11 +369,11 @@ Claude テスト全通過後、余力があれば実施する。コマンドは�
 
 - [ ] テスト用 Issue をクローズする
   ```sh
-  gh issue close <ISSUE_NUM> --repo Hiroshiba/vv-ai
+  gh issue close 1 --repo Hiroshiba/vv-ai
   ```
 - [ ] テスト用 PR をクローズしブランチを削除する
   ```sh
-  gh pr close <PR_NUM> --repo Hiroshiba/vv-ai --delete-branch
+  gh pr close 2 --repo Hiroshiba/vv-ai --delete-branch
   ```
 
 ### extra. 追加タスク
