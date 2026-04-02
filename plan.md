@@ -357,21 +357,89 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
     -f provider=claude -f session_mode=new -f dry_run=true
   ```
 
-### 21. Codex Provider GitHub テスト
+### 21. バグ修正 + 認可共通化
 
-Claude テスト全通過後、余力があれば実施する。コマンドはセクション 20 と同じで `provider=codex` に変更する。
+- [x] 認可チェックを `allowed_users` に一本化する
+- [x] ワークフローに git config ステップを追加する
+- [x] session artifact に provider セッションディレクトリを含める
+
+### 22. dry_run=false テスト（workflow_dispatch）
+
+テスト用の Issue #1 と PR #2 を使用する。`provider=claude`, `session_mode=new` で実行する。各テスト後に作成されたリソースをクリーンアップする。エラーが発生した場合はそれ以降を中断し日誌を書く。
+
+- [ ] G-Live-10: reply Issue #1 → success → Issue #1 にコメントが投稿されていること
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=reply \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
+    -f instruction="この Issue の内容を一行で要約して" \
+    -f provider=claude -f session_mode=new
+  ```
+- [ ] G-Live-20: plan Issue #1 → success → コメント投稿確認
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=plan \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
+    -f instruction="実装方針を出して" \
+    -f provider=claude -f session_mode=new
+  ```
+- [ ] G-Live-30: implement Issue #1 → success → ブランチ push + PR 作成を確認 → PR クローズ + ブランチ削除
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=implement \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
+    -f provider=claude -f session_mode=new
+  ```
+- [ ] G-Live-40: review PR #2 → success → PR #2 にコメント投稿確認
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=review \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/pull/2 \
+    -f provider=claude -f session_mode=new
+  ```
+- [ ] G-Live-50: issue → success → 新 Issue が作成されること → クローズ
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=issue \
+    -f instruction="README の改善案を Issue にして" \
+    -f provider=claude -f session_mode=new
+  ```
+
+### 23. dry_run=false テスト（issue_comment）
+
+実際に Issue/PR へコメントを書いてワークフローをトリガーする。テスト用の Issue #1 と PR #2 を使用。エラーが発生した場合はそれ以降を中断し日誌を書く。
+
+**Issue コメント起動:**
+- [ ] E-10: Issue #1 に `@vv-ai この Issue の内容を一行で要約して` → reply コメント投稿確認
+- [ ] E-20: Issue #1 に `@vv-ai plan 実装方針を出して` → コメント投稿確認
+- [ ] E-30: Issue #1 に `@vv-ai implement` → ブランチ push + PR 作成 → 確認後削除
+- [ ] E-40: Issue #1 に `@vv-ai issue この Issue をもう少し詳しく書き直して` → 新 Issue 作成 + リンクコメント → 新 Issue クローズ
+
+**PR コメント起動:**
+- [ ] E-50: PR #2 に `@vv-ai この PR の内容を一行で要約して` → reply コメント投稿確認
+- [ ] E-60: PR #2 に `@vv-ai review` → レビューコメント投稿確認
+- [ ] E-70: PR #2 に `@vv-ai implement この PR に改善を追加して` → head ブランチに追コミット push
+
+**セッション継続テスト:**
+- [ ] E-80: Issue #1 に `@vv-ai この Issue について質問：対象ユーザーは？` → 初回セッション
+- [ ] E-90: Issue #1 に `@vv-ai --session inherit 前回の回答を踏まえて要点をまとめて` → 前回コンテキスト引き継ぎ確認
+
+### 24. Codex Provider GitHub テスト
+
+Claude テスト全通過後、余力があれば実施する。コマンドはセクション 22 と同じで `provider=codex` に変更する。
 
 - [ ] G-C-10: reply GitHub Issue
 - [ ] G-C-20: plan GitHub Issue
 - [ ] G-C-30: review GitHub PR
 
-### 22. テスト後処理
+### 25. テスト後処理
 
-- [ ] テスト用 Issue をクローズする
+- [ ] テスト中に作成された Issue/PR/ブランチを削除する
+- [ ] テスト用 Issue #1 をクローズする
   ```sh
   gh issue close 1 --repo Hiroshiba/vv-ai
   ```
-- [ ] テスト用 PR をクローズしブランチを削除する
+- [ ] テスト用 PR #2 をクローズしブランチを削除する
   ```sh
   gh pr close 2 --repo Hiroshiba/vv-ai --delete-branch
   ```

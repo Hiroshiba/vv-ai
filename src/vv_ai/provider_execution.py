@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 import time
@@ -375,11 +376,15 @@ def _execute_claude(
             )
 
         claude_output = _parse_claude_json_output(proc.stdout)
+        provider_session_path = _resolve_claude_session_dir(
+            repo_root, claude_output.session_id
+        )
         return _build_execution_result(
             ready_execution,
             claude_output,
             preflight_duration_seconds,
             execution_duration_seconds,
+            provider_session_path,
         )
     finally:
         if is_temporary:
@@ -509,6 +514,31 @@ def _build_sanitized_env(env: Mapping[str, str]) -> dict[str, str]:
     return {key: value for key, value in env.items() if key in _ALLOWED_ENV_KEYS}
 
 
+def _resolve_claude_session_dir(repo_root: Path, session_id: str) -> Path | None:
+    """Claude Code のセッションファイルを一時ディレクトリに集めて返す。"""
+    sanitized = str(repo_root).replace("/", "-")
+    project_dir = Path.home() / ".claude" / "projects" / sanitized
+    if not project_dir.is_dir():
+        return None
+
+    session_jsonl = project_dir / f"{session_id}.jsonl"
+    if not session_jsonl.is_file():
+        return None
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="vv-ai-claude-session-"))
+    try:
+        shutil.copy2(session_jsonl, tmp_dir / session_jsonl.name)
+
+        session_subdir = project_dir / session_id
+        if session_subdir.is_dir():
+            shutil.copytree(session_subdir, tmp_dir / session_id)
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+    return tmp_dir
+
+
 def _parse_claude_json_output(stdout: str) -> _ClaudeOutput:
     """Claude Code の JSON 出力を解析する。"""
     stripped = stdout.strip()
@@ -535,6 +565,7 @@ def _build_execution_result(
     claude_output: _ClaudeOutput,
     preflight_duration_seconds: float,
     execution_duration_seconds: float,
+    provider_session_path: Path | None,
 ) -> ExecutionResult:
     """Claude Code 出力から ExecutionResult を組み立てる。"""
     usage_data = claude_output.usage
@@ -590,7 +621,7 @@ def _build_execution_result(
         },
         provider_specific=ProviderSpecificMetrics(claude=claude_metrics),
         state_ref=SessionStateRef(provider_session_id=claude_output.session_id),
-        provider_session_path=None,
+        provider_session_path=provider_session_path,
         allow_edits_notice_posted=False,
         response_text=claude_output.result,
     )

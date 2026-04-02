@@ -90,11 +90,6 @@ def _authorize_actor(
             return SilentSkip(reason="unauthorized_comment")
         raise AuthorizationError("この workflow は許可されたユーザーのみ実行できます")
 
-    if resolved_command.event_name == "workflow_dispatch" and actor != "Hiroshiba":
-        raise AuthorizationError(
-            "`workflow_dispatch` は Hiroshiba のみ実行できます"
-        )
-
     return None
 
 
