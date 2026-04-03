@@ -150,6 +150,13 @@ def _execute_codex(
         command = _build_codex_command(ready_execution, output_file, provider_prompt)
         codex_env = _build_codex_env(env, skip_api_key_check)
 
+        session = ready_execution.resolved_session
+        if session is not None and session.restored_provider_session_path is not None:
+            codex_home = codex_env.get("CODEX_HOME", str(Path.home() / ".codex"))
+            _deploy_provider_session_dir(
+                session.restored_provider_session_path, Path(codex_home)
+            )
+
         execution_started_at = time.perf_counter()
         proc = subprocess.run(
             command,
@@ -171,11 +178,13 @@ def _execute_codex(
         file_content = output_file.read_text()
         result_text = file_content if file_content else proc.stdout
         codex_output = _parse_codex_jsonl(proc.stdout, result_text)
+        provider_session_path = _resolve_codex_session_dir(codex_env)
         return _build_codex_execution_result(
             ready_execution,
             codex_output,
             preflight_duration_seconds,
             execution_duration_seconds,
+            provider_session_path,
         )
     finally:
         output_file.unlink(missing_ok=True)
@@ -297,6 +306,7 @@ def _build_codex_execution_result(
     codex_output: _CodexOutput,
     preflight_duration_seconds: float,
     execution_duration_seconds: float,
+    provider_session_path: Path | None,
 ) -> ExecutionResult:
     """Codex 出力から ExecutionResult を組み立てる。"""
     usage = MetricsUsage(
@@ -342,7 +352,7 @@ def _build_codex_execution_result(
         },
         provider_specific=ProviderSpecificMetrics(codex=codex_metrics),
         state_ref=SessionStateRef(provider_session_id=codex_output.thread_id),
-        provider_session_path=None,
+        provider_session_path=provider_session_path,
         allow_edits_notice_posted=False,
         response_text=codex_output.result,
     )
@@ -372,6 +382,14 @@ def _execute_claude(
             provider_prompt,
         )
         sanitized_env = _build_sanitized_env(env)
+
+        session = ready_execution.resolved_session
+        if session is not None and session.restored_provider_session_path is not None:
+            sanitized = str(repo_root).replace("/", "-")
+            project_dir = Path.home() / ".claude" / "projects" / sanitized
+            _deploy_provider_session_dir(
+                session.restored_provider_session_path, project_dir
+            )
 
         execution_started_at = time.perf_counter()
         proc = subprocess.run(
@@ -542,6 +560,42 @@ def _resolve_claude_session_dir(repo_root: Path, session_id: str) -> Path | None
         raise
 
     return tmp_dir
+
+
+def _resolve_codex_session_dir(codex_env: dict[str, str]) -> Path | None:
+    """Codex のセッションファイルを一時ディレクトリに集めて返す。"""
+    codex_home = Path(codex_env.get("CODEX_HOME", str(Path.home() / ".codex")))
+    if not codex_home.is_dir():
+        return None
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="vv-ai-codex-session-"))
+    try:
+        ignore = shutil.ignore_patterns("auth.json", "config.toml")
+        for item in codex_home.iterdir():
+            dest = tmp_dir / item.name
+            if item.is_dir():
+                shutil.copytree(item, dest, ignore=ignore)
+            elif item.name not in ("auth.json", "config.toml"):
+                shutil.copy2(item, dest)
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+    return tmp_dir
+
+
+def _deploy_provider_session_dir(source: str, destination: Path) -> None:
+    """復元されたセッションファイルを provider が期待する場所にコピーする。"""
+    source_path = Path(source)
+    destination.mkdir(parents=True, exist_ok=True)
+    for item in source_path.iterdir():
+        dest_item = destination / item.name
+        if item.is_dir():
+            if dest_item.exists():
+                shutil.rmtree(dest_item)
+            shutil.copytree(item, dest_item)
+        else:
+            shutil.copy2(item, dest_item)
 
 
 def _parse_claude_json_output(stdout: str) -> _ClaudeOutput:
