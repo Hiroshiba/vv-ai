@@ -365,7 +365,7 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
 
 ### 22. dry_run=false テスト（workflow_dispatch）
 
-テスト用の Issue #1 と PR #2 を使用する。`provider=claude`, `session_mode=new` で実行する。各テスト後に作成されたリソースをクリーンアップする。エラーが発生した場合はそれ以降を中断し日誌を書く。
+テスト用の Issue #1 と PR #2 を使用する。`provider=codex`, `session_mode=new` で実行する。各テスト後に作成されたリソースをクリーンアップする。エラーが発生した場合はそれ以降を中断し日誌を書く。
 
 - [ ] G-Live-10: reply Issue #1 → success → Issue #1 にコメントが投稿されていること
   ```sh
@@ -373,7 +373,7 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
     -f command=reply \
     -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
     -f instruction="この Issue の内容を一行で要約して" \
-    -f provider=claude -f session_mode=new
+    -f provider=codex -f session_mode=new
   ```
 - [ ] G-Live-20: plan Issue #1 → success → コメント投稿確認
   ```sh
@@ -381,33 +381,33 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
     -f command=plan \
     -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
     -f instruction="実装方針を出して" \
-    -f provider=claude -f session_mode=new
+    -f provider=codex -f session_mode=new
   ```
 - [ ] G-Live-30: implement Issue #1 → success → ブランチ push + PR 作成を確認 → PR クローズ + ブランチ削除
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=implement \
     -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
-    -f provider=claude -f session_mode=new
+    -f provider=codex -f session_mode=new
   ```
 - [ ] G-Live-40: review PR #2 → success → PR #2 にコメント投稿確認
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=review \
     -f target_url=https://github.com/Hiroshiba/vv-ai/pull/2 \
-    -f provider=claude -f session_mode=new
+    -f provider=codex -f session_mode=new
   ```
 - [ ] G-Live-50: issue → success → 新 Issue が作成されること → クローズ
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=issue \
     -f instruction="README の改善案を Issue にして" \
-    -f provider=claude -f session_mode=new
+    -f provider=codex -f session_mode=new
   ```
 
 ### 23. dry_run=false テスト（issue_comment）
 
-実際に Issue/PR へコメントを書いてワークフローをトリガーする。テスト用の Issue #1 と PR #2 を使用。エラーが発生した場合はそれ以降を中断し日誌を書く。
+実際に Issue/PR へコメントを書いてワークフローをトリガーする。テスト用の Issue #1 と PR #2 を使用。provider は未指定（`vv-ai.yml` の `provider_priority` 先頭の codex が自動選択される）。エラーが発生した場合はそれ以降を中断し日誌を書く。
 
 **Issue コメント起動:**
 - [ ] E-10: Issue #1 に `@vv-ai この Issue の内容を一行で要約して` → reply コメント投稿確認
@@ -424,13 +424,13 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
 - [ ] E-80: Issue #1 に `@vv-ai この Issue について質問：対象ユーザーは？` → 初回セッション
 - [ ] E-90: Issue #1 に `@vv-ai --session inherit 前回の回答を踏まえて要点をまとめて` → 前回コンテキスト引き継ぎ確認
 
-### 24. Codex Provider GitHub テスト
+### 24. Claude Provider GitHub テスト
 
-Claude テスト全通過後、余力があれば実施する。コマンドはセクション 22 と同じで `provider=codex` に変更する。
+Codex テスト全通過後、余力があれば実施する。コマンドはセクション 22 と同じで `provider=claude` に変更する。
 
-- [ ] G-C-10: reply GitHub Issue
-- [ ] G-C-20: plan GitHub Issue
-- [ ] G-C-30: review GitHub PR
+- [ ] G-CL-10: reply GitHub Issue
+- [ ] G-CL-20: plan GitHub Issue
+- [ ] G-CL-30: review GitHub PR
 
 ### 25. テスト後処理
 
