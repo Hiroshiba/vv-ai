@@ -28,6 +28,7 @@ from vv_ai.session import SessionStateRef
 
 _CODEX_OPENAI_API_KEY_ENV = "VV_OPENAI_API_KEY"
 _CODEX_OPENAI_API_KEY_FILE_ENV = "VV_OPENAI_API_KEY_FILE"
+_CODEX_HOME_ENV = "VV_CODEX_HOME"
 _ANTHROPIC_API_KEY_ENV = "VV_ANTHROPIC_API_KEY"
 _ANTHROPIC_API_KEY_FILE_ENV = "VV_ANTHROPIC_API_KEY_FILE"
 _CLAUDE_EXTRA_SETTINGS_ENV = "VV_CLAUDE_SETTINGS"
@@ -225,12 +226,27 @@ def _build_codex_env(
 ) -> dict[str, str]:
     """Codex プロセスに渡す環境変数を構築する。"""
     sanitized = _build_sanitized_env(env)
-    if not skip_api_key_check:
-        api_key = _resolve_api_key(
-            env, _CODEX_OPENAI_API_KEY_FILE_ENV, _CODEX_OPENAI_API_KEY_ENV
-        )
+    if skip_api_key_check:
+        return sanitized
+
+    api_key = _try_resolve_api_key(
+        env, _CODEX_OPENAI_API_KEY_FILE_ENV, _CODEX_OPENAI_API_KEY_ENV
+    )
+    if api_key is not None:
         sanitized["OPENAI_API_KEY"] = api_key
-    return sanitized
+        return sanitized
+
+    # TODO: GitHub-hosted runner (ephemeral) では実行後に更新された auth.json を
+    #       secret に書き戻す仕組みが必要。現時点では毎回 secret から注入する運用。
+    codex_home = env.get(_CODEX_HOME_ENV, "").strip()
+    if codex_home and (Path(codex_home) / "auth.json").is_file():
+        sanitized["CODEX_HOME"] = codex_home
+        return sanitized
+
+    raise ProviderExecutionError(
+        f"認証に必要な環境変数 `{_CODEX_OPENAI_API_KEY_FILE_ENV}` /"
+        f" `{_CODEX_OPENAI_API_KEY_ENV}` / `{_CODEX_HOME_ENV}` のいずれも設定されていません"
+    )
 
 
 def _parse_codex_jsonl(jsonl_stdout: str, result_text: str) -> _CodexOutput:
@@ -455,31 +471,22 @@ def _build_claude_settings(
     return json.dumps(settings)
 
 
-def _resolve_api_key(
+def _try_resolve_api_key(
     env: Mapping[str, str],
     file_env: str,
     value_env: str,
-) -> str:
-    """ファイルパス env 優先、生キー値 env フォールバックで API キーを返す。"""
+) -> str | None:
+    """ファイルパス env 優先、生キー値 env フォールバックで API キーを返す。認証なしなら None を返す。"""
     file_path = env.get(file_env, "").strip()
     if file_path:
-        path = Path(file_path)
-        if not path.is_file():
+        if not Path(file_path).is_file():
             raise ProviderExecutionError(
                 f"`{file_env}` で指定されたファイル `{file_path}` が見つかりません"
             )
-        content = path.read_text(encoding="utf-8").strip()
-        if not content:
-            raise ProviderExecutionError(
-                f"`{file_env}` で指定されたファイル `{file_path}` が空です"
-            )
-        return content
+        content = Path(file_path).read_text(encoding="utf-8").strip()
+        return content if content else None
     value = env.get(value_env, "").strip()
-    if not value:
-        raise ProviderExecutionError(
-            f"認証に必要な環境変数 `{file_env}` または `{value_env}` が設定されていません"
-        )
-    return value
+    return value if value else None
 
 
 def _resolve_api_key_file_path(

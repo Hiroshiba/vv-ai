@@ -26,6 +26,7 @@ class ProviderSpec(BaseModel):
     name: ProviderName
     api_key_env: str
     api_key_file_env: str
+    auth_home_env: str | None
     cli_command: str
     supports_session_resume: bool
     supports_compact: bool
@@ -55,6 +56,7 @@ _PROVIDER_SPECS: dict[ProviderName, ProviderSpec] = {
         name="codex",
         api_key_env="VV_OPENAI_API_KEY",
         api_key_file_env="VV_OPENAI_API_KEY_FILE",
+        auth_home_env="VV_CODEX_HOME",
         cli_command="codex",
         supports_session_resume=True,
         supports_compact=True,
@@ -63,6 +65,7 @@ _PROVIDER_SPECS: dict[ProviderName, ProviderSpec] = {
         name="claude",
         api_key_env="VV_ANTHROPIC_API_KEY",
         api_key_file_env="VV_ANTHROPIC_API_KEY_FILE",
+        auth_home_env=None,
         cli_command="claude",
         supports_session_resume=True,
         supports_compact=True,
@@ -94,9 +97,15 @@ def resolve_provider(
         if _has_provider_secret(spec, env):
             return ResolvedProvider(spec=spec, source="config")
 
+    def _spec_hint(p: ProviderName) -> str:
+        spec = get_provider_spec(p)
+        hint = f"{spec.api_key_file_env} / {spec.api_key_env}"
+        if spec.auth_home_env is not None:
+            hint += f" / {spec.auth_home_env}"
+        return hint
+
     required_secrets = ", ".join(
-        f"{get_provider_spec(p).api_key_file_env} / {get_provider_spec(p).api_key_env}"
-        for p in _iter_provider_priority(config.provider_priority)
+        _spec_hint(p) for p in _iter_provider_priority(config.provider_priority)
     )
     raise ProviderResolutionError(
         "利用可能な provider を選べませんでした。"
@@ -124,10 +133,13 @@ def _ensure_provider_available(
     if _has_provider_secret(spec, env):
         return
 
-    raise ProviderResolutionError(
+    msg = (
         f"`{spec.name}` を使うには環境変数 `{spec.api_key_file_env}` または"
         f" `{spec.api_key_env}` が必要です"
     )
+    if spec.auth_home_env is not None:
+        msg += f"。または `{spec.auth_home_env}` で auth.json を配置してください"
+    raise ProviderResolutionError(msg)
 
 
 def _has_provider_secret(
@@ -136,7 +148,15 @@ def _has_provider_secret(
 ) -> bool:
     """provider 用の秘密値が利用可能かを確認する。"""
     file_path = env.get(spec.api_key_file_env, "").strip()
-    if file_path:
-        return Path(file_path).is_file()
-    secret_value = env.get(spec.api_key_env)
-    return secret_value is not None and secret_value.strip() != ""
+    if file_path and Path(file_path).is_file():
+        if Path(file_path).read_text(encoding="utf-8").strip() != "":
+            return True
+    else:
+        secret_value = env.get(spec.api_key_env)
+        if secret_value is not None and secret_value.strip() != "":
+            return True
+    if spec.auth_home_env is not None:
+        home_dir = env.get(spec.auth_home_env, "").strip()
+        if home_dir and (Path(home_dir) / "auth.json").is_file():
+            return True
+    return False

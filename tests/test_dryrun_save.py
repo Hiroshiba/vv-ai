@@ -52,6 +52,7 @@ def _make_provider() -> ResolvedProvider:
             name="codex",
             api_key_env="VV_OPENAI_API_KEY",
             api_key_file_env="VV_OPENAI_API_KEY_FILE",
+            auth_home_env="VV_CODEX_HOME",
             cli_command="codex",
             supports_session_resume=True,
             supports_compact=True,

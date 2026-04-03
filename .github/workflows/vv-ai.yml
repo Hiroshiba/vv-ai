@@ -84,6 +84,7 @@ jobs:
           VV_ANTHROPIC_API_KEY: ${{ secrets.VV_ANTHROPIC_API_KEY }}
           VV_AI_AGE_PUBLIC_KEY: ${{ secrets.VV_AI_AGE_PUBLIC_KEY }}
           VV_AI_AGE_SECRET_KEY: ${{ secrets.VV_AI_AGE_SECRET_KEY }}
+          VV_CODEX_AUTH_JSON: ${{ secrets.VV_CODEX_AUTH_JSON }}
         run: |
           mkdir -p /home/runner/.vv-secrets
           chmod 700 /home/runner/.vv-secrets
@@ -92,6 +93,11 @@ jobs:
           printf '%s' "$VV_AI_AGE_PUBLIC_KEY" > /home/runner/.vv-secrets/age_public_key
           printf '%s' "$VV_AI_AGE_SECRET_KEY" > /home/runner/.vv-secrets/age_secret_key
           chmod 400 /home/runner/.vv-secrets/*
+          if [ -n "$VV_CODEX_AUTH_JSON" ]; then
+            mkdir -p /home/runner/.vv-secrets/codex_home
+            printf '%s' "$VV_CODEX_AUTH_JSON" > /home/runner/.vv-secrets/codex_home/auth.json
+            chmod 400 /home/runner/.vv-secrets/codex_home/auth.json
+          fi
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -118,6 +124,7 @@ jobs:
           VV_AI_AGE_PUBLIC_KEY_FILE: /home/runner/.vv-secrets/age_public_key
           VV_AI_AGE_SECRET_KEY_FILE: /home/runner/.vv-secrets/age_secret_key
           VV_CLAUDE_SETTINGS: ${{ secrets.VV_CLAUDE_SETTINGS }}
+          VV_CODEX_HOME: /home/runner/.vv-secrets/codex_home
         run: |
           uv run vv-ai \
             --event "${{ github.event_name }}" \
