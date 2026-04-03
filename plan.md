@@ -375,6 +375,14 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
     -f instruction="この Issue の内容を一行で要約して" \
     -f provider=codex -f session_mode=new
   ```
+- [ ] G-Live-15: reply Issue #1 でセッション継続 → success → 前回のコンテキストを引き継いでいること（artifacts の metrics に cached_input_tokens や thread_id が前回と一致することで確認）
+  ```sh
+  gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
+    -f command=reply \
+    -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
+    -f instruction="前回の要約を踏まえて、この Issue の目的を一文で言い換えて" \
+    -f provider=codex -f session_mode=inherit
+  ```
 - [ ] G-Live-20: plan Issue #1 → success → コメント投稿確認
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
