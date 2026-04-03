@@ -148,9 +148,10 @@ def _has_provider_secret(
 ) -> bool:
     """provider 用の秘密値が利用可能かを確認する。"""
     file_path = env.get(spec.api_key_file_env, "").strip()
-    if file_path and Path(file_path).is_file():
-        if Path(file_path).read_text(encoding="utf-8").strip() != "":
-            return True
+    if file_path:
+        if Path(file_path).is_file():
+            if Path(file_path).read_text(encoding="utf-8").strip() != "":
+                return True
     else:
         secret_value = env.get(spec.api_key_env)
         if secret_value is not None and secret_value.strip() != "":

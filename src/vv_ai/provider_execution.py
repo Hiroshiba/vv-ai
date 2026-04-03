@@ -403,7 +403,7 @@ def _execute_claude(
             provider_session_path,
         )
     finally:
-        if is_temporary:
+        if is_temporary and api_key_file_path is not None:
             Path(api_key_file_path).unlink(missing_ok=True)
 
 
@@ -480,9 +480,7 @@ def _try_resolve_api_key(
     file_path = env.get(file_env, "").strip()
     if file_path:
         if not Path(file_path).is_file():
-            raise ProviderExecutionError(
-                f"`{file_env}` で指定されたファイル `{file_path}` が見つかりません"
-            )
+            return None
         content = Path(file_path).read_text(encoding="utf-8").strip()
         return content if content else None
     value = env.get(value_env, "").strip()
