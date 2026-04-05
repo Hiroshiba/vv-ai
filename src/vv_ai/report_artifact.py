@@ -107,7 +107,7 @@ def save_report_artifact(
     """report artifact を保存する。"""
     artifact_name = build_report_artifact_name(resolved_session.key, workflow_id)
     reports_root = repo_root / ".vv-ai" / "artifacts" / workflow_id / "reports"
-    artifact_path = reports_root / "report.md.age"
+    artifact_path = reports_root / f"{artifact_name}.md.age"
 
     if artifact_path.exists():
         raise ReportArtifactError(f"`{artifact_path}` は既に存在します")

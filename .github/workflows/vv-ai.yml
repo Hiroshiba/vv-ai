@@ -130,11 +130,73 @@ jobs:
             --event "${{ github.event_name }}" \
             --event-file "$GITHUB_EVENT_PATH"
 
-      - name: Upload artifacts
+      - name: Resolve artifact paths
         if: always()
+        id: artifact_paths
+        run: |
+          shopt -s nullglob
+
+          session_files=(.vv-ai/artifacts/*/sessions/*.tar.age)
+          metrics_files=(.vv-ai/artifacts/*/metrics/*.json.age)
+          report_files=(.vv-ai/artifacts/*/reports/*.md.age)
+
+          if [ ${#session_files[@]} -gt 1 ]; then
+            echo "session artifact が複数あります" >&2
+            printf '%s\n' "${session_files[@]}" >&2
+            exit 1
+          fi
+          if [ ${#metrics_files[@]} -gt 1 ]; then
+            echo "metrics artifact が複数あります" >&2
+            printf '%s\n' "${metrics_files[@]}" >&2
+            exit 1
+          fi
+          if [ ${#report_files[@]} -gt 1 ]; then
+            echo "report artifact が複数あります" >&2
+            printf '%s\n' "${report_files[@]}" >&2
+            exit 1
+          fi
+
+          if [ ${#session_files[@]} -eq 1 ]; then
+            session_path="${session_files[0]}"
+            session_name="$(basename "$session_path" .tar.age)"
+            echo "session_path=$session_path" >> "$GITHUB_OUTPUT"
+            echo "session_name=$session_name" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ ${#metrics_files[@]} -eq 1 ]; then
+            metrics_path="${metrics_files[0]}"
+            metrics_name="$(basename "$metrics_path" .json.age)"
+            echo "metrics_path=$metrics_path" >> "$GITHUB_OUTPUT"
+            echo "metrics_name=$metrics_name" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ ${#report_files[@]} -eq 1 ]; then
+            report_path="${report_files[0]}"
+            report_name="$(basename "$report_path" .md.age)"
+            echo "report_path=$report_path" >> "$GITHUB_OUTPUT"
+            echo "report_name=$report_name" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload session artifact
+        if: always() && steps.artifact_paths.outputs.session_path != ''
         uses: actions/upload-artifact@v4
         with:
-          name: vv-ai-artifacts-${{ github.run_id }}
-          path: .vv-ai/artifacts/
+          name: ${{ steps.artifact_paths.outputs.session_name }}
+          path: ${{ steps.artifact_paths.outputs.session_path }}
           retention-days: 90
-          if-no-files-found: ignore
+
+      - name: Upload metrics artifact
+        if: always() && steps.artifact_paths.outputs.metrics_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_paths.outputs.metrics_name }}
+          path: ${{ steps.artifact_paths.outputs.metrics_path }}
+          retention-days: 90
+
+      - name: Upload report artifact
+        if: always() && steps.artifact_paths.outputs.report_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_paths.outputs.report_name }}
+          path: ${{ steps.artifact_paths.outputs.report_path }}
+          retention-days: 90
