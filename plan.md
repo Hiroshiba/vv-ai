@@ -18,7 +18,13 @@
 
 ## 日誌
 
-日誌には受けたレビューと、レビューを反映した場合になぜそれを見逃してしまったのかの考察と、手こずったことを書く。
+日誌には以下の内容を盛り込んで書く。
+
+- 受けたレビュー
+- レビューを反映した場合になぜそれを見逃してしまっていた理由の考察
+- セッション中にあったユーザーから得られた指摘
+- その指摘を見逃してしまっていた理由の考察
+- その他、手こずったこと
 
 ## タスクリスト
 
@@ -150,11 +156,13 @@ tmux kill-session -t vvai-test 2>/dev/null || true
 - [x] ローカル Issue フィクスチャを作成する
   - `.vv-ai/issues/test-issue-1/comments/`（空ディレクトリ）
   - `.vv-ai/issues/test-issue-1/issue.md`
+
     ```
     # テスト Issue
 
     vv-ai の動作確認用 Issue です。ローカル backend のテストに使います。
     ```
+
   - `.vv-ai/issues/test-issue-1/meta.json`
     ```json
     {
@@ -166,14 +174,17 @@ tmux kill-session -t vvai-test 2>/dev/null || true
       "backend": "local"
     }
     ```
+
 - [x] ローカル PR フィクスチャを作成する
   - `.vv-ai/prs/test-pr-1/comments/`（空ディレクトリ）
   - `.vv-ai/prs/test-pr-1/pr.md`
+
     ```
     # テスト PR
 
     vv-ai の動作確認用 PR です。review コマンドのテストに使います。
     ```
+
   - `.vv-ai/prs/test-pr-1/meta.json`
     ```json
     {
@@ -187,6 +198,7 @@ tmux kill-session -t vvai-test 2>/dev/null || true
       "base_branch": "main"
     }
     ```
+
 - [x] age 鍵ペアを生成する
   ```sh
   age-keygen -o /tmp/vv-ai-age-key.txt
@@ -418,17 +430,20 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
 実際に Issue/PR へコメントを書いてワークフローをトリガーする。テスト用の Issue #1 と PR #2 を使用。provider は未指定（`vv-ai.yml` の `provider_priority` 先頭の codex が自動選択される）。エラーが発生した場合はそれ以降を中断し日誌を書く。
 
 **Issue コメント起動:**
+
 - [ ] E-10: Issue #1 に `@vv-ai この Issue の内容を一行で要約して` → reply コメント投稿確認
 - [ ] E-20: Issue #1 に `@vv-ai plan 実装方針を出して` → コメント投稿確認
 - [ ] E-30: Issue #1 に `@vv-ai implement` → ブランチ push + PR 作成 → 確認後削除
 - [ ] E-40: Issue #1 に `@vv-ai issue この Issue をもう少し詳しく書き直して` → 新 Issue 作成 + リンクコメント → 新 Issue クローズ
 
 **PR コメント起動:**
+
 - [ ] E-50: PR #2 に `@vv-ai この PR の内容を一行で要約して` → reply コメント投稿確認
 - [ ] E-60: PR #2 に `@vv-ai review` → レビューコメント投稿確認
 - [ ] E-70: PR #2 に `@vv-ai implement この PR に改善を追加して` → head ブランチに追コミット push
 
 **セッション継続テスト:**
+
 - [ ] E-80: Issue #1 に `@vv-ai この Issue について質問：対象ユーザーは？` → 初回セッション
 - [ ] E-90: Issue #1 に `@vv-ai --session inherit 前回の回答を踏まえて要点をまとめて` → 前回コンテキスト引き継ぎ確認
 
