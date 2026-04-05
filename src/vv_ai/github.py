@@ -248,7 +248,7 @@ class GitHubClient:
                 "-f",
                 f"base={_require_non_empty_text(base_branch, 'base_branch')}",
                 "-F",
-                f"maintainer_can_modify={maintainer_can_modify}",
+                f"maintainer_can_modify={'true' if maintainer_can_modify else 'false'}",
             ]
         )
         if not isinstance(payload, dict):
@@ -361,6 +361,27 @@ class GitHubClient:
                 ),
             ]
         )
+
+    def get_default_branch(self, repository_full_name: str) -> str:
+        """リポジトリのデフォルトブランチ名を返す。"""
+        raw = self._run_json(
+            [
+                "repo",
+                "view",
+                repository_full_name,
+                "--json",
+                "defaultBranchRef",
+            ]
+        )
+        if not isinstance(raw, dict):
+            raise GitHubClientError("リポジトリ情報の JSON 形式が不正です")
+        ref = raw.get("defaultBranchRef")
+        if not isinstance(ref, dict):
+            raise GitHubClientError("defaultBranchRef の取得に失敗しました")
+        name = ref.get("name")
+        if not isinstance(name, str) or not name:
+            raise GitHubClientError("デフォルトブランチ名の取得に失敗しました")
+        return name
 
     def get_target_details(self, target: ResolvedTarget) -> GitHubTargetDetails:
         """GitHub target に対応する本体を取得する。"""

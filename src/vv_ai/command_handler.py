@@ -14,8 +14,8 @@ from vv_ai.git_ops import (
     fetch_and_checkout_branch,
     generate_implement_branch_name,
     generate_patch,
-    get_default_branch,
     get_head_sha,
+    has_commits_ahead,
     push_branch,
     try_push_current_branch,
 )
@@ -234,6 +234,19 @@ def _handle_implement_issue_post_execution(
     assert github_client is not None
 
     try:
+        base_branch = github_client.get_default_branch(target.repository_full_name)
+    except GitHubClientError as exc:
+        raise CommandError(str(exc)) from exc
+
+    try:
+        ahead = has_commits_ahead(repo_root, base_branch)
+    except GitOpsError as exc:
+        raise CommandError(str(exc)) from exc
+    if not ahead:
+        print("変更コミットがないため push と PR 作成をスキップします")
+        return
+
+    try:
         push_branch(repo_root, implement_branch_name)
     except GitOpsError as exc:
         raise CommandError(str(exc)) from exc
@@ -244,10 +257,6 @@ def _handle_implement_issue_post_execution(
         raise CommandError(str(exc)) from exc
     pr_title = issue.title
     pr_body = f"Closes #{target.number}"
-    try:
-        base_branch = get_default_branch(repo_root)
-    except GitOpsError as exc:
-        raise CommandError(str(exc)) from exc
 
     try:
         pr = github_client.create_pull_request(

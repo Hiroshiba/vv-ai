@@ -44,16 +44,10 @@ def push_branch(repo_root: Path, branch_name: str) -> None:
     run_git_command(repo_root, "push", "-u", "origin", branch_name)
 
 
-def get_default_branch(repo_root: Path) -> str:
-    """リモートのデフォルトブランチ名を返す。"""
-    ref = run_git_command(
-        repo_root, "rev-parse", "--abbrev-ref", "origin/HEAD"
-    ).strip()
-    if ref.startswith("origin/"):
-        return ref[len("origin/"):]
-    if not ref:
-        raise GitOpsError("origin/HEAD が未設定のためデフォルトブランチを取得できません")
-    return ref
+def has_commits_ahead(repo_root: Path, base_ref: str) -> bool:
+    """base_ref より HEAD が先行するコミットを持つか返す。"""
+    log = run_git_command(repo_root, "log", "--oneline", f"{base_ref}..HEAD").strip()
+    return len(log) > 0
 
 
 def get_head_sha(repo_root: Path) -> str:
