@@ -367,7 +367,7 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
 
 テスト用の Issue #1 と PR #2 を使用する。`provider=codex`, `session_mode=new` で実行する。各テスト後に作成されたリソースをクリーンアップする。エラーが発生した場合はそれ以降を中断し日誌を書く。
 
-- [ ] G-Live-10: reply Issue #1 → success → Issue #1 にコメントが投稿されていること
+- [x] G-Live-10: reply Issue #1 → success → Issue #1 にコメントが投稿されていること
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=reply \
