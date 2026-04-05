@@ -31,7 +31,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 | オプション                          | 説明                                                   | デフォルト              |
 | ----------------------------------- | ------------------------------------------------------ | ----------------------- |
 | `--provider codex\|claude`          | 使用する AI プロバイダを上書き指定                      | 優先順に従い自動選択    |
-| `--session inherit\|compact\|new`   | セッション継続方式                                     | `inherit`               |
+| `--session_mode inherit\|compact\|new` | セッション継続方式                                  | `inherit`               |
 | `--dry-run`                         | GitHub への外部反映を一切行わない（artifact のみ保存） | `false`                 |
 | `--repo org/repo`                   | Issue 作成先リポジトリ（`issue` コマンド専用）         | workflow が置かれた repo |
 
@@ -41,7 +41,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 @vv-ai 調べて要点だけ返して
 @vv-ai plan 実装方針を3案ください
 @vv-ai implement --provider codex このIssueを実装して
-@vv-ai review --session inherit このPRをレビューして
+@vv-ai review --session_mode inherit このPRをレビューして
 @vv-ai issue --repo org/repo この不具合をIssue化して
 @vv-ai implement --dry-run この修正を試してみて
 ```
@@ -89,7 +89,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 - サブコマンドなし（`vv-ai [options]` で直接実行）
 - workflow 側からもこの CLI を呼ぶ
 - 入力方法:
-  - 直接指定: `--command`, `--instruction`, `--target-url`, `--target-type`, `--target-number`, `--provider`, `--session`, `--dry-run`, `--repo`
+  - 直接指定: `--command`, `--instruction`, `--target-url`, `--target-type`, `--target-number`, `--provider`, `--session_mode`, `--dry-run`, `--repo`
   - イベントファイル: `--event-file <json>` で GitHub event payload を読み込み再現実行
   - `--event issue_comment|workflow_dispatch|local`
 - ローカルデバッグは主に **dry-run** で実施
@@ -270,7 +270,7 @@ provider_priority:
   - 例: `github / org/repo#123 / codex / main`
   - 例: `local / issue:login-403-7k2p9a / codex / main`
 
-### セッション継続方式（`--session`）
+### セッション継続方式（`--session_mode`）
 
 | 値        | 説明                                           |
 | --------- | ---------------------------------------------- |
@@ -281,8 +281,8 @@ provider_priority:
 ### Issue → PR 作成時のセッション引き継ぎ
 
 - Issue の main セッションを **フォーク（複製）** して PR の main セッションとする
-- `--session compact` 指定時: フォーク前に compact をかけた状態を複製
-- `--session new` 指定時: PR 側は複製せず新規
+- `--session_mode compact` 指定時: フォーク前に compact をかけた状態を複製
+- `--session_mode new` 指定時: PR 側は複製せず新規
 - 複数の PR を同じ Issue から作った場合: PR 番号が異なるため各 PR は別セッション
 
 ### セッション共有
@@ -338,8 +338,8 @@ provider_priority:
 
 ### 復元失敗時
 
-- `--session inherit` / `--session compact` で artifact が見つからない場合: **エラー終了**
-- `--session new` の場合: 探さず新規開始
+- `--session_mode inherit` / `--session_mode compact` で artifact が見つからない場合: **エラー終了**
+- `--session_mode new` の場合: 探さず新規開始
 
 ### 必ず保存するタイミング
 

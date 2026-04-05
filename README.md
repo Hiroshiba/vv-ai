@@ -82,7 +82,7 @@ uv run vv-ai --command reply --target-type issue --target-number 123 --instructi
 | `--target-type` | `issue` または `pr` |
 | `--target-number` | Issue / PR 番号 |
 | `--provider` | `codex` または `claude` |
-| `--session` | `inherit` / `compact` / `new`。デフォルトは `inherit` |
+| `--session_mode` | `inherit` / `compact` / `new`。デフォルトは `inherit` |
 | `--dry-run` | GitHub への外部反映を行わず、artifact のみ保存する |
 | `--repo` | Issue 作成先の `org/repo`。`issue` コマンド専用 |
 | `--event-file` | GitHub event payload JSON を読み込んで再現実行する |
@@ -96,7 +96,7 @@ Issue または PR のコメントで `@vv-ai` で始めると起動します。
 ```
 @vv-ai plan 実装方針を3案ください
 @vv-ai implement --provider codex このIssueを実装して
-@vv-ai review --session new このPRをレビューして
+@vv-ai review --session_mode new このPRをレビューして
 ```
 
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。

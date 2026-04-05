@@ -231,11 +231,11 @@ tmux new-session -d -s vvai-test -x 200 -y 50 -c /Users/kazuyuki_hiroshiba/Githu
   ```
 - [x] C-02: reply で instruction なし → exit 2
   ```sh
-  uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 --provider codex --session new
+  uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 --provider codex --session_mode new
   ```
 - [x] C-03: review で Issue を指定 → exit 1（`review` は PR 専用）
   ```sh
-  uv run vv-ai --command review --target-url .vv-ai/issues/test-issue-1 --provider codex --session new --dry-run --skip-api-key-check
+  uv run vv-ai --command review --target-url .vv-ai/issues/test-issue-1 --provider codex --session_mode new --dry-run --skip-api-key-check
   ```
 
 **正常ケース（dry-run）**
@@ -244,18 +244,18 @@ tmux new-session -d -s vvai-test -x 200 -y 50 -c /Users/kazuyuki_hiroshiba/Githu
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 \
     --instruction "この Issue の内容を一行で要約して" \
-    --provider codex --session new --dry-run --skip-api-key-check
+    --provider codex --session_mode new --dry-run --skip-api-key-check
   ```
 - [x] C-20: plan ローカル Issue → exit 0
   ```sh
   uv run vv-ai --command plan --target-url .vv-ai/issues/test-issue-1 \
     --instruction "実装方針を出して" \
-    --provider codex --session new --dry-run --skip-api-key-check
+    --provider codex --session_mode new --dry-run --skip-api-key-check
   ```
 - [x] C-30: implement ローカル Issue → exit 0、`[dry-run/local]` 出力、`vv-ai/issue-` ブランチ作成確認→削除
   ```sh
   uv run vv-ai --command implement --target-url .vv-ai/issues/test-issue-1 \
-    --provider codex --session new --dry-run --skip-api-key-check
+    --provider codex --session_mode new --dry-run --skip-api-key-check
   # 確認後: git checkout main && git branch | grep 'vv-ai/issue-' | xargs git branch -D
   ```
 - [x] C-40: reply GitHub Issue → exit 0、GitHub への書き込みなし（dry-run）
@@ -263,7 +263,7 @@ tmux new-session -d -s vvai-test -x 200 -y 50 -c /Users/kazuyuki_hiroshiba/Githu
   uv run vv-ai --command reply \
     --target-url https://github.com/VOICEVOX/voicevox_core/issues/1 \
     --instruction "テスト" \
-    --provider codex --session new --dry-run --skip-api-key-check
+    --provider codex --session_mode new --dry-run --skip-api-key-check
   ```
 
 ### 16. Claude Provider テスト
@@ -276,25 +276,25 @@ tmux セッションを再作成する（Phase 15 のセッションを破棄）
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 \
     --instruction "この Issue の内容を一行で要約して" \
-    --provider claude --session new --dry-run --skip-api-key-check
+    --provider claude --session_mode new --dry-run --skip-api-key-check
   ```
 - [x] D-20: plan ローカル Issue → exit 0
   ```sh
   uv run vv-ai --command plan --target-url .vv-ai/issues/test-issue-1 \
     --instruction "実装方針を出して" \
-    --provider claude --session new --dry-run --skip-api-key-check
+    --provider claude --session_mode new --dry-run --skip-api-key-check
   ```
 - [x] D-30: implement ローカル Issue → exit 0、`[dry-run/local]` 出力、ブランチ確認→削除
   ```sh
   uv run vv-ai --command implement --target-url .vv-ai/issues/test-issue-1 \
-    --provider claude --session new --dry-run --skip-api-key-check
+    --provider claude --session_mode new --dry-run --skip-api-key-check
   ```
 - [x] D-40: reply GitHub Issue → exit 0
   ```sh
   uv run vv-ai --command reply \
     --target-url https://github.com/VOICEVOX/voicevox_core/issues/1 \
     --instruction "テスト" \
-    --provider claude --session new --dry-run --skip-api-key-check
+    --provider claude --session_mode new --dry-run --skip-api-key-check
   ```
 
 ### 17. Provider 自動選択テスト
@@ -302,7 +302,7 @@ tmux セッションを再作成する（Phase 15 のセッションを破棄）
 - [x] A-01: `--provider` 省略時に `provider_priority` の先頭（codex）が選択される
   ```sh
   uv run vv-ai --command reply --target-url .vv-ai/issues/test-issue-1 \
-    --instruction "テスト" --session new --dry-run --skip-api-key-check
+    --instruction "テスト" --session_mode new --dry-run --skip-api-key-check
   # stdout に provider=codex を含むことを確認
   ```
 
@@ -445,7 +445,7 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
 **セッション継続テスト:**
 
 - [ ] E-80: Issue #1 に `@vv-ai この Issue について質問：対象ユーザーは？` → 初回セッション
-- [ ] E-90: Issue #1 に `@vv-ai --session inherit 前回の回答を踏まえて要点をまとめて` → 前回コンテキスト引き継ぎ確認
+- [ ] E-90: Issue #1 に `@vv-ai --session_mode inherit 前回の回答を踏まえて要点をまとめて` → 前回コンテキスト引き継ぎ確認
 
 ### 24. Claude Provider GitHub テスト
 

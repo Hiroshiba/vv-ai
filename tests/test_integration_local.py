@@ -78,7 +78,7 @@ class TestGitHubTargetDryRun:
             "--target-url", "https://github.com/org/repo/issues/1",
             "--instruction", "テスト指示",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
             "--dry-run",
         ]
         session = _make_resolved_session("github", "org/repo#1", "codex")
@@ -119,7 +119,7 @@ class TestLocalTargetDryRun:
             "--target-url", str(issue_dir),
             "--instruction", "テスト指示",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
             "--dry-run",
         ]
         session = _make_resolved_session("local", "issue:test-1", "codex")
@@ -152,7 +152,7 @@ class TestInputErrors:
             "--command", "plan",
             "--instruction", "テスト指示",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
         ]
 
         with (
@@ -169,7 +169,7 @@ class TestInputErrors:
             "--command", "reply",
             "--target-url", "https://github.com/org/repo/issues/1",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
         ]
 
         with (
@@ -189,7 +189,7 @@ class TestProviderFailure:
             "--target-url", "https://github.com/org/repo/issues/1",
             "--instruction", "テスト指示",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
             "--dry-run",
         ]
         session = _make_resolved_session("github", "org/repo#1", "codex")

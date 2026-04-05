@@ -36,7 +36,7 @@ class CLIInput(BaseModel):
     target_type: TargetType | None = None
     target_number: int | None = None
     provider: ProviderName | None = None
-    session: SessionMode | None = None
+    session_mode: SessionMode | None = None
     dry_run: bool | None = None
     repo: str | None = None
     skip_api_key_check: bool = False
@@ -153,7 +153,7 @@ def build_raw_input_from_cli(cli_input: CLIInput) -> RawInput:
             target_type=cli_input.target_type,
             target_number=cli_input.target_number,
             provider=cli_input.provider,
-            session_mode=cli_input.session,
+            session_mode=cli_input.session_mode,
             dry_run=bool(cli_input.dry_run),
             repo=cli_input.repo,
             skip_api_key_check=cli_input.skip_api_key_check,
@@ -267,8 +267,8 @@ def parse_comment_invocation(comment_body: str) -> CommentInvocation:
             provider = _expect_option_value(tokens, index, "--provider")
             index += 2
             continue
-        if token == "--session":
-            session_mode = _expect_option_value(tokens, index, "--session")
+        if token == "--session_mode":
+            session_mode = _expect_option_value(tokens, index, "--session_mode")
             index += 2
             continue
         if token == "--repo":
@@ -305,7 +305,7 @@ def _ensure_event_file_mode(cli_input: CLIInput) -> None:
         "target_type": cli_input.target_type,
         "target_number": cli_input.target_number,
         "provider": cli_input.provider,
-        "session": cli_input.session,
+        "session_mode": cli_input.session_mode,
         "dry_run": cli_input.dry_run,
         "repo": cli_input.repo,
     }

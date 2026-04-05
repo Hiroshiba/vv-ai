@@ -65,8 +65,8 @@ class TestParseCommentInvocation:
         result = parse_comment_invocation("@vv-ai implement --provider codex 実装して")
         assert result.provider == "codex"
 
-    def test_option_session(self) -> None:
-        result = parse_comment_invocation("@vv-ai review --session new")
+    def test_option_session_mode(self) -> None:
+        result = parse_comment_invocation("@vv-ai review --session_mode new")
         assert result.session_mode == "new"
 
     def test_option_repo(self) -> None:
@@ -81,13 +81,17 @@ class TestParseCommentInvocation:
 
     def test_multiple_options(self) -> None:
         result = parse_comment_invocation(
-            "@vv-ai implement --provider claude --session compact --dry-run 実装して"
+            "@vv-ai implement --provider claude --session_mode compact --dry-run 実装して"
         )
         assert result.command == "implement"
         assert result.provider == "claude"
         assert result.session_mode == "compact"
         assert result.dry_run is True
         assert result.instruction == "実装して"
+
+    def test_error_legacy_session_option(self) -> None:
+        with pytest.raises(InputError, match="未対応のオプションです: --session"):
+            parse_comment_invocation("@vv-ai review --session new")
 
     def test_leading_whitespace(self) -> None:
         result = parse_comment_invocation("  @vv-ai plan 方針出して")

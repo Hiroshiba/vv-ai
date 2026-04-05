@@ -81,7 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="使用する AI プロバイダを指定します。",
     )
     parser.add_argument(
-        "--session",
+        "--session_mode",
         choices=["inherit", "compact", "new"],
         help="セッション継続方式を指定します。",
     )

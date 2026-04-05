@@ -128,7 +128,7 @@ class TestImplementIssueDryRun:
             "--target-url", "https://github.com/org/repo/issues/1",
             "--instruction", "この Issue を実装して",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
             "--dry-run",
         ]
         session = _make_resolved_session("github", "org/repo#1", "codex")
@@ -154,7 +154,7 @@ class TestImplementPRDryRun:
             "--command", "implement",
             "--target-url", "https://github.com/org/repo/pull/5",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
             "--dry-run",
         ]
         session = _make_resolved_session("github", "org/repo#5", "codex")
@@ -185,7 +185,7 @@ class TestReviewDryRun:
             "--command", "review",
             "--target-url", "https://github.com/org/repo/pull/10",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
             "--dry-run",
         ]
         session = _make_resolved_session("github", "org/repo#10", "codex")
@@ -204,7 +204,7 @@ class TestReviewDryRun:
             "--command", "review",
             "--target-url", "https://github.com/org/repo/issues/1",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
             "--dry-run",
         ]
         session = _make_resolved_session("github", "org/repo#1", "codex")
@@ -227,7 +227,7 @@ class TestIssueDryRun:
             "--target-url", "https://github.com/org/repo/issues/1",
             "--instruction", "この不具合を Issue 化して",
             "--provider", "codex",
-            "--session", "new",
+            "--session_mode", "new",
             "--dry-run",
             "--repo", "org/repo",
         ]
