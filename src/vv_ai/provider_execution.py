@@ -200,11 +200,11 @@ def _build_codex_command(
     session_mode = session.mode if session is not None else "new"
     state_ref = session.state_ref if session is not None else None
 
-    base_options: list[str] = [
-        "--sandbox",
-        "workspace-write",
+    shared_options: list[str] = [
         "-c",
         'approval_policy="never"',
+        "-c",
+        'sandbox_mode="workspace-write"',
         "--json",
         "-c",
         'shell_environment_policy.inherit="all"',
@@ -225,12 +225,12 @@ def _build_codex_command(
             "exec",
             "resume",
             state_ref.provider_session_id,
-            *base_options,
+            *shared_options,
             "--",
             provider_prompt,
         ]
 
-    return ["codex", "exec", *base_options, "--", provider_prompt]
+    return ["codex", "exec", *shared_options, "--", provider_prompt]
 
 
 def _build_codex_env(
