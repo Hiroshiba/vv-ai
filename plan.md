@@ -403,7 +403,7 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
     -f instruction="実装方針を出して" \
     -f provider=codex -f session_mode=new
   ```
-- [ ] G-Live-30: implement Issue #1 → success → ブランチ push + PR 作成を確認 → PR クローズ + ブランチ削除
+- [x] G-Live-30: implement Issue #1 → success → ブランチ push + PR 作成を確認 → PR クローズ + ブランチ削除
   - 事前に Issue コメントで具体的な実装指示を書いてから implement を実行する
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
@@ -411,7 +411,7 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
     -f target_url=https://github.com/Hiroshiba/vv-ai/issues/1 \
     -f provider=codex -f session_mode=new
   ```
-- [ ] G-Live-40: review PR #2 → success → PR #2 にコメント投稿確認
+- [x] G-Live-40: review PR #2 → success → PR #2 にコメント投稿確認
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=review \
