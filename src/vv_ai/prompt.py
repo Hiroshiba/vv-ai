@@ -46,6 +46,7 @@ def build_provider_prompt(
     ready_execution: ReadyExecution,
     past_vvai_comments: list[str],
     implement_branch_name: str | None,
+    target_context: str | None,
 ) -> str:
     """コンテキストと指示を組み合わせたプロンプト文字列を返す。"""
     sections: list[str] = []
@@ -65,6 +66,9 @@ def build_provider_prompt(
         sections.append(_IMPLEMENT_PR_TASK_DESCRIPTION)
     elif command_name in _COMMAND_TASK_DESCRIPTION:
         sections.append(_COMMAND_TASK_DESCRIPTION[command_name])
+
+    if target_context is not None:
+        sections.append(f"対象コンテキスト:\n{target_context}")
 
     instruction = ready_execution.command.instruction
     if instruction is not None:

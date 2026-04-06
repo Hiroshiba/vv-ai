@@ -68,6 +68,7 @@ def run_command(
         )
 
     past_vvai_comments = _fetch_past_vvai_comments(github_client, target)
+    target_context = _build_target_context(github_client, target)
 
     implement_branch_name: str | None = None
     pr_info: GitHubPullRequest | None = None
@@ -113,7 +114,10 @@ def run_command(
             head_sha_before = get_head_sha(repo_root)
 
         provider_prompt = build_provider_prompt(
-            ready_execution, past_vvai_comments, implement_branch_name
+            ready_execution,
+            past_vvai_comments,
+            implement_branch_name,
+            target_context,
         )
         execution_result = execute_provider(
             repo_root,
@@ -176,6 +180,72 @@ def _fetch_past_vvai_comments(
         print(f"過去コメント取得に失敗しました: {exc}", file=sys.stderr)
         return []
     return [c.body for c in comments if c.body.startswith("@vv-ai")]
+
+
+def _build_target_context(
+    github_client: GitHubClient | None,
+    target: ResolvedTarget | None,
+) -> str | None:
+    """target 本文とコメントを provider 用テキストへ整形する。"""
+    if target is None:
+        return None
+    if target.backend == "github":
+        if github_client is None:
+            raise CommandError("GitHub target の取得に必要な client がありません")
+        try:
+            details = github_client.get_target_details(target)
+            comments = github_client.list_issue_comments(
+                details.repository_full_name, details.number
+            )
+        except GitHubClientError as exc:
+            raise CommandError(str(exc)) from exc
+        other_comments = [comment.body for comment in comments if not comment.body.startswith("@vv-ai")]
+        return _format_target_context(
+            kind=target.kind,
+            title=details.title,
+            body=details.body,
+            comments=other_comments,
+        )
+    if target.backend == "local":
+        if target.path is None:
+            raise CommandError("local target の path がありません")
+        target_dir = Path(target.path)
+        document_name = "issue.md" if target.kind == "issue" else "pr.md"
+        document_path = target_dir / document_name
+        if not document_path.is_file():
+            raise CommandError(f"`{document_path}` が見つかりません")
+        comments_dir = target_dir / "comments"
+        if not comments_dir.is_dir():
+            raise CommandError(f"`{comments_dir}` が見つかりません")
+        comment_paths = sorted(path for path in comments_dir.iterdir() if path.is_file())
+        return _format_target_context(
+            kind=target.kind,
+            title=target.local_id or target.canonical_id,
+            body=document_path.read_text(encoding="utf-8"),
+            comments=[path.read_text(encoding="utf-8") for path in comment_paths],
+        )
+    raise AssertionError(f"未対応の backend です: {target.backend}")
+
+
+def _format_target_context(
+    kind: str,
+    title: str,
+    body: str,
+    comments: list[str],
+) -> str:
+    """target 情報を provider に渡す文字列へ整形する。"""
+    sections = [
+        f"種別: {'Issue' if kind == 'issue' else 'PR'}",
+        f"タイトル:\n{title}",
+        f"本文:\n{body}",
+    ]
+    if comments:
+        comment_blocks = [
+            f"コメント {index}:\n{comment}"
+            for index, comment in enumerate(comments, start=1)
+        ]
+        sections.append("コメント:\n" + "\n\n".join(comment_blocks))
+    return "\n\n".join(sections)
 
 
 def _handle_post_execution(

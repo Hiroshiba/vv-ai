@@ -112,6 +112,7 @@ class TestLocalTargetDryRun:
         _write_config(tmp_path)
         issue_dir = tmp_path / ".vv-ai" / "issues" / "test-1"
         issue_dir.mkdir(parents=True)
+        (issue_dir / "comments").mkdir()
         (issue_dir / "issue.md").write_text("テスト Issue", encoding="utf-8")
 
         argv = [
