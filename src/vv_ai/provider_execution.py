@@ -201,7 +201,10 @@ def _build_codex_command(
     state_ref = session.state_ref if session is not None else None
 
     base_options: list[str] = [
-        "--full-auto",
+        "--sandbox",
+        "workspace-write",
+        "-c",
+        'approval_policy="never"',
         "--json",
         "-c",
         'shell_environment_policy.inherit="all"',
