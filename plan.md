@@ -432,17 +432,17 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
 
 **Issue コメント起動:**
 
-- [ ] E-10: Issue #1 に `@vv-ai --session_mode new この Issue の内容を一行で要約して` → reply コメント投稿確認
-- [ ] E-15: Issue #1 に `@vv-ai 前回の要約を少しだけ解説して` → inheritでコメント投稿確認
-- [ ] E-20: Issue #1 に `@vv-ai plan 実装方針を出して` → コメント投稿確認
-- [ ] E-30: Issue #1 に `@vv-ai implement` → ブランチ push + PR 作成 → 確認後削除
-- [ ] E-40: Issue #1 に `@vv-ai issue この Issue をもう少し詳しく書き直して` → 新 Issue 作成 + リンクコメント → 新 Issue クローズ
+- [x] E-10: Issue #1 に `@vv-ai --session_mode new この Issue の内容を一行で要約して` → reply コメント投稿確認
+- [x] E-15: Issue #1 に `@vv-ai 前回の要約を少しだけ解説して` → inheritでコメント投稿確認
+- [x] E-20: Issue #1 に `@vv-ai plan 実装方針を出して` → コメント投稿確認
+- [x] E-30: Issue #1 に `@vv-ai implement` → ブランチ push + PR 作成 → 確認後削除
+- [x] E-40: Issue #1 に `@vv-ai issue この Issue をもう少し詳しく書き直して` → 新 Issue 作成 + リンクコメント → 新 Issue クローズ
 
 **PR コメント起動:**
 
-- [ ] E-50: PR #2 に `@vv-ai この PR の内容を一行で要約して` → reply コメント投稿確認
-- [ ] E-70: PR #2 に `@vv-ai implement この PR に改善を追加して` → head ブランチに追コミット push
-- [ ] E-60: PR #2 に `@vv-ai review` → レビューコメント投稿確認
+- [x] E-50: PR #2 に `@vv-ai --session_mode new この PR の内容を一行で要約して` → reply コメント投稿確認
+- [x] E-70: PR #2 に `@vv-ai implement この PR に改善を追加して` → head ブランチに追コミット push
+- [x] E-60: PR #2 に `@vv-ai review` → レビューコメント投稿確認
 
 ### 24. Claude Provider GitHub テスト
 
