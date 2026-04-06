@@ -404,6 +404,7 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
     -f provider=codex -f session_mode=new
   ```
 - [ ] G-Live-30: implement Issue #1 → success → ブランチ push + PR 作成を確認 → PR クローズ + ブランチ削除
+  - 事前に Issue コメントで具体的な実装指示を書いてから implement を実行する
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=implement \
