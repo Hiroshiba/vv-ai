@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from vv_ai.cli import main
 from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
+from vv_ai.github import GitHubActor, GitHubIssue
 from vv_ai.resolve import BackendName
 from vv_ai.metrics_artifact import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
 from vv_ai.report_artifact import ReportSections
@@ -84,13 +85,23 @@ class TestGitHubTargetDryRun:
         session = _make_resolved_session("github", "org/repo#1", "codex")
         result = _make_execution_result("success", "テスト応答")
         env_patch = {"VV_OPENAI_API_KEY": "dummy-key"}
+        github_client = MagicMock()
+        github_client.get_issue.return_value = GitHubIssue(
+            repository_full_name="org/repo",
+            number=1,
+            title="テスト Issue",
+            body="Issue 本文です",
+            state="OPEN",
+            author=GitHubActor(login="Hiroshiba"),
+            url="https://github.com/org/repo/issues/1",
+        )
 
         with (
             patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
             patch("vv_ai.cli.resolve_session", return_value=session),
             patch("vv_ai.command_handler.execute_provider", return_value=result) as mock_provider,
             patch("vv_ai.cli.save_execution_artifacts", return_value=MagicMock(spec=SavedExecutionArtifacts)) as mock_save,
-            patch("vv_ai.command_handler.build_github_client", return_value=MagicMock()),
+            patch("vv_ai.command_handler.build_github_client", return_value=github_client),
             patch.dict("os.environ", env_patch),
         ):
             exit_code = main(argv)
@@ -100,11 +111,15 @@ class TestGitHubTargetDryRun:
         mock_save.assert_called_once()
 
         ready_execution = mock_provider.call_args[0][1]
+        provider_prompt = mock_provider.call_args[0][4]
         assert ready_execution.command.command == "plan"
         assert ready_execution.command.dry_run is True
         assert ready_execution.command.target is not None
         assert ready_execution.command.target.backend == "github"
         assert ready_execution.command.target.canonical_id == "org/repo#1"
+        assert "対象の Issue:" in provider_prompt
+        assert "タイトル: テスト Issue" in provider_prompt
+        assert "本文:\nIssue 本文です" in provider_prompt
 
 
 class TestLocalTargetDryRun:
@@ -139,10 +154,13 @@ class TestLocalTargetDryRun:
         mock_provider.assert_called_once()
 
         ready_execution = mock_provider.call_args[0][1]
+        provider_prompt = mock_provider.call_args[0][4]
         assert ready_execution.command.target is not None
         assert ready_execution.command.target.backend == "local"
         assert ready_execution.command.target.kind == "issue"
         assert ready_execution.command.target.local_id == "test-1"
+        assert "対象の Issue:" in provider_prompt
+        assert "本文:\nテスト Issue" in provider_prompt
 
 
 class TestInputErrors:

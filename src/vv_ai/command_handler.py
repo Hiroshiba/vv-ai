@@ -23,6 +23,7 @@ from vv_ai.git_ops import (
 from vv_ai.github import (
     GitHubClient,
     GitHubClientError,
+    GitHubTargetDetails,
     GitHubPullRequest,
     GitHubReactionContent,
     build_github_client,
@@ -71,8 +72,6 @@ def run_command(
             "eyes",
         )
 
-    past_vvai_comments = _fetch_past_vvai_comments(github_client, target)
-
     implement_branch_name: str | None = None
     pr_info: GitHubPullRequest | None = None
     head_sha_before: str | None = None
@@ -113,11 +112,14 @@ def run_command(
                 except GitOpsError as exc:
                     raise CommandError(str(exc)) from exc
 
+        target_context = _load_target_context(repo_root, github_client, target, pr_info)
+        past_vvai_comments = _fetch_past_vvai_comments(github_client, target)
+
         if pr_info is not None and pr_info.is_cross_repository:
             head_sha_before = get_head_sha(repo_root)
 
         provider_prompt = build_provider_prompt(
-            ready_execution, past_vvai_comments, implement_branch_name
+            ready_execution, target_context, past_vvai_comments, implement_branch_name
         )
         execution_result = execute_provider(
             repo_root,
@@ -180,6 +182,71 @@ def _fetch_past_vvai_comments(
         print(f"過去コメント取得に失敗しました: {exc}", file=sys.stderr)
         return []
     return [c.body for c in comments if c.body.startswith("@vv-ai")]
+
+
+def _load_target_context(
+    repo_root: Path,
+    github_client: GitHubClient | None,
+    target: ResolvedTarget | None,
+    github_target_details: GitHubTargetDetails | None,
+) -> str | None:
+    """target の本文を prompt 用文字列に変換する。"""
+    if target is None:
+        return None
+    if target.backend == "github":
+        return _load_github_target_context(github_client, target, github_target_details)
+    return _load_local_target_context(repo_root, target)
+
+
+def _load_github_target_context(
+    github_client: GitHubClient | None,
+    target: ResolvedTarget,
+    github_target_details: GitHubTargetDetails | None,
+) -> str:
+    """GitHub target の本文を読み込む。"""
+    if github_target_details is not None:
+        return _format_github_target_context(github_target_details)
+    if github_client is None:
+        raise CommandError("GitHub target の取得に必要な client がありません")
+    if target.repository_full_name is None or target.number is None:
+        raise CommandError("GitHub target の repository または番号が不正です")
+    try:
+        details = (
+            github_client.get_issue(target.repository_full_name, target.number)
+            if target.kind == "issue"
+            else github_client.get_pull_request(target.repository_full_name, target.number)
+        )
+    except GitHubClientError as exc:
+        raise CommandError(str(exc)) from exc
+    return _format_github_target_context(details)
+
+
+def _format_github_target_context(details: GitHubTargetDetails) -> str:
+    """GitHub target 詳細を prompt 用文字列に整形する。"""
+    kind_label = "PR" if isinstance(details, GitHubPullRequest) else "Issue"
+    return (
+        f"対象の {kind_label}:\n"
+        f"タイトル: {details.title}\n"
+        f"URL: {details.url}\n"
+        f"本文:\n{details.body}"
+    )
+
+
+def _load_local_target_context(repo_root: Path, target: ResolvedTarget) -> str:
+    """local target の本文を読み込む。"""
+    if target.path is None:
+        raise CommandError("local target の path がありません")
+    target_dir = Path(target.path)
+    if not target_dir.is_absolute():
+        target_dir = (repo_root / target_dir).resolve()
+    document_name = "issue.md" if target.kind == "issue" else "pr.md"
+    document_path = target_dir / document_name
+    try:
+        body = document_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CommandError(f"`{document_path}` の読み込みに失敗しました") from exc
+    kind_label = "PR" if target.kind == "pr" else "Issue"
+    return f"対象の {kind_label}:\nパス: {document_path}\n本文:\n{body}"
 
 
 def _handle_post_execution(

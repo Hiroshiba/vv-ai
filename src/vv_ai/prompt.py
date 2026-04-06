@@ -44,6 +44,7 @@ _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
 
 def build_provider_prompt(
     ready_execution: ReadyExecution,
+    target_context: str | None,
     past_vvai_comments: list[str],
     implement_branch_name: str | None,
 ) -> str:
@@ -51,6 +52,8 @@ def build_provider_prompt(
     sections: list[str] = []
 
     sections.append(_build_header(ready_execution, implement_branch_name))
+    if target_context is not None:
+        sections.append(target_context)
 
     if ready_execution.resolved_session is not None:
         restore_manifest = ready_execution.resolved_session.restore_manifest
