@@ -19,7 +19,9 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
     ),
     "implement": (
         "以下の Issue の内容を実装してください。"
-        "変更は git commit してください。push は別途行うため、push は不要です。"
+        "ファイル変更のみ行ってください。git の操作は不要です。"
+        "終了後にワーキングツリーの全変更が git add -A でコミットされます。"
+        "一時ファイルやキャッシュは削除してから終了してください。"
     ),
     "issue": (
         "以下の指示に基づいて GitHub Issue を作成するための内容を生成してください。\n"
@@ -34,7 +36,9 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
 
 _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
     "この PR の内容・コメントの指示に基づいて追加実装してください。"
-    "変更は git commit してください。push は別途行うため、push は不要です。"
+    "ファイル変更のみ行ってください。git の操作は不要です。"
+    "終了後にワーキングツリーの全変更が git add -A でコミットされます。"
+    "一時ファイルやキャッシュは削除してから終了してください。"
 )
 
 
@@ -99,10 +103,10 @@ def _build_header(
         if target is not None and target.kind == "pr":
             lines.append(
                 f"現在のブランチ: `{implement_branch_name}`（PR #{target.number} の head ブランチ）。"
-                "このブランチ上でコミットしてください。"
+                "このブランチ上で作業してください。"
             )
         else:
             lines.append(
-                f"現在のブランチ: `{implement_branch_name}`。このブランチ上でコミットしてください。"
+                f"現在のブランチ: `{implement_branch_name}`。このブランチ上で作業してください。"
             )
     return "\n".join(lines)

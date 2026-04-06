@@ -10,6 +10,7 @@ from vv_ai.execution import ExecutionResult, ExecutionStatus
 from vv_ai.git_ops import (
     GitOpsError,
     checkout_fork_pr,
+    commit_all_changes,
     create_and_checkout_branch,
     fetch_and_checkout_branch,
     generate_implement_branch_name,
@@ -238,6 +239,14 @@ def _handle_implement_issue_post_execution(
     except GitHubClientError as exc:
         raise CommandError(str(exc)) from exc
 
+    commit_message = f"vv-ai: implement for #{target.number}"
+    try:
+        committed = commit_all_changes(repo_root, commit_message)
+    except GitOpsError as exc:
+        raise CommandError(str(exc)) from exc
+    if committed:
+        print(f"ワーキングツリーの変更をコミットしました: {commit_message}")
+
     try:
         ahead = has_commits_ahead(repo_root, base_branch)
     except GitOpsError as exc:
@@ -292,6 +301,17 @@ def _handle_implement_pr_post_execution(
         print(f"[dry-run/local] push をスキップします。ブランチ: {implement_branch_name}")
         return
 
+    assert target is not None
+    assert target.number is not None
+
+    commit_message = f"vv-ai: implement for PR #{target.number}"
+    try:
+        committed = commit_all_changes(repo_root, commit_message)
+    except GitOpsError as exc:
+        raise CommandError(str(exc)) from exc
+    if committed:
+        print(f"ワーキングツリーの変更をコミットしました: {commit_message}")
+
     if pr_info is None or not pr_info.is_cross_repository:
         try:
             push_branch(repo_root, implement_branch_name)
@@ -300,9 +320,7 @@ def _handle_implement_pr_post_execution(
         print(f"ブランチ `{implement_branch_name}` を push しました。")
         return
 
-    assert target is not None
     assert target.repository_full_name is not None
-    assert target.number is not None
 
     if try_push_current_branch(repo_root):
         print(f"fork ブランチ `{implement_branch_name}` を push しました。")

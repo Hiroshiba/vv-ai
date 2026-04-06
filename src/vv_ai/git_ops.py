@@ -44,6 +44,18 @@ def push_branch(repo_root: Path, branch_name: str) -> None:
     run_git_command(repo_root, "push", "-u", "origin", branch_name)
 
 
+# TODO: git add -A は AI が残した不要ファイルも含めてしまうリスクがある。本来は変更対象を絞りたい。
+# TODO: Claude は .git への書き込みが制限されていないため、AI 自身がコミットする可能性がある。その場合ラッパーのコミットと二重になる。
+def commit_all_changes(repo_root: Path, message: str) -> bool:
+    """ワーキングツリーの全変更をコミットする。変更がなければ False を返す。"""
+    status = run_git_command(repo_root, "status", "--porcelain").strip()
+    if not status:
+        return False
+    run_git_command(repo_root, "add", "-A")
+    run_git_command(repo_root, "commit", "-m", message)
+    return True
+
+
 def has_commits_ahead(repo_root: Path, base_ref: str) -> bool:
     """base_ref より HEAD が先行するコミットを持つか返す。"""
     log = run_git_command(repo_root, "log", "--oneline", f"{base_ref}..HEAD").strip()
