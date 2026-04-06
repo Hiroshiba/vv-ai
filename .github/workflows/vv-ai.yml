@@ -107,9 +107,11 @@ jobs:
 
       - name: Install age
         run: |
+          age_install_dir="$(mktemp -d "$RUNNER_TEMP/age-install.XXXXXX")"
           curl -sL https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz \
-            | tar xz
-          sudo mv age/age age/age-keygen /usr/local/bin/
+            | tar xz -C "$age_install_dir"
+          sudo mv "$age_install_dir/age/age" "$age_install_dir/age/age-keygen" /usr/local/bin/
+          rm -rf "$age_install_dir"
 
       - name: Install AI CLIs
         run: |
