@@ -50,7 +50,11 @@ def run_command(
     if command.command == "review" and (target is None or target.kind != "pr"):
         raise CommandError("`review` コマンドは PR を対象に指定してください")
 
-    github_client = build_github_client() if _is_github_target(target) else None
+    github_client = (
+        build_github_client()
+        if _is_github_target(target) or command.command == "issue"
+        else None
+    )
 
     eyes_reaction_id: int | None = None
     if (
@@ -443,10 +447,7 @@ def _handle_issue_post_execution(
         print(f"[dry-run] Issue 作成をスキップします。repo: {repo}, title: {title}")
         return
 
-    if github_client is None:
-        print(f"[local] Issue 作成をスキップします。repo: {repo}, title: {title}")
-        return
-
+    assert github_client is not None
     try:
         issue = github_client.create_issue(repo, title, body)
     except GitHubClientError as exc:
