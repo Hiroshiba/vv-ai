@@ -418,7 +418,7 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
     -f target_url=https://github.com/Hiroshiba/vv-ai/pull/2 \
     -f provider=codex -f session_mode=new
   ```
-- [ ] G-Live-50: issue → success → 新 Issue が作成されること → クローズ
+- [x] G-Live-50: issue → success → 新 Issue が作成されること → クローズ
   ```sh
   gh workflow run vv-ai.yml --repo Hiroshiba/vv-ai \
     -f command=issue \
