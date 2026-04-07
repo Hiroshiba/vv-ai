@@ -488,6 +488,9 @@ def _build_claude_settings(
         "filesystem": {
             "denyRead": _DENY_READ_PATHS,
         },
+        "network": {
+            "allowedDomains": ["api.github.com"],
+        },
     }
     if api_key_file_path is not None:
         settings["apiKeyHelper"] = f"cat {api_key_file_path}"
