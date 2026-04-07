@@ -574,7 +574,8 @@ provider_priority:
 
 ### GitHub 書き込み権限の分離
 
-- AI プロセスには **GITHUB_TOKEN を渡さない**
+- write 権限のある **GITHUB_TOKEN は AI プロセスに渡さない**
+- GitHub App 経由の read-only トークンを `GH_TOKEN` として AI プロセスに渡す（Issue/PR/コード読み取り用）
 - `git commit` / `git push` / PR 作成 / Issue 作成 / コメント投稿は **非 AI ラッパー**（ワークフローステップ）が実施
 
 ---

@@ -47,11 +47,12 @@ _ALLOWED_ENV_KEYS = frozenset(
         "XDG_RUNTIME_DIR",
         "TERM",
         "SHELL",
+        "VV_GH_READONLY_TOKEN",
     ]
 )
 
 _CODEX_SHELL_ENV_ALLOWLIST = json.dumps(
-    ["PATH", "HOME", "USER", "LANG", "TERM", "SHELL", "TMPDIR"]
+    ["PATH", "HOME", "USER", "LANG", "TERM", "SHELL", "TMPDIR", "GH_TOKEN"]
 )
 
 _DENY_READ_PATHS = [
@@ -537,7 +538,10 @@ def _resolve_api_key_file_path(
 
 def _build_sanitized_env(env: Mapping[str, str]) -> dict[str, str]:
     """AI プロセスに渡す環境変数をホワイトリストで絞り込む。"""
-    return {key: value for key, value in env.items() if key in _ALLOWED_ENV_KEYS}
+    sanitized = {key: value for key, value in env.items() if key in _ALLOWED_ENV_KEYS}
+    if "VV_GH_READONLY_TOKEN" in sanitized:
+        sanitized["GH_TOKEN"] = sanitized.pop("VV_GH_READONLY_TOKEN")
+    return sanitized
 
 
 def _resolve_claude_session_dir(repo_root: Path, session_id: str) -> Path | None:

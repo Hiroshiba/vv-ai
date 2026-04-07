@@ -130,9 +130,17 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
 
+      - name: Generate read-only token
+        id: readonly-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.VV_AI_APP_ID }}
+          private-key: ${{ secrets.VV_AI_APP_PRIVATE_KEY }}
+
       - name: Run vv-ai
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VV_GH_READONLY_TOKEN: ${{ steps.readonly-token.outputs.token }}
           VV_OPENAI_API_KEY_FILE: /home/runner/.vv-secrets/openai_key
           VV_ANTHROPIC_API_KEY_FILE: /home/runner/.vv-secrets/anthropic_key
           VV_AI_AGE_PUBLIC_KEY_FILE: /home/runner/.vv-secrets/age_public_key
