@@ -489,7 +489,9 @@ def _build_claude_settings(
             "denyRead": _DENY_READ_PATHS,
         },
         "network": {
-            "allowedDomains": ["api.github.com"],
+            "allowedDomains": [
+                "api.github.com"
+            ],  # TODO: これがないとなぜかアクセスできなかった
         },
     }
     if api_key_file_path is not None:
