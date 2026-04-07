@@ -483,6 +483,7 @@ def _build_claude_settings(
     }
     settings["sandbox"] = {
         "enabled": True,
+        "failIfUnavailable": True,
         "autoAllowBashIfSandboxed": True,
         "filesystem": {
             "denyRead": _DENY_READ_PATHS,

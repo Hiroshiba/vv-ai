@@ -448,9 +448,9 @@ GitHub Actions 経由で `dry_run=true` でテストする。`gh workflow run` �
 
 Codex テスト全通過後、余力があれば実施する。コマンドはセクション 22 と同じで `provider=claude` に変更する。
 
-- [x] G-CL-10: reply GitHub Issue
-- [x] G-CL-20: plan GitHub Issue
-- [x] G-CL-30: review GitHub PR
+- [ ] G-CL-10: reply GitHub Issue
+- [ ] G-CL-20: plan GitHub Issue
+- [ ] G-CL-30: review GitHub PR
 
 ### 25. テスト後処理
 

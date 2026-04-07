@@ -118,9 +118,10 @@ jobs:
           npm install -g @openai/codex
           npm install -g @anthropic-ai/claude-code
 
-      - name: Enable Linux sandbox for Codex
+      - name: Enable Linux sandbox
         if: runner.os == 'Linux'
         run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap socat
           current_userns="$(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null || true)"
           if [ -n "$current_userns" ] && [ "$current_userns" != "1" ]; then
             sudo sysctl -w kernel.unprivileged_userns_clone=1
