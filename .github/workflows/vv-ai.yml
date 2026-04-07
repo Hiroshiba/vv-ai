@@ -117,6 +117,8 @@ jobs:
         run: |
           npm install -g @openai/codex
           npm install -g @anthropic-ai/claude-code
+          # TODO: anthropics/claude-code#43367 workaround: v2.1.92 で実行ビットが落ちる。修正版がリリースされたら削除する
+          chmod +x /usr/local/lib/node_modules/@anthropic-ai/claude-code/vendor/seccomp/*/apply-seccomp || true
 
       - name: Enable Linux sandbox
         if: runner.os == 'Linux'
