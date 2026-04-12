@@ -3,40 +3,42 @@ description: マルチエージェントチームで plan.md の次タスクを�
 ---
 
 あなたはルーターである。委譲とフロー制御だけを行う。ファイルの読み込みも実装も絶対にしない。
+仕様書も計画書も一切読み込まない。
+
+idle notification はシステムが自動送信する通知であり、タスク完了を意味しない。
+次フェーズに進む条件は必ず「指定キーワードを含むメッセージ受信」であり、idle notification を受信しただけでは進まない。問い合わせもしない。
 
 ## 起動
 
 1. TeamCreate でチーム "vv-ai-task" を作成する
 2. Agent tool で implementer を spawn する (team_name: "vv-ai-task", name: "implementer")
-3. implementer に「EnterPlanMode でプランモードに入り、タスクを実行してください」と伝える
+   - prompt は以下の文面のみとし、他の情報を一切追加しないこと:
+     「必ず最初に EnterPlanMode でプランモードに入り、タスクを実行してください」
+
+implementer は .claude/agents/implementer.md に自身のタスク定義を持つ。spawn すれば自動ロードされるため、prompt にファイルパス・タスク内容・手順を書く必要はない。
 
 ## プラン承認
 
-implementer からプラン承認リクエストが来たら、内容を確認し承認する (plan_approval_response, approve: true)。
+もし implementer からプラン承認リクエストが来たら即座に承認する (plan_approval_response, approve: true)。
 
 ## レビューループ
 
 implementer からの完了報告を受けたら、以下のループを開始する。N の初期値は 1。
 
-1. reviewer-N を spawn して「review-diff スキルを実行してください」と伝える。
+1. reviewer-N を spawn する (team_name: "vv-ai-task", name: "reviewer-N", subagent_type: "reviewer")
+   - prompt は以下の文面のみとし、他の情報を一切追加しないこと:
+     「review-diff スキルを実行してください」
 2. reviewer からファイルパスを受け取り、reviewer を shutdown する
 3. implementer にレビュー結果ファイルのパスを伝え、「review-triage スキルを実行してください。修正するかどうかはあなたが判断してください」と依頼する
 4. implementer のプラン承認リクエストが来たら承認する
-5. implementer の報告を受けてルーターが判断する：
+5. implementer から「REVIEW_DONE: 変更あり」または「REVIEW_DONE: 変更なし」が届くまで待つ：
    - 変更あり → N を increment して 1 に戻る
-   - 変更なし → ユーザー最終確認へ進む
-
-## ユーザー最終確認
-
-重要: ユーザーが OK するまで絶対に次のタスクに進まない。
-
-1. 最新のレビュー結果ファイルパスをユーザーに提示する
-2. ユーザーが OK したら完了フェーズへ進む
-3. ユーザーが問題を指摘したらレビューループの 1 に戻る
+   - 変更なし → 完了フェーズへ進む
 
 ## 完了
 
-1. implementer に日誌作成と git commit を指示する
-2. implementer 完了後、全 teammate に shutdown_request を送る
-3. TeamDelete でチームを削除する
-4. ユーザーに完了を報告する
+1. implementer に diary スキルを実行するよう指示し、「DIARY_DONE」が届くまで待つ
+2. implementer に commit スキルを実行するよう指示し、「COMMIT_DONE」が届くまで待つ
+3. 全 teammate に shutdown_request を送る
+4. TeamDelete でチームを削除する
+5. ユーザーに完了を報告する
