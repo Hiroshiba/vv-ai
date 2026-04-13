@@ -44,22 +44,34 @@ provider_priority:
 
 ### Secrets
 
-4 つの Secrets を登録します。
+以下の Secrets を登録します。
 
-| 名前 | 用途 |
-| --- | --- |
-| `VV_OPENAI_API_KEY` | Codex CLI 用 API キー |
-| `VV_ANTHROPIC_API_KEY` | Claude Code CLI 用 API キー |
-| `VV_AI_AGE_PUBLIC_KEY` | artifact 暗号化に使う公開鍵 |
-| `VV_AI_AGE_SECRET_KEY` | artifact 復号に使う秘密鍵 |
+| 名前 | 必須 | 用途 |
+| --- | --- | --- |
+| `VV_AI_AGE_PUBLIC_KEY` | 必須 | artifact 暗号化に使う公開鍵 |
+| `VV_AI_AGE_SECRET_KEY` | 必須 | artifact 復号に使う秘密鍵 |
+| `VV_AI_APP_ID` | 必須 | read-only トークン生成に使う GitHub App ID |
+| `VV_AI_APP_PRIVATE_KEY` | 必須 | GitHub App の RSA 秘密鍵 |
+| `VV_ANTHROPIC_API_KEY` | Claude 用 | Claude Code CLI 用 API キー |
+| `VV_OPENAI_API_KEY` | Codex 用 | Codex CLI 用 API キー。`VV_CODEX_AUTH_JSON` と択一 |
+| `VV_CODEX_AUTH_JSON` | Codex 用 | Codex CLI の OAuth 認証 JSON。`VV_OPENAI_API_KEY` と択一 |
+| `VV_CLAUDE_SETTINGS` | 任意 | モデル名や Base URL を指定する Claude Code の追加設定 JSON |
+
+`VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` はツールで設定できます。
+
+```sh
+uv run python src/tools/set_codex_auth_secret.py --repo org/repo
+uv run python src/tools/set_claude_settings_secret.py --repo org/repo
+```
 
 ローカル実行では、環境変数に直接セットするか `_FILE` サフィックスでファイルパスを渡します。
 
 ```sh
-export VV_OPENAI_API_KEY_FILE=/path/to/openai_key
 export VV_ANTHROPIC_API_KEY_FILE=/path/to/anthropic_key
+export VV_OPENAI_API_KEY_FILE=/path/to/openai_key
 export VV_AI_AGE_PUBLIC_KEY_FILE=/path/to/age_public_key
 export VV_AI_AGE_SECRET_KEY_FILE=/path/to/age_secret_key
+export VV_CODEX_HOME=/path/to/codex_home
 ```
 
 ## ローカル実行
@@ -119,7 +131,7 @@ gh workflow run vv-ai.yml \
 ### 導入手順
 
 1. `.github/workflows/vv-ai.yml` をリポジトリにコピーする
-2. リポジトリの Settings > Secrets and variables > Actions に4つの Secret を登録する
+2. リポジトリの Settings > Secrets and variables > Actions に必要な Secret を登録する
 3. リポジトリルートに `vv-ai.yml` を配置する
 
 workflow には `contents: write`, `issues: write`, `pull-requests: write` の権限が必要です。
