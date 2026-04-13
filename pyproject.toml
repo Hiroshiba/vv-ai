@@ -11,10 +11,16 @@ dependencies = [
 
 [project.scripts]
 vv-ai = "vv_ai.cli:main"
+onetask = "onetask.cli:main"
+set-codex-auth-secret = "tools.set_codex_auth_secret:main"
+sync-fork-branch = "tools.sync_fork_branch:main"
 
 [build-system]
 requires = ["uv_build>=0.9.22,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["vv_ai", "onetask", "tools"]
 
 [dependency-groups]
 dev = [
