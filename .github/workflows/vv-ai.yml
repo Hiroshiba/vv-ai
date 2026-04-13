@@ -120,6 +120,17 @@ jobs:
           # TODO: anthropics/claude-code#43367 workaround: v2.1.92 で実行ビットが落ちる。修正版がリリースされたら削除する
           chmod +x /usr/local/lib/node_modules/@anthropic-ai/claude-code/vendor/seccomp/*/apply-seccomp || true
 
+      # NOTE: プロトタイプ運用の暫定措置。プロトタイプ段階なのでワークフロー側で処理する。
+      - name: Sync AI prompts from hiho_ai_coding
+        run: |
+          mkdir -p "$HOME/.claude" "$HOME/.codex"
+          tmp_dir="$(mktemp -d)"
+          git clone --depth 1 \
+            https://github.com/Hiroshiba/hiho_ai_coding.git \
+            "$tmp_dir/hiho_ai_coding"
+          python "$tmp_dir/hiho_ai_coding/sync.py"
+          rm -rf "$tmp_dir"
+
       - name: Enable Linux sandbox
         if: runner.os == 'Linux'
         run: |
