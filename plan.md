@@ -452,18 +452,7 @@ Codex テスト全通過後、余力があれば実施する。コマンドは�
 - [x] G-CL-20: plan GitHub Issue
 - [x] G-CL-30: review GitHub PR
 
-### 25. テスト後処理
-
-- [ ] テスト中に作成された Issue/PR/ブランチを削除する
-- [ ] テスト用 Issue #1 をクローズする
-  ```sh
-  gh issue close 1 --repo Hiroshiba/vv-ai
-  ```
-- [ ] テスト用 PR #2 をクローズしブランチを削除する
-  ```sh
-  gh pr close 2 --repo Hiroshiba/vv-ai --delete-branch
-  ```
-
 ### extra. 追加タスク
 
+- [ ] https://github.com/Hiroshiba/vv-ai/issues/8
 - [ ] Github WorkflowでのClaudeをlocalhost proxy経由にして完全に秘匿する
