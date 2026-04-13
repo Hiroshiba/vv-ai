@@ -14,13 +14,11 @@ Issue / PR へのコメントやワークフロー手動実行から AI を起�
 - Codex CLI または Claude Code CLI のいずれか
 - gh（GitHub 操作に使用）
 
-依存関係のインストール:
+uvx を使えばクローン不要で GitHub から直接実行できます。
 
 ```sh
-uv sync
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --help
 ```
-
-`vv-ai` コマンドが使えるようになります。
 
 ## 設定
 
@@ -60,8 +58,8 @@ provider_priority:
 `VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` はツールで設定できます。
 
 ```sh
-uv run python src/tools/set_codex_auth_secret.py --repo org/repo
-uv run python src/tools/set_claude_settings_secret.py --repo org/repo
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-codex-auth-secret --repo org/repo
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-claude-settings-secret --repo org/repo
 ```
 
 ローカル実行では、環境変数に直接セットするか `_FILE` サフィックスでファイルパスを渡します。
@@ -79,9 +77,9 @@ export VV_CODEX_HOME=/path/to/codex_home
 `--event local` がデフォルトです。
 
 ```sh
-uv run vv-ai --command plan --target-url https://github.com/org/repo/issues/123 --instruction "実装方針を3案ください"
-uv run vv-ai --command implement --target-url https://github.com/org/repo/issues/123 --dry-run
-uv run vv-ai --command reply --target-type issue --target-number 123 --instruction "このIssueの要点を教えて"
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command plan --target-url https://github.com/org/repo/issues/123 --instruction "実装方針を3案ください"
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command implement --target-url https://github.com/org/repo/issues/123 --dry-run
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --target-type issue --target-number 123 --instruction "このIssueの要点を教えて"
 ```
 
 主要な引数:
