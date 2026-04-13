@@ -13,11 +13,12 @@ idle notification はシステムが自動送信する通知であり、タス�
 1. TeamCreate でチーム "vv-ai-task" を作成する
 2. Agent tool で implementer を spawn する (team_name: "vv-ai-task", name: "implementer")
    - prompt は以下の文面のみとし、他の情報を一切追加しないこと:
-     「必ず最初に EnterPlanMode でプランモードに入り、タスクを実行してください」
+     「必ず最初に EnterPlanMode でプランモードに入り、実装してください」
+3. implementer から「IMPLEMENT_DONE」が届くまで待つ
 
 implementer は .claude/agents/implementer.md に自身のタスク定義を持つ。spawn すれば自動ロードされるため、prompt にファイルパス・タスク内容・手順を書く必要はない。
 
-## プラン承認
+## プラン承認（オプション）
 
 もし implementer からプラン承認リクエストが来たら即座に承認する (plan_approval_response, approve: true)。
 
@@ -39,6 +40,7 @@ implementer からの完了報告を受けたら、以下のループを開始�
 
 1. implementer に diary スキルを実行するよう指示し、「DIARY_DONE」が届くまで待つ
 2. implementer に commit スキルを実行するよう指示し、「COMMIT_DONE」が届くまで待つ
-3. 全 teammate に shutdown_request を送る
-4. TeamDelete でチームを削除する
-5. ユーザーに完了を報告する
+3. implementer に「念のため確認です。今回のタスクに関して、チェックリスト更新、Issue クローズなど、やり残したことはありませんか？確認して、あれば対応してください」と伝え、「CHECK_DONE」が届くまで待つ
+4. 全 teammate に shutdown_request を送る
+5. TeamDelete でチームを削除する
+6. ユーザーに完了を報告する
