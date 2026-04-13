@@ -102,9 +102,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install dependencies
-        run: uv sync
-
       - name: Install age
         run: |
           age_install_dir="$(mktemp -d "$RUNNER_TEMP/age-install.XXXXXX")"
@@ -162,7 +159,7 @@ jobs:
           VV_CLAUDE_SETTINGS: ${{ secrets.VV_CLAUDE_SETTINGS }}
           VV_CODEX_HOME: /home/runner/.vv-secrets/codex_home
         run: |
-          uv run vv-ai \
+          uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai \
             --event "${{ github.event_name }}" \
             --event-file "$GITHUB_EVENT_PATH"
 
