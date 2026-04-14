@@ -455,4 +455,5 @@ Codex テスト全通過後、余力があれば実施する。コマンドは�
 ### extra. 追加タスク
 
 - [x] https://github.com/Hiroshiba/vv-ai/issues/8
+- [x] https://github.com/Hiroshiba/vv-ai/issues/10
 - [ ] Github WorkflowでのClaudeをlocalhost proxy経由にして完全に秘匿する

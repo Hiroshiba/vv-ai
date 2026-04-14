@@ -68,6 +68,9 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+      # TODO: workflow: write は .github/workflows/ 変更の push に必要だが、
+      # 権限スコープが広い。将来的に権限を限定する方法を検討する。
+      workflow: write
 
     steps:
       - name: Checkout
