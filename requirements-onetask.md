@@ -6,7 +6,7 @@ Claude Code の Agent Teams 機能を使わず、Python + tmux + 複数の claud
 
 ## 主目的
 
-Agent Teams の TeamCreate / SendMessage / TaskCreate 等のツールに依存せず、Python がルーター役を担い implementer と reviewer を claude -p プロセスとして tmux 内で起動・協調させる。
+Agent Teams の TeamCreate / SendMessage / TaskCreate 等のツールに依存せず、Python がteam-lead役を担い implementer と reviewer を claude -p プロセスとして tmux 内で起動・協調させる。
 
 ## 実行方法
 
@@ -14,7 +14,7 @@ Agent Teams の TeamCreate / SendMessage / TaskCreate 等のツールに依存�
 
 ## 役割分担
 
-- ルーター: Python スクリプト。フロー制御、tmux 管理、結果判定を行う
+- team-lead: Python スクリプト。フロー制御、tmux 管理、結果判定を行う
 - implementer: claude -p プロセス。plan.md の次タスクを実行する。セッションを --resume で維持する
 - reviewer: claude -p プロセス。review-diff スキルで差分レビューを行う。毎回新規セッション
 
