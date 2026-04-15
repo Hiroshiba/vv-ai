@@ -57,24 +57,6 @@ provider_priority:
 
 `VV_CLAUDE_SETTINGS` に `mcpServers` を含めると MCP サーバーを有効化できます。MCP サーバーが外部 API を呼ぶ場合は `sandbox.network.allowedDomains` に対象ドメインを追加します（デフォルトの `api.github.com` はマージされるため省略可）。
 
-Context7 MCP の設定例:
-```json
-{
-  "mcpServers": {
-    "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"],
-      "env": {"CONTEXT7_API_KEY": "YOUR_KEY"}
-    }
-  },
-  "sandbox": {
-    "network": {
-      "allowedDomains": ["context7.com"]
-    }
-  }
-}
-```
-
 `VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` はツールで設定できます。
 
 ```sh
