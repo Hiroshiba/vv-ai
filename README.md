@@ -92,7 +92,7 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 | `--target-type` | `issue` または `pr` |
 | `--target-number` | Issue / PR 番号 |
 | `--provider` | `codex` または `claude` |
-| `--session_mode` | `inherit` / `compact` / `new`。デフォルトは `inherit` |
+| `--session_mode` | `inherit` / `inherit_or_new` / `compact` / `new`。デフォルトは `inherit_or_new` |
 | `--dry-run` | GitHub への外部反映を行わず、artifact のみ保存する |
 | `--repo` | Issue 作成先の `org/repo`。`issue` コマンド専用 |
 | `--event-file` | GitHub event payload JSON を読み込んで再現実行する |

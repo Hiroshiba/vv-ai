@@ -198,7 +198,7 @@ def _build_codex_command(
 ) -> list[str]:
     """Codex CLI のコマンドリストを返す。"""
     session = ready_execution.resolved_session
-    session_mode = session.mode if session is not None else "new"
+    restore_strategy = session.restore_strategy if session is not None else "new"
     state_ref = session.state_ref if session is not None else None
 
     shared_options: list[str] = [
@@ -216,7 +216,7 @@ def _build_codex_command(
     ]
 
     if (
-        session_mode != "new"
+        restore_strategy != "new"
         and state_ref is not None
         and state_ref.provider_session_id is not None
     ):
@@ -438,7 +438,7 @@ def _build_claude_command(
     """Claude Code CLI のコマンドリストを返す。"""
     settings_json = _build_claude_settings(api_key_file_path, extra_settings_json)
     session = ready_execution.resolved_session
-    session_mode = session.mode if session is not None else "new"
+    restore_strategy = session.restore_strategy if session is not None else "new"
 
     command: list[str] = [
         "claude",
@@ -454,7 +454,7 @@ def _build_claude_command(
 
     state_ref = session.state_ref if session is not None else None
     if (
-        session_mode == "new"
+        restore_strategy == "new"
         or state_ref is None
         or state_ref.provider_session_id is None
     ):

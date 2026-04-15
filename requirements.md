@@ -31,7 +31,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 | オプション                          | 説明                                                   | デフォルト              |
 | ----------------------------------- | ------------------------------------------------------ | ----------------------- |
 | `--provider codex\|claude`          | 使用する AI プロバイダを上書き指定                      | 優先順に従い自動選択    |
-| `--session_mode inherit\|compact\|new` | セッション継続方式                                  | `inherit`               |
+| `--session_mode inherit\|inherit_or_new\|compact\|new` | セッション継続方式                                  | `inherit_or_new`        |
 | `--dry-run`                         | GitHub への外部反映を一切行わない（artifact のみ保存） | `false`                 |
 | `--repo org/repo`                   | Issue 作成先リポジトリ（`issue` コマンド専用）         | workflow が置かれた repo |
 
@@ -65,7 +65,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
   - `target_url`: Issue/PR URL（任意）
   - `instruction`: 自然言語指示（コマンドにより必須/任意）
   - `provider`: codex | claude（任意）
-  - `session_mode`: inherit | compact | new（任意）
+  - `session_mode`: inherit | inherit_or_new | compact | new（任意）
   - `dry_run`: true/false（任意）
   - `repo`: Issue 作成先 org/repo（`issue` 用、任意）
 - `target_type`/`target_number` と `target_url` の両対応（C 方式）
@@ -272,11 +272,12 @@ provider_priority:
 
 ### セッション継続方式（`--session_mode`）
 
-| 値        | 説明                                           |
-| --------- | ---------------------------------------------- |
-| `inherit` | 前回セッションをそのまま継続（**デフォルト**） |
-| `compact` | コンパクト化して継続                           |
-| `new`     | 新規セッション                                 |
+| 値               | 説明                                                                        |
+| ---------------- | --------------------------------------------------------------------------- |
+| `inherit`        | 前回セッションを必ず継続。保存済みセッションが見つからないとエラー終了       |
+| `inherit_or_new` | 前回セッションがあれば継続、なければ新規で開始（**デフォルト**）             |
+| `compact`        | コンパクト化して継続。保存済みセッションが見つからないとエラー終了           |
+| `new`            | 新規セッション                                                              |
 
 ### Issue → PR 作成時のセッション引き継ぎ
 
@@ -339,6 +340,7 @@ provider_priority:
 ### 復元失敗時
 
 - `--session_mode inherit` / `--session_mode compact` で artifact が見つからない場合: **エラー終了**
+- `--session_mode inherit_or_new` の場合: 探しに行き、見つからなければ新規開始
 - `--session_mode new` の場合: 探さず新規開始
 
 ### 必ず保存するタイミング

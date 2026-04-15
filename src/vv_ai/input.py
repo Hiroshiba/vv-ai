@@ -13,7 +13,7 @@ from vv_ai.config import ProviderName
 
 CommandName = Literal["reply", "plan", "implement", "review", "issue"]
 EventName = Literal["issue_comment", "workflow_dispatch", "local"]
-SessionMode = Literal["inherit", "compact", "new"]
+SessionMode = Literal["inherit", "inherit_or_new", "compact", "new"]
 TargetType = Literal["issue", "pr"]
 
 _COMMAND_NAMES: set[str] = {"reply", "plan", "implement", "review", "issue"}

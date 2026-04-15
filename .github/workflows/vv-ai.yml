@@ -35,10 +35,10 @@ on:
         options: ["", codex, claude]
         default: ""
       session_mode:
-        description: "セッション継続方式 (inherit / compact / new)"
+        description: "セッション継続方式 (inherit / inherit_or_new / compact / new)"
         required: false
         type: choice
-        options: ["", inherit, compact, new]
+        options: ["", inherit, inherit_or_new, compact, new]
         default: ""
       dry_run:
         description: "ドライラン"

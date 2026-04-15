@@ -75,7 +75,7 @@ def _make_session_key() -> SessionKey:
 def _make_resolved_session() -> ResolvedSession:
     """テスト用の最小 ResolvedSession を生成する。"""
     return ResolvedSession(
-        mode="new",
+        requested_mode="new",
         lane="main",
         key=_make_session_key(),
         restore_strategy="new",

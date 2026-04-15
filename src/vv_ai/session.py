@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from vv_ai.session_artifact import RestoredSessionArtifact
 
 SessionLane = Literal["main", "review"]
+RestoreStrategy = Literal["inherit", "compact", "new"]
 
 
 class SessionResolutionError(Exception):
@@ -68,10 +69,10 @@ class ResolvedSession(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: SessionMode
+    requested_mode: SessionMode
     lane: SessionLane
     key: SessionKey
-    restore_strategy: SessionMode
+    restore_strategy: RestoreStrategy
     restore_manifest: SavedSessionManifest | None = None
     save_manifest_path: str
     state_ref: SessionStateRef | None = None
@@ -101,7 +102,7 @@ def resolve_session(
 
     lane = _resolve_lane(resolved_command)
     backend, target_key = _resolve_scope(resolved_command)
-    mode = resolved_command.session_mode or "inherit"
+    requested_mode: SessionMode = resolved_command.session_mode or "inherit_or_new"
     key = SessionKey(
         backend=backend,
         target_key=target_key,
@@ -112,12 +113,12 @@ def resolve_session(
         ),
     )
     try:
-        restore_manifest, restored_artifact = _resolve_restore_state(
+        restore_manifest, restored_artifact, restore_strategy = _resolve_restore_state(
             repo_root=repo_root,
             workflow_id=workflow_id,
             resolved_command=resolved_command,
             key=key,
-            mode=mode,
+            requested_mode=requested_mode,
             resolved_provider=resolved_provider,
             env=env,
             load_latest_session_manifest=load_latest_session_manifest,
@@ -138,10 +139,10 @@ def resolve_session(
         raise SessionResolutionError(str(exc)) from exc
 
     return ResolvedSession(
-        mode=mode,
+        requested_mode=requested_mode,
         lane=lane,
         key=key,
-        restore_strategy=mode,
+        restore_strategy=restore_strategy,
         restore_manifest=restore_manifest,
         save_manifest_path=str(save_manifest_path),
         state_ref=restore_manifest.state_ref if restore_manifest is not None else None,
@@ -190,34 +191,47 @@ def _resolve_restore_state(
     workflow_id: str,
     resolved_command: ResolvedCommand,
     key: SessionKey,
-    mode: SessionMode,
+    requested_mode: SessionMode,
     resolved_provider: ResolvedProvider,
     env: Mapping[str, str],
     load_latest_session_manifest,
     build_session_artifact_prefix,
     restore_downloaded_session_artifact,
-) -> tuple[SavedSessionManifest | None, RestoredSessionArtifact | None]:
-    """mode と provider 能力に応じて復元対象を確定する。"""
-    if mode == "new":
-        return None, None
+) -> tuple[
+    SavedSessionManifest | None,
+    RestoredSessionArtifact | None,
+    RestoreStrategy,
+]:
+    """要求モードと provider 能力に応じて復元対象と実際の復元戦略を確定する。"""
+    if requested_mode == "new":
+        return None, None, "new"
 
     if not resolved_provider.spec.supports_session_resume:
         raise SessionResolutionError(
             f"`{resolved_provider.name}` は session 継続に対応していません"
         )
-    if mode == "compact" and not resolved_provider.spec.supports_compact:
+    if requested_mode == "compact" and not resolved_provider.spec.supports_compact:
         raise SessionResolutionError(
             f"`{resolved_provider.name}` は compact 継続に対応していません"
         )
 
+    strict_missing = requested_mode in ("inherit", "compact")
+    restore_strategy: RestoreStrategy = (
+        "compact" if requested_mode == "compact" else "inherit"
+    )
+
     manifest = load_latest_session_manifest(repo_root, key)
     if manifest is not None:
-        _validate_restore_manifest(mode, manifest)
-        return manifest, None
+        _validate_restore_manifest(requested_mode, manifest)
+        return manifest, None, restore_strategy
+
     if key.backend == "local":
-        raise SessionResolutionError(
-            f"`{mode}` 用の保存済み session が見つかりません: {key.canonical_key}"
-        )
+        if strict_missing:
+            raise SessionResolutionError(
+                f"`{requested_mode}` 用の保存済み session が見つかりません: "
+                f"{key.canonical_key}"
+            )
+        return None, None, "new"
 
     repository_full_name = _resolve_restore_repository_full_name(resolved_command)
     artifact_prefix = build_session_artifact_prefix(key)
@@ -227,10 +241,13 @@ def _resolve_restore_state(
         artifact_prefix,
     )
     if latest_artifact is None:
-        raise SessionResolutionError(
-            f"`{mode}` 用の保存済み session artifact が見つかりません: "
-            f"{key.canonical_key}"
-        )
+        if strict_missing:
+            raise SessionResolutionError(
+                f"`{requested_mode}` 用の保存済み session artifact が見つかりません: "
+                f"{key.canonical_key}"
+            )
+        return None, None, "new"
+
     age_secret_key = resolve_age_secret_key(env)
     with tempfile.TemporaryDirectory(prefix="vv-ai-session-restore-") as temp_root:
         download_path = Path(temp_root) / f"{latest_artifact.name}.zip"
@@ -247,18 +264,18 @@ def _resolve_restore_state(
             age_secret_key,
         )
     manifest = _build_manifest_from_restored_artifact(restored_artifact)
-    _validate_restore_manifest(mode, manifest)
-    return manifest, restored_artifact
+    _validate_restore_manifest(requested_mode, manifest)
+    return manifest, restored_artifact, restore_strategy
 
 
 def _validate_restore_manifest(
-    mode: SessionMode,
+    requested_mode: SessionMode,
     manifest: SavedSessionManifest,
 ) -> None:
     """復元に必要な状態が揃っているか確認する。"""
     if manifest.state_ref.provider_session_id is None:
         raise SessionResolutionError(
-            f"`{mode}` に必要な `provider_session_id` が保存されていません: "
+            f"`{requested_mode}` に必要な `provider_session_id` が保存されていません: "
             f"{manifest.workflow_id}"
         )
 

@@ -69,6 +69,12 @@ class TestParseCommentInvocation:
         result = parse_comment_invocation("@vv-ai review --session_mode new")
         assert result.session_mode == "new"
 
+    def test_option_session_mode_inherit_or_new(self) -> None:
+        result = parse_comment_invocation(
+            "@vv-ai reply --session_mode inherit_or_new 要約して"
+        )
+        assert result.session_mode == "inherit_or_new"
+
     def test_option_repo(self) -> None:
         result = parse_comment_invocation("@vv-ai issue --repo org/repo Issue化して")
         assert result.repo == "org/repo"

@@ -82,8 +82,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--session_mode",
-        choices=["inherit", "compact", "new"],
-        help="セッション継続方式を指定します。",
+        choices=["inherit", "inherit_or_new", "compact", "new"],
+        help="セッション継続方式を指定します。未指定時は inherit_or_new です。",
     )
     parser.add_argument(
         "--dry-run",
@@ -202,7 +202,7 @@ def _format_session_suffix(result: ReadyExecution) -> str:
             f"{session.restore_strategy}:{session.restore_manifest.workflow_id}"
         )
     return (
-        f", session_mode={session.mode}, "
+        f", session_mode={session.requested_mode}, "
         f"session_lane={session.lane}, "
         f"session_key={session.key.canonical_key}, "
         f"session_restore={restore_suffix}"

@@ -59,7 +59,7 @@ def _make_resolved_session(
     lane = "main"
     canonical_key = f"{backend}/{target_key}/{provider}/{lane}"
     return ResolvedSession(
-        mode="new",
+        requested_mode="new",
         lane=lane,
         key=SessionKey(
             backend=backend,
