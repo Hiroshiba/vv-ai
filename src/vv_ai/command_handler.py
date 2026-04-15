@@ -42,8 +42,8 @@ def run_command(
     ready_execution: ReadyExecution,
     env: Mapping[str, str],
     preflight_duration_seconds: float,
-) -> ExecutionResult:
-    """コマンド固有の前処理・provider 実行・後処理を行って ExecutionResult を返す。"""
+) -> tuple[ExecutionResult, GitHubPullRequest | None]:
+    """コマンド固有の前処理・provider 実行・後処理を行って実行結果と作成された PR を返す。"""
     command = ready_execution.command
     target = command.target
 
@@ -77,6 +77,7 @@ def run_command(
     pr_info: GitHubPullRequest | None = None
     head_sha_before: str | None = None
     execution_result: ExecutionResult | None = None
+    created_pr: GitHubPullRequest | None = None
     finalize_status: ExecutionStatus = "failure"
     try:
         if command.command == "implement" and target is not None and target.kind == "issue":
@@ -127,7 +128,7 @@ def run_command(
             provider_prompt,
         )
 
-        _handle_post_execution(
+        created_pr = _handle_post_execution(
             repo_root,
             ready_execution,
             execution_result,
@@ -155,7 +156,7 @@ def run_command(
             )
 
     assert execution_result is not None
-    return execution_result
+    return execution_result, created_pr
 
 
 def _is_github_target(target: ResolvedTarget | None) -> bool:
@@ -190,8 +191,8 @@ def _handle_post_execution(
     implement_branch_name: str | None,
     pr_info: GitHubPullRequest | None,
     head_sha_before: str | None,
-) -> None:
-    """コマンド固有の後処理を行う。"""
+) -> GitHubPullRequest | None:
+    """コマンド固有の後処理を行う。作成された PR があれば返す。"""
     command_name = ready_execution.command.command
     if command_name in ("reply", "plan", "review"):
         _post_response_comment(ready_execution, execution_result, github_client)
@@ -210,9 +211,10 @@ def _handle_post_execution(
                 head_sha_before,
             )
         else:
-            _handle_implement_issue_post_execution(
+            return _handle_implement_issue_post_execution(
                 repo_root, ready_execution, execution_result, github_client, implement_branch_name
             )
+    return None
 
 
 def _handle_implement_issue_post_execution(
@@ -221,17 +223,17 @@ def _handle_implement_issue_post_execution(
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
     implement_branch_name: str,
-) -> None:
-    """implement + Issue 起点の後処理（push + PR 作成）を行う。"""
+) -> GitHubPullRequest | None:
+    """implement + Issue 起点の後処理（push + PR 作成）を行う。作成した PR を返す。"""
     command = ready_execution.command
     target = command.target
 
     if execution_result.status != "success":
-        return
+        return None
 
     if command.dry_run or not _is_github_target(target):
         print(f"[dry-run/local] push と PR 作成をスキップします。ブランチ: {implement_branch_name}")
-        return
+        return None
 
     assert target is not None
     assert target.repository_full_name is not None
@@ -257,7 +259,7 @@ def _handle_implement_issue_post_execution(
         raise CommandError(str(exc)) from exc
     if not ahead:
         print("変更コミットがないため push と PR 作成をスキップします")
-        return
+        return None
 
     try:
         push_branch(repo_root, implement_branch_name)
@@ -283,6 +285,7 @@ def _handle_implement_issue_post_execution(
     except GitHubClientError as exc:
         raise CommandError(str(exc)) from exc
     print(f"PR を作成しました: {pr.url}")
+    return pr
 
 
 def _handle_implement_pr_post_execution(

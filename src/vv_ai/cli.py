@@ -15,8 +15,10 @@ from vv_ai.config import VVAIConfigError, find_repo_root
 from vv_ai.execution import (
     ExecutionArtifactError,
     ExecutionResult,
+    SavedExecutionArtifacts,
     save_execution_artifacts,
 )
+from vv_ai.github import GitHubPullRequest
 from vv_ai.input import CLIInput, InputError, build_raw_input_from_cli
 from vv_ai.metrics_artifact import (
     MetricsBehavior,
@@ -32,6 +34,8 @@ from vv_ai.preflight import (
 )
 from vv_ai.provider import ProviderResolutionError
 from vv_ai.command_handler import run_command
+from vv_ai.session import SessionKey
+from vv_ai.session_artifact import SessionArtifactError, fork_session_artifact
 from vv_ai.report_artifact import ReportSections
 from vv_ai.resolve import ResolutionError, resolve_raw_input
 from vv_ai.session import SessionResolutionError, SessionStateRef, resolve_session
@@ -219,12 +223,12 @@ def _run_ready_execution(
     """実行本体と artifact 保存を行う。"""
     ready_message = _format_ready_message(ready_execution)
     execution_started_at = time.perf_counter()
-    execution_result: ExecutionResult
     runtime_error: BaseException | None = None
     exit_code = 0
 
+    created_pr = None
     try:
-        execution_result = run_command(
+        execution_result, created_pr = run_command(
             repo_root,
             ready_execution,
             env,
@@ -249,7 +253,7 @@ def _run_ready_execution(
         )
 
     try:
-        save_execution_artifacts(
+        saved_artifacts = save_execution_artifacts(
             repo_root,
             ready_execution,
             env,
@@ -258,6 +262,13 @@ def _run_ready_execution(
     except ExecutionArtifactError as exc:
         print(f"artifact 保存エラー: {exc}", file=sys.stderr)
         return 1
+
+    if created_pr is not None and _should_rebind_session(ready_execution):
+        try:
+            _fork_session_for_pr(repo_root, ready_execution, saved_artifacts, created_pr.number)
+        except SessionArtifactError as exc:
+            print(f"session fork エラー: {exc}", file=sys.stderr)
+            return 1
 
     if runtime_error is None:
         print(ready_message)
@@ -362,3 +373,42 @@ def _format_exception(error: BaseException) -> str:
     if message == "":
         return error.__class__.__name__
     return f"{error.__class__.__name__}: {message}"
+
+
+def _should_rebind_session(ready_execution: ReadyExecution) -> bool:
+    """PR 作成後に session を rebind すべきかを返す。"""
+    session = ready_execution.resolved_session
+    if session is None:
+        return False
+    return session.requested_mode != "new"
+
+
+def _fork_session_for_pr(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    saved_artifacts: SavedExecutionArtifacts,
+    pr_number: int,
+) -> None:
+    """Issue session artifact を作成された PR の session key に複製する。"""
+    session = ready_execution.resolved_session
+    target = ready_execution.command.target
+    if session is None or target is None or target.repository_full_name is None:
+        return
+
+    source_key = session.key
+    pr_target_key = f"{target.repository_full_name}#{pr_number}"
+    new_session_key = SessionKey(
+        backend=source_key.backend,
+        target_key=pr_target_key,
+        provider=source_key.provider,
+        lane=source_key.lane,
+        canonical_key=f"{source_key.backend}/{pr_target_key}/{source_key.provider}/{source_key.lane}",
+    )
+
+    fork_session_artifact(
+        Path(saved_artifacts.session.artifact_path),
+        source_key,
+        new_session_key,
+        repo_root,
+        ready_execution.workflow_id,
+    )

@@ -25,7 +25,7 @@ from vv_ai.session import (
     SessionLane,
     SessionStateRef,
 )
-from vv_ai.session_store import save_session_manifest
+from vv_ai.session_store import load_latest_session_manifest, save_session_manifest
 
 _SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -226,6 +226,40 @@ def save_session_artifact(
         artifact_path=str(artifact_path),
         manifest_path=str(manifest_path),
     )
+
+
+def fork_session_artifact(
+    source_artifact_path: Path,
+    source_session_key: SessionKey,
+    new_session_key: SessionKey,
+    repo_root: Path,
+    workflow_id: str,
+) -> None:
+    """session artifact を新しい session key に複製して manifest を作成する。"""
+    old_manifest = load_latest_session_manifest(repo_root, source_session_key)
+    if old_manifest is None:
+        raise SessionArtifactError("元の session manifest が見つかりません")
+
+    new_name = build_session_artifact_name(new_session_key, workflow_id)
+    new_path = source_artifact_path.parent / f"{new_name}.tar.age"
+    if new_path.exists():
+        raise SessionArtifactError(f"`{new_path}` は既に存在します")
+
+    try:
+        shutil.copy2(source_artifact_path, new_path)
+    except OSError as exc:
+        raise SessionArtifactError(
+            f"`{source_artifact_path}` の複製に失敗しました"
+        ) from exc
+
+    new_state_ref = old_manifest.state_ref.model_copy(
+        update={"artifact_hint": str(new_path)}
+    )
+    try:
+        save_session_manifest(repo_root, workflow_id, new_session_key, new_state_ref)
+    except Exception as exc:
+        _cleanup_file(new_path)
+        raise SessionArtifactError("session manifest の保存に失敗しました") from exc
 
 
 def decrypt_session_artifact(

@@ -209,7 +209,7 @@ class TestFinallySaveGuarantee:
         mock_run_command: MagicMock,
         mock_save: MagicMock,
     ) -> None:
-        mock_run_command.return_value = _make_execution_result("success")
+        mock_run_command.return_value = (_make_execution_result("success"), None)
         mock_save.return_value = _make_saved_artifacts()
         ready = _make_ready_execution()
 

@@ -175,8 +175,8 @@ jobs:
           metrics_files=(.vv-ai/artifacts/*/metrics/*.json.age)
           report_files=(.vv-ai/artifacts/*/reports/*.md.age)
 
-          if [ ${#session_files[@]} -gt 1 ]; then
-            echo "session artifact が複数あります" >&2
+          if [ ${#session_files[@]} -gt 2 ]; then
+            echo "session artifact が3つ以上あります" >&2
             printf '%s\n' "${session_files[@]}" >&2
             exit 1
           fi
@@ -191,11 +191,17 @@ jobs:
             exit 1
           fi
 
-          if [ ${#session_files[@]} -eq 1 ]; then
+          if [ ${#session_files[@]} -ge 1 ]; then
             session_path="${session_files[0]}"
             session_name="$(basename "$session_path" .tar.age)"
             echo "session_path=$session_path" >> "$GITHUB_OUTPUT"
             echo "session_name=$session_name" >> "$GITHUB_OUTPUT"
+          fi
+          if [ ${#session_files[@]} -ge 2 ]; then
+            session_path_1="${session_files[1]}"
+            session_name_1="$(basename "$session_path_1" .tar.age)"
+            echo "session_path_1=$session_path_1" >> "$GITHUB_OUTPUT"
+            echo "session_name_1=$session_name_1" >> "$GITHUB_OUTPUT"
           fi
 
           if [ ${#metrics_files[@]} -eq 1 ]; then
@@ -218,6 +224,14 @@ jobs:
         with:
           name: ${{ steps.artifact_paths.outputs.session_name }}
           path: ${{ steps.artifact_paths.outputs.session_path }}
+          retention-days: 90
+
+      - name: Upload session artifact (forked)
+        if: always() && steps.artifact_paths.outputs.session_path_1 != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_paths.outputs.session_name_1 }}
+          path: ${{ steps.artifact_paths.outputs.session_path_1 }}
           retention-days: 90
 
       - name: Upload metrics artifact
