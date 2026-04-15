@@ -53,7 +53,27 @@ provider_priority:
 | `VV_ANTHROPIC_API_KEY` | Claude 用 | Claude Code CLI 用 API キー |
 | `VV_OPENAI_API_KEY` | Codex 用 | Codex CLI 用 API キー。`VV_CODEX_AUTH_JSON` と択一 |
 | `VV_CODEX_AUTH_JSON` | Codex 用 | Codex CLI の OAuth 認証 JSON。`VV_OPENAI_API_KEY` と択一 |
-| `VV_CLAUDE_SETTINGS` | 任意 | モデル名や Base URL を指定する Claude Code の追加設定 JSON |
+| `VV_CLAUDE_SETTINGS` | 任意 | モデル名・Base URL・MCP サーバーなどを指定する Claude Code の追加設定 JSON |
+
+`VV_CLAUDE_SETTINGS` に `mcpServers` を含めると MCP サーバーを有効化できます。MCP サーバーが外部 API を呼ぶ場合は `sandbox.network.allowedDomains` に対象ドメインを追加します（デフォルトの `api.github.com` はマージされるため省略可）。
+
+Context7 MCP の設定例:
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "env": {"CONTEXT7_API_KEY": "YOUR_KEY"}
+    }
+  },
+  "sandbox": {
+    "network": {
+      "allowedDomains": ["context7.com"]
+    }
+  }
+}
+```
 
 `VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` はツールで設定できます。
 

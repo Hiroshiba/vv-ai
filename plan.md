@@ -457,4 +457,5 @@ Codex テスト全通過後、余力があれば実施する。コマンドは�
 - [x] https://github.com/Hiroshiba/vv-ai/issues/8
 - [x] https://github.com/Hiroshiba/vv-ai/issues/9
 - [x] https://github.com/Hiroshiba/vv-ai/issues/12
+- [x] https://github.com/Hiroshiba/vv-ai/issues/15
 - [ ] Github WorkflowでのClaudeをlocalhost proxy経由にして完全に秘匿する

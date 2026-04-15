@@ -476,6 +476,10 @@ def _build_claude_settings(
     # TODO: これだとClaude内のコードから見えてしまうので、真に隠すには他の方法が必要。
     settings: dict = json.loads(extra_settings_json) if extra_settings_json else {}
 
+    extra_allowed_domains: list[str] = (
+        settings.get("sandbox", {}).get("network", {}).get("allowedDomains", [])
+    )
+
     # セキュリティ設定を最後に適用。extra_settings_json による上書きを防ぐ。
     settings["allowUnsandboxedCommands"] = False
     settings["permissions"] = {
@@ -489,9 +493,7 @@ def _build_claude_settings(
             "denyRead": _DENY_READ_PATHS,
         },
         "network": {
-            "allowedDomains": [
-                "api.github.com"
-            ],  # TODO: これがないとなぜかアクセスできなかった
+            "allowedDomains": ["api.github.com"] + extra_allowed_domains,
         },
     }
     if api_key_file_path is not None:
