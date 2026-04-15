@@ -9,7 +9,7 @@ allowed-tools: Bash(gh issue close:*), Bash(gh issue comment:*)
 
 ## 処理フロー
 
-1. `mktemp -u` で未使用の一時ファイルパスを取得する (ファイルは作らない)
+1. `mktemp -u` を引数なしで実行し、一時ファイルパスを取得する
 2. `Write` ツールでコメント本文をそのパスに書く
 3. `gh issue comment <num> --body-file <tempfile>` でコメントを投稿する
 4. `gh issue close <num>` でクローズする
