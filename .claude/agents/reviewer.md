@@ -9,6 +9,6 @@ description: 実装差分をレビューし結果を報告する。毎回新規�
 
 ## 手順
 
-1. `mktemp -u` を引数なしで実行し、一時ファイルパスを取得する
+1. `mkdir -p hiho_temp && mktemp -u hiho_temp/hiho.XXXXXXXXXX` で一時ファイルパスを取得する
 2. Write ツールでレビュー結果をそのパスに書き込む
 3. そのパスを team-lead に SendMessage で報告する

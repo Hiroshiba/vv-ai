@@ -9,7 +9,7 @@ allowed-tools: Bash(git add:*), Bash(git commit:*)
 
 ## 処理フロー
 
-1. `mktemp -u` を引数なしで実行し、一時ファイルパスを取得する
+1. `mkdir -p hiho_temp && mktemp -u hiho_temp/hiho.XXXXXXXXXX` で一時ファイルパスを取得する
 2. `Write` ツールでコミットメッセージをそのパスに書く
 3. `git add <paths>` で対象ファイルをステージングする
 4. `git commit -F <tempfile>` でコミットする
