@@ -65,9 +65,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: read
 
     env:
       VV_CODEX_HOME: /home/runner/.vv-secrets/codex_home
@@ -150,10 +148,22 @@ jobs:
         with:
           app-id: ${{ secrets.VV_AI_APP_ID }}
           private-key: ${{ secrets.VV_AI_APP_PRIVATE_KEY }}
+          permission-metadata: read
+
+      - name: Generate write token
+        id: write-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.VV_AI_APP_ID }}
+          private-key: ${{ secrets.VV_AI_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+          permission-workflows: write
 
       - name: Run vv-ai
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.write-token.outputs.token }}
           VV_GH_READONLY_TOKEN: ${{ steps.readonly-token.outputs.token }}
           VV_OPENAI_API_KEY_FILE: /home/runner/.vv-secrets/openai_key
           VV_ANTHROPIC_API_KEY_FILE: /home/runner/.vv-secrets/anthropic_key

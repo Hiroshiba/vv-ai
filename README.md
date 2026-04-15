@@ -48,7 +48,7 @@ provider_priority:
 | --- | --- | --- |
 | `VV_AI_AGE_PUBLIC_KEY` | 必須 | artifact 暗号化に使う公開鍵 |
 | `VV_AI_AGE_SECRET_KEY` | 必須 | artifact 復号に使う秘密鍵 |
-| `VV_AI_APP_ID` | 必須 | read-only トークン生成に使う GitHub App ID |
+| `VV_AI_APP_ID` | 必須 | read/write 両方のインストールトークン生成に使う GitHub App ID |
 | `VV_AI_APP_PRIVATE_KEY` | 必須 | GitHub App の RSA 秘密鍵 |
 | `VV_ANTHROPIC_API_KEY` | Claude 用 | Claude Code CLI 用 API キー |
 | `VV_OPENAI_API_KEY` | Codex 用 | Codex CLI 用 API キー。`VV_CODEX_AUTH_JSON` と択一 |
@@ -56,6 +56,8 @@ provider_priority:
 | `VV_CLAUDE_SETTINGS` | 任意 | モデル名・Base URL・MCP サーバーなどを指定する Claude Code の追加設定 JSON |
 
 `VV_CLAUDE_SETTINGS` に `mcpServers` を含めると MCP サーバーを有効化できます。MCP サーバーが外部 API を呼ぶ場合は `sandbox.network.allowedDomains` に対象ドメインを追加します（デフォルトの `api.github.com` はマージされるため省略可）。
+
+GitHub App にはリポジトリ権限として `Contents: Read & Write` / `Issues: Read & Write` / `Pull requests: Read & Write` / `Workflows: Read & Write` / `Metadata: Read-only` を付与します。
 
 `VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` はツールで設定できます。
 
