@@ -148,7 +148,7 @@ jobs:
         with:
           app-id: ${{ secrets.VV_AI_APP_ID }}
           private-key: ${{ secrets.VV_AI_APP_PRIVATE_KEY }}
-          permission-metadata: read
+          permission-metadata: read # NOTE: 無指定だとGithub Appの全権限になってしまうため、適当に１つだけ指定する
 
       - name: Generate write token
         id: write-token
@@ -159,7 +159,7 @@ jobs:
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
-          permission-workflows: write
+          permission-workflows: write # NOTE: `.github/workflows` をpushするために必要
 
       - name: Run vv-ai
         env:
