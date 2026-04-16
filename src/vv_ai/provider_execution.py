@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict
 
@@ -59,6 +61,7 @@ _DENY_READ_PATHS = [
     "/home/runner/.vv-secrets/**",
     "/proc/**",
     str(Path.home() / ".claude" / "**"),
+    str(Path.home() / ".claude.json"),
 ]
 
 
@@ -479,6 +482,7 @@ def _build_claude_settings(
     extra_allowed_domains: list[str] = (
         settings.get("sandbox", {}).get("network", {}).get("allowedDomains", [])
     )
+    mcp_domains = _extract_mcp_domains()
 
     # セキュリティ設定を最後に適用。extra_settings_json による上書きを防ぐ。
     settings["allowUnsandboxedCommands"] = False
@@ -493,12 +497,37 @@ def _build_claude_settings(
             "denyRead": _DENY_READ_PATHS,
         },
         "network": {
-            "allowedDomains": ["api.github.com"] + extra_allowed_domains,
+            "allowedDomains": ["api.github.com"]
+            + extra_allowed_domains
+            + mcp_domains,
         },
     }
     if api_key_file_path is not None:
         settings["apiKeyHelper"] = f"cat {api_key_file_path}"
     return json.dumps(settings)
+
+
+def _extract_mcp_domains() -> list[str]:
+    """~/.claude.json の mcpServers URL からドメインを抽出する。"""
+    claude_json_path = Path.home() / ".claude.json"
+    if not claude_json_path.is_file():
+        return []
+    try:
+        data = json.loads(claude_json_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(
+            f"~/.claude.json の読み込みに失敗しました: {exc}", file=sys.stderr
+        )
+        return []
+    mcp_servers = data.get("mcpServers", {})
+    domains: list[str] = []
+    for server in mcp_servers.values():
+        url = server.get("url", "")
+        if url != "":
+            hostname = urlparse(url).hostname
+            if hostname is not None:
+                domains.append(hostname)
+    return domains
 
 
 def _try_resolve_api_key(
