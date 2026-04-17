@@ -24,6 +24,20 @@ class GitHubClientError(Exception):
     """GitHub 操作に失敗したことを表す例外。"""
 
 
+class RepoInfo:
+    """リポジトリの基本情報。"""
+
+    def __init__(
+        self,
+        is_fork: bool,
+        parent_full_name: str | None,
+        parent_default_branch: str | None,
+    ) -> None:
+        self.is_fork = is_fork
+        self.parent_full_name = parent_full_name
+        self.parent_default_branch = parent_default_branch
+
+
 class GitHubActor(BaseModel):
     """GitHub 上の user を表す。"""
 
@@ -382,6 +396,42 @@ class GitHubClient:
         if not isinstance(name, str) or not name:
             raise GitHubClientError("デフォルトブランチ名の取得に失敗しました")
         return name
+
+    def get_repo_info(self, repository_full_name: str) -> RepoInfo:
+        """リポジトリの fork 情報を返す。"""
+        raw = self._run_json(
+            [
+                "repo",
+                "view",
+                repository_full_name,
+                "--json",
+                "isFork,parent",
+            ]
+        )
+        if not isinstance(raw, dict):
+            raise GitHubClientError("リポジトリ情報の JSON 形式が不正です")
+        is_fork = raw.get("isFork")
+        if not isinstance(is_fork, bool):
+            raise GitHubClientError("isFork の取得に失敗しました")
+        if not is_fork:
+            return RepoInfo(is_fork=False, parent_full_name=None, parent_default_branch=None)
+        parent = raw.get("parent")
+        if not isinstance(parent, dict):
+            raise GitHubClientError("fork リポジトリの parent 情報が取得できません")
+        parent_full_name = parent.get("nameWithOwner")
+        if not isinstance(parent_full_name, str) or not parent_full_name:
+            raise GitHubClientError("parent の nameWithOwner を取得できません")
+        parent_default_branch_ref = parent.get("defaultBranchRef")
+        if not isinstance(parent_default_branch_ref, dict):
+            raise GitHubClientError("parent の defaultBranchRef を取得できません")
+        parent_default_branch = parent_default_branch_ref.get("name")
+        if not isinstance(parent_default_branch, str) or not parent_default_branch:
+            raise GitHubClientError("parent のデフォルトブランチ名を取得できません")
+        return RepoInfo(
+            is_fork=True,
+            parent_full_name=parent_full_name,
+            parent_default_branch=parent_default_branch,
+        )
 
     def get_target_details(self, target: ResolvedTarget) -> GitHubTargetDetails:
         """GitHub target に対応する本体を取得する。"""

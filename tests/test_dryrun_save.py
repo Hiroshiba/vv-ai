@@ -137,7 +137,7 @@ class TestDryRunSuppression:
 
         with patch("vv_ai.command_handler.push_branch") as mock_push:
             _handle_implement_issue_post_execution(
-                Path("/dummy"), ready, result, github_client, "vv-ai/issue-1-abc123", {}
+                Path("/dummy"), ready, result, github_client, "vv-ai/issue-1-abc123", None, {}
             )
             mock_push.assert_not_called()
 

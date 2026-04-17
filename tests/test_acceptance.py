@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from vv_ai.cli import main
 from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
-from vv_ai.github import GitHubActor, GitHubPullRequest
+from vv_ai.github import GitHubActor, GitHubPullRequest, RepoInfo
 from vv_ai.metrics_artifact import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
 from vv_ai.report_artifact import ReportSections
 from vv_ai.resolve import BackendName
@@ -116,6 +116,10 @@ def _enter_common_patches(
         patch("vv_ai.command_handler.build_github_client", return_value=github_client)
     )
     stack.enter_context(patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}))
+    if isinstance(github_client, MagicMock):
+        github_client.get_repo_info.return_value = RepoInfo(
+            is_fork=False, parent_full_name=None, parent_default_branch=None
+        )
 
 
 class TestImplementIssueDryRun:

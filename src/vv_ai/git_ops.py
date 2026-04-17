@@ -61,9 +61,43 @@ def _build_push_env(token: str) -> dict[str, str]:
     }
 
 
-def create_and_checkout_branch(repo_root: Path, branch_name: str) -> None:
+def create_and_checkout_branch(
+    repo_root: Path, branch_name: str, start_point: str | None
+) -> None:
     """ブランチを作成してチェックアウトする。"""
-    run_git_command(repo_root, "checkout", "-b", branch_name)
+    if start_point is not None:
+        run_git_command(repo_root, "checkout", "-b", branch_name, start_point)
+    else:
+        run_git_command(repo_root, "checkout", "-b", branch_name)
+
+
+def _normalize_git_url(url: str) -> str:
+    """Git URL を正規化する。末尾の .git を除去して小文字に変換する。"""
+    return url.lower().removesuffix(".git")
+
+
+def setup_upstream_remote(repo_root: Path, upstream_url: str) -> None:
+    """upstream remote を追加する。既に同じ URL で存在する場合は何もしない。"""
+    result = subprocess.run(
+        ["git", "remote", "get-url", "upstream"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        existing_url = result.stdout.strip()
+        if _normalize_git_url(existing_url) != _normalize_git_url(upstream_url):
+            raise GitOpsError(
+                f"upstream remote が既に別の URL で存在します: {existing_url}"
+            )
+        return
+    run_git_command(repo_root, "remote", "add", "upstream", upstream_url)
+
+
+def fetch_remote(repo_root: Path, remote: str) -> None:
+    """指定リモートを fetch する。"""
+    run_git_command(repo_root, "fetch", remote)
 
 
 def fetch_and_checkout_branch(repo_root: Path, branch_name: str) -> None:

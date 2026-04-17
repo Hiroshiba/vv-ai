@@ -13,11 +13,13 @@ from vv_ai.git_ops import (
     commit_all_changes,
     create_and_checkout_branch,
     fetch_and_checkout_branch,
+    fetch_remote,
     generate_implement_branch_name,
     generate_patch,
     get_head_sha,
     has_commits_ahead,
     push_branch,
+    setup_upstream_remote,
     try_push_current_branch,
 )
 from vv_ai.github import (
@@ -76,6 +78,7 @@ def run_command(
     implement_branch_name: str | None = None
     pr_info: GitHubPullRequest | None = None
     head_sha_before: str | None = None
+    fork_base_ref: str | None = None
     execution_result: ExecutionResult | None = None
     created_pr: GitHubPullRequest | None = None
     finalize_status: ExecutionStatus = "failure"
@@ -84,8 +87,27 @@ def run_command(
             issue_identifier = str(target.number) if target.number is not None else target.local_id
             assert issue_identifier is not None
             implement_branch_name = generate_implement_branch_name(issue_identifier)
+            start_point: str | None = None
+            if _is_github_target(target):
+                assert github_client is not None
+                assert target.repository_full_name is not None
+                try:
+                    repo_info = github_client.get_repo_info(target.repository_full_name)
+                except GitHubClientError as exc:
+                    raise CommandError(str(exc)) from exc
+                if repo_info.is_fork:
+                    assert repo_info.parent_full_name is not None
+                    assert repo_info.parent_default_branch is not None
+                    upstream_url = f"https://github.com/{repo_info.parent_full_name}"
+                    try:
+                        setup_upstream_remote(repo_root, upstream_url)
+                        fetch_remote(repo_root, "upstream")
+                    except GitOpsError as exc:
+                        raise CommandError(str(exc)) from exc
+                    fork_base_ref = f"upstream/{repo_info.parent_default_branch}"
+                    start_point = fork_base_ref
             try:
-                create_and_checkout_branch(repo_root, implement_branch_name)
+                create_and_checkout_branch(repo_root, implement_branch_name, start_point)
             except GitOpsError as exc:
                 raise CommandError(str(exc)) from exc
         elif command.command == "implement" and target is not None and target.kind == "pr":
@@ -136,6 +158,7 @@ def run_command(
             implement_branch_name,
             pr_info,
             head_sha_before,
+            fork_base_ref,
             env,
         )
         assert execution_result is not None
@@ -192,6 +215,7 @@ def _handle_post_execution(
     implement_branch_name: str | None,
     pr_info: GitHubPullRequest | None,
     head_sha_before: str | None,
+    fork_base_ref: str | None,
     env: Mapping[str, str],
 ) -> GitHubPullRequest | None:
     """コマンド固有の後処理を行う。作成された PR があれば返す。"""
@@ -215,7 +239,7 @@ def _handle_post_execution(
             )
         else:
             return _handle_implement_issue_post_execution(
-                repo_root, ready_execution, execution_result, github_client, implement_branch_name, env
+                repo_root, ready_execution, execution_result, github_client, implement_branch_name, fork_base_ref, env
             )
     return None
 
@@ -226,6 +250,7 @@ def _handle_implement_issue_post_execution(
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
     implement_branch_name: str,
+    fork_base_ref: str | None,
     env: Mapping[str, str],
 ) -> GitHubPullRequest | None:
     """implement + Issue 起点の後処理（push + PR 作成）を行う。作成した PR を返す。"""
@@ -257,8 +282,9 @@ def _handle_implement_issue_post_execution(
     if committed:
         print(f"ワーキングツリーの変更をコミットしました: {commit_message}")
 
+    commits_ahead_ref = fork_base_ref if fork_base_ref is not None else base_branch
     try:
-        ahead = has_commits_ahead(repo_root, base_branch)
+        ahead = has_commits_ahead(repo_root, commits_ahead_ref)
     except GitOpsError as exc:
         raise CommandError(str(exc)) from exc
     if not ahead:
