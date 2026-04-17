@@ -136,6 +136,7 @@ def run_command(
             implement_branch_name,
             pr_info,
             head_sha_before,
+            env,
         )
         assert execution_result is not None
         finalize_status = execution_result.status
@@ -191,6 +192,7 @@ def _handle_post_execution(
     implement_branch_name: str | None,
     pr_info: GitHubPullRequest | None,
     head_sha_before: str | None,
+    env: Mapping[str, str],
 ) -> GitHubPullRequest | None:
     """コマンド固有の後処理を行う。作成された PR があれば返す。"""
     command_name = ready_execution.command.command
@@ -209,10 +211,11 @@ def _handle_post_execution(
                 implement_branch_name,
                 pr_info,
                 head_sha_before,
+                env,
             )
         else:
             return _handle_implement_issue_post_execution(
-                repo_root, ready_execution, execution_result, github_client, implement_branch_name
+                repo_root, ready_execution, execution_result, github_client, implement_branch_name, env
             )
     return None
 
@@ -223,6 +226,7 @@ def _handle_implement_issue_post_execution(
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
     implement_branch_name: str,
+    env: Mapping[str, str],
 ) -> GitHubPullRequest | None:
     """implement + Issue 起点の後処理（push + PR 作成）を行う。作成した PR を返す。"""
     command = ready_execution.command
@@ -262,7 +266,7 @@ def _handle_implement_issue_post_execution(
         return None
 
     try:
-        push_branch(repo_root, implement_branch_name)
+        push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
     except GitOpsError as exc:
         raise CommandError(str(exc)) from exc
 
@@ -296,6 +300,7 @@ def _handle_implement_pr_post_execution(
     implement_branch_name: str,
     pr_info: GitHubPullRequest | None,
     head_sha_before: str | None,
+    env: Mapping[str, str],
 ) -> None:
     """implement + PR 起点の後処理（push / patch fallback）を行う。"""
     command = ready_execution.command
@@ -321,7 +326,7 @@ def _handle_implement_pr_post_execution(
 
     if pr_info is None or not pr_info.is_cross_repository:
         try:
-            push_branch(repo_root, implement_branch_name)
+            push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
         except GitOpsError as exc:
             raise CommandError(str(exc)) from exc
         print(f"ブランチ `{implement_branch_name}` を push しました。")
@@ -329,7 +334,7 @@ def _handle_implement_pr_post_execution(
 
     assert target.repository_full_name is not None
 
-    if try_push_current_branch(repo_root):
+    if try_push_current_branch(repo_root, env.get("GITHUB_TOKEN")):
         print(f"fork ブランチ `{implement_branch_name}` を push しました。")
         return
 

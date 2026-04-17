@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import os
 import secrets
 import subprocess
 from pathlib import Path
@@ -28,6 +30,37 @@ def run_git_command(repo_root: Path, *args: str) -> str:
     return result.stdout
 
 
+def _run_git_command_env(repo_root: Path, env: dict[str, str], *args: str) -> str:
+    """環境変数を指定して git コマンドを実行して標準出力を返す。"""
+    command = ["git", *args]
+    result = subprocess.run(
+        command,
+        cwd=repo_root,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        detail = f": {stderr}" if stderr else ""
+        raise GitOpsError(f"`{' '.join(command)}` の実行に失敗しました{detail}")
+    return result.stdout
+
+
+def _build_push_env(token: str) -> dict[str, str]:
+    """push 用の HTTP 認証ヘッダーを git 設定として注入した環境変数を返す。"""
+    auth = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    return {
+        **os.environ,
+        "GIT_CONFIG_COUNT": "2",
+        "GIT_CONFIG_KEY_0": "credential.helper",
+        "GIT_CONFIG_VALUE_0": "",
+        "GIT_CONFIG_KEY_1": "http.https://github.com/.extraheader",
+        "GIT_CONFIG_VALUE_1": f"AUTHORIZATION: basic {auth}",
+    }
+
+
 def create_and_checkout_branch(repo_root: Path, branch_name: str) -> None:
     """ブランチを作成してチェックアウトする。"""
     run_git_command(repo_root, "checkout", "-b", branch_name)
@@ -39,9 +72,12 @@ def fetch_and_checkout_branch(repo_root: Path, branch_name: str) -> None:
     run_git_command(repo_root, "checkout", branch_name)
 
 
-def push_branch(repo_root: Path, branch_name: str) -> None:
+def push_branch(repo_root: Path, branch_name: str, token: str | None) -> None:
     """ブランチを origin へ push する。"""
-    run_git_command(repo_root, "push", "-u", "origin", branch_name)
+    if token is not None:
+        _run_git_command_env(repo_root, _build_push_env(token), "push", "-u", "origin", branch_name)
+    else:
+        run_git_command(repo_root, "push", "-u", "origin", branch_name)
 
 
 # TODO: git add -A は AI が残した不要ファイルも含めてしまうリスクがある。本来は変更対象を絞りたい。
@@ -90,11 +126,13 @@ def checkout_fork_pr(
         raise GitOpsError(f"fork PR のチェックアウトに失敗しました{detail}")
 
 
-def try_push_current_branch(repo_root: Path) -> bool:
+def try_push_current_branch(repo_root: Path, token: str | None) -> bool:
     """現在のブランチを upstream へ push する。成功なら True、失敗なら False。"""
+    env = _build_push_env(token) if token is not None else None
     result = subprocess.run(
         ["git", "push"],
         cwd=repo_root,
+        env=env,
         check=False,
         capture_output=True,
         text=True,
