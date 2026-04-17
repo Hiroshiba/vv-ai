@@ -399,34 +399,19 @@ class GitHubClient:
 
     def get_repo_info(self, repository_full_name: str) -> RepoInfo:
         """リポジトリの fork 情報を返す。"""
-        raw = self._run_json(
-            [
-                "repo",
-                "view",
-                repository_full_name,
-                "--json",
-                "isFork,parent",
-            ]
-        )
+        raw = self._run_json(["api", _build_repository_path(repository_full_name)])
         if not isinstance(raw, dict):
             raise GitHubClientError("リポジトリ情報の JSON 形式が不正です")
-        is_fork = raw.get("isFork")
+        is_fork = raw.get("fork")
         if not isinstance(is_fork, bool):
-            raise GitHubClientError("isFork の取得に失敗しました")
+            raise GitHubClientError("fork の取得に失敗しました")
         if not is_fork:
             return RepoInfo(is_fork=False, parent_full_name=None, parent_default_branch=None)
-        parent = raw.get("parent")
-        if not isinstance(parent, dict):
-            raise GitHubClientError("fork リポジトリの parent 情報が取得できません")
-        parent_full_name = parent.get("nameWithOwner")
-        if not isinstance(parent_full_name, str) or not parent_full_name:
-            raise GitHubClientError("parent の nameWithOwner を取得できません")
-        parent_default_branch_ref = parent.get("defaultBranchRef")
-        if not isinstance(parent_default_branch_ref, dict):
-            raise GitHubClientError("parent の defaultBranchRef を取得できません")
-        parent_default_branch = parent_default_branch_ref.get("name")
-        if not isinstance(parent_default_branch, str) or not parent_default_branch:
-            raise GitHubClientError("parent のデフォルトブランチ名を取得できません")
+        parent = _require_mapping(raw.get("parent"), "parent")
+        parent_full_name = _require_string(parent.get("full_name"), "parent.full_name")
+        parent_default_branch = _require_string(
+            parent.get("default_branch"), "parent.default_branch"
+        )
         return RepoInfo(
             is_fork=True,
             parent_full_name=parent_full_name,
@@ -768,6 +753,11 @@ def _build_issues_path(repository_full_name: str) -> str:
 def _build_pulls_path(repository_full_name: str) -> str:
     """Pulls endpoint を返す。"""
     return f"repos/{_require_repository_full_name(repository_full_name)}/pulls"
+
+
+def _build_repository_path(repository_full_name: str) -> str:
+    """Repository endpoint を返す。"""
+    return f"repos/{_require_repository_full_name(repository_full_name)}"
 
 
 def _build_issue_comment_reaction_path(
