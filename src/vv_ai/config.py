@@ -42,7 +42,11 @@ class VVAIConfig(BaseModel):
 
 def load_vv_ai_config(repo_root: Path) -> VVAIConfig:
     """リポジトリルートから `vv-ai.yml` を読み込んで検証する。"""
-    config_path = repo_root / "vv-ai.yml"
+    return load_vv_ai_config_file(repo_root / "vv-ai.yml")
+
+
+def load_vv_ai_config_file(config_path: Path) -> VVAIConfig:
+    """指定 path の `vv-ai.yml` を読み込んで検証する。"""
     if not config_path.is_file():
         raise VVAIConfigFileNotFoundError(
             f"`{config_path}` に設定ファイル `vv-ai.yml` が見つかりません"

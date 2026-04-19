@@ -41,3 +41,4 @@
 - [x] https://github.com/Hiroshiba/vv-ai/issues/21
 - [x] https://github.com/Hiroshiba/vv-ai/issues/22
 - [x] https://github.com/Hiroshiba/vv-ai/issues/25
+- [x] https://github.com/Hiroshiba/vv-ai/issues/27 と https://github.com/Hiroshiba/vv-ai/issues/28

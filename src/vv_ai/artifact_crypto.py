@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import tarfile
@@ -82,23 +81,23 @@ def decrypt_file(
     if temp_destination_path.exists():
         raise ArtifactCryptoError(f"`{temp_destination_path}` が残っています")
 
-    with _temporary_identity_file(age_secret_key) as identity_path:
-        try:
-            _run_age_command(
-                [
-                    "age",
-                    "--decrypt",
-                    "--identity",
-                    str(identity_path),
-                    "--output",
-                    str(temp_destination_path),
-                    str(source_path),
-                ]
-            )
-            temp_destination_path.replace(destination_path)
-        except Exception:
-            _cleanup_path(temp_destination_path)
-            raise
+    try:
+        _run_age_command(
+            [
+                "age",
+                "--decrypt",
+                "--identity",
+                "-",
+                "--output",
+                str(temp_destination_path),
+                str(source_path),
+            ],
+            stdin_text=_normalize_secret(age_secret_key, AGE_SECRET_KEY_ENV) + "\n",
+        )
+        temp_destination_path.replace(destination_path)
+    except Exception:
+        _cleanup_path(temp_destination_path)
+        raise
 
 
 def encrypt_directory(
@@ -198,10 +197,11 @@ def _ensure_age_command() -> None:
     raise ArtifactCryptoError("`age` コマンドが見つかりません")
 
 
-def _run_age_command(command: list[str]) -> None:
-    """age コマンドを実行する。"""
+def _run_age_command(command: list[str], *, stdin_text: str | None = None) -> None:
+    """age コマンドを実行する。stdin_text を渡すと標準入力経由で流し込む。"""
     result = subprocess.run(
         command,
+        input=stdin_text,
         check=False,
         capture_output=True,
         text=True,
@@ -242,32 +242,6 @@ def _extract_tar_archive(
         raise ArtifactCryptoError(f"`{archive_path}` の展開に失敗しました") from exc
     except tarfile.TarError as exc:
         raise ArtifactCryptoError(f"`{archive_path}` の展開に失敗しました") from exc
-
-
-class _TemporaryIdentityFile:
-    """age 秘密鍵を一時 file として扱う。"""
-
-    def __init__(self, secret_key: str) -> None:
-        self._secret_key = _normalize_secret(secret_key, AGE_SECRET_KEY_ENV)
-        self._path: Path | None = None
-
-    def __enter__(self) -> Path:
-        file_descriptor, raw_path = tempfile.mkstemp(prefix="vv-ai-age-key-")
-        os.close(file_descriptor)
-        path = Path(raw_path)
-        path.write_text(self._secret_key + "\n", encoding="utf-8")
-        path.chmod(0o600)
-        self._path = path
-        return path
-
-    def __exit__(self, exc_type, exc, traceback) -> None:
-        if self._path is not None and self._path.exists():
-            self._path.unlink()
-
-
-def _temporary_identity_file(secret_key: str) -> _TemporaryIdentityFile:
-    """秘密鍵用の context manager を返す。"""
-    return _TemporaryIdentityFile(secret_key)
 
 
 def _cleanup_path(path: Path) -> None:

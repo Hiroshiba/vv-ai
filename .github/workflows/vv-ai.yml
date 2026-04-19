@@ -82,10 +82,16 @@ jobs:
       should_run: ${{ steps.verify.outputs.should_run }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+      # NOTE: checkout せず default_branch の vv-ai.yml を API 取得する。
+      # 任意 ref を読めると PR 側で allowed_users を書き換えられてしまうため ref を固定する。
+      - name: Fetch vv-ai.yml from default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          gh api "repos/$REPO/contents/vv-ai.yml?ref=$DEFAULT_BRANCH" \
+            -H "Accept: application/vnd.github.raw" > /tmp/vv-ai.yml
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -96,7 +102,8 @@ jobs:
           result="$(uvx --from git+https://github.com/Hiroshiba/vv-ai@main \
                       vv-ai verify \
                       --event "${{ github.event_name }}" \
-                      --event-file "$GITHUB_EVENT_PATH")"
+                      --event-file "$GITHUB_EVENT_PATH" \
+                      --config /tmp/vv-ai.yml)"
           echo "$result"
           should_run="$(echo "$result" | jq -r '.should_run')"
           echo "should_run=$should_run" >> "$GITHUB_OUTPUT"

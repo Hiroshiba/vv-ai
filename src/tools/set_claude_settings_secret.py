@@ -40,7 +40,6 @@ def main() -> None:
     print(f"含めるキー: {list(filtered.keys())}")
 
     if args.dry_run:
-        print(f"VV_CLAUDE_SETTINGS: {secret_value}")
         print("--dry-run: Secret の設定をスキップします")
         return
 

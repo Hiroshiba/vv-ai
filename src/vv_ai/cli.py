@@ -12,7 +12,13 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from vv_ai.config import VVAIConfigError, find_repo_root
+from vv_ai.config import (
+    VVAIConfig,
+    VVAIConfigError,
+    find_repo_root,
+    load_vv_ai_config,
+    load_vv_ai_config_file,
+)
 from vv_ai.execution import (
     ExecutionArtifactError,
     ExecutionResult,
@@ -188,17 +194,31 @@ def _run_verify_subcommand(verify_argv: Sequence[str]) -> int:
         required=True,
         help="GitHub event payload JSON のパスを指定する。",
     )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help=(
+            "vv-ai.yml のパスを明示する。未指定時はリポジトリルートから探索する。"
+        ),
+    )
     namespace = parser.parse_args(verify_argv)
 
     try:
-        repo_root = find_repo_root(Path.cwd())
-        result = run_verify(namespace.event, namespace.event_file, repo_root)
+        config = _load_verify_config(namespace.config)
+        result = run_verify(namespace.event, namespace.event_file, config)
     except (VVAIConfigError, InputError) as exc:
         print(f"verify エラー: {exc}", file=sys.stderr)
         return 2
 
     print(_format_verify_result(result))
     return 0
+
+
+def _load_verify_config(config_path: Path | None) -> VVAIConfig:
+    """verify 用の vv-ai.yml を読み込む。"""
+    if config_path is not None:
+        return load_vv_ai_config_file(config_path)
+    return load_vv_ai_config(find_repo_root(Path.cwd()))
 
 
 def _format_verify_result(result: VerifyResult) -> str:

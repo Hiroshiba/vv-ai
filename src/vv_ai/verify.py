@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 
-from vv_ai.config import load_vv_ai_config
+from vv_ai.config import VVAIConfig
 from vv_ai.input import (
     InputError,
     IssueCommentEvent,
@@ -30,11 +30,9 @@ class VerifyResult(BaseModel):
 
 
 def run_verify(
-    event: VerifyEventName, event_file: Path, repo_root: Path
+    event: VerifyEventName, event_file: Path, config: VVAIConfig
 ) -> VerifyResult:
     """`vv-ai.yml` と event payload だけを見て本体実行可否を判定する。"""
-    config = load_vv_ai_config(repo_root)
-
     try:
         raw = event_file.read_text(encoding="utf-8")
     except OSError as exc:
