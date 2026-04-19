@@ -463,3 +463,4 @@ Codex テスト全通過後、余力があれば実施する。コマンドは�
 - [x] https://github.com/Hiroshiba/vv-ai/issues/17
 - [x] https://github.com/Hiroshiba/vv-ai/issues/21
 - [x] https://github.com/Hiroshiba/vv-ai/issues/22
+- [x] https://github.com/Hiroshiba/vv-ai/issues/25

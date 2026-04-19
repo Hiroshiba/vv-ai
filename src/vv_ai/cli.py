@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -40,6 +41,7 @@ from vv_ai.report_artifact import ReportSections
 from vv_ai.resolve import ResolutionError, resolve_raw_input
 from vv_ai.session import SessionResolutionError, SessionStateRef, resolve_session
 from vv_ai.target import TargetResolutionError, resolve_target
+from vv_ai.verify import VerifyResult, run_verify
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -110,9 +112,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI を起動し、終了コードを返す。"""
+    argv_list = list(sys.argv[1:] if argv is None else argv)
+    if argv_list and argv_list[0] == "verify":
+        return _run_verify_subcommand(argv_list[1:])
+
     started_at = time.perf_counter()
     parser = build_parser()
-    namespace = parser.parse_args(argv)
+    namespace = parser.parse_args(argv_list)
 
     try:
         cli_input = CLIInput.model_validate(vars(namespace))
@@ -159,6 +165,45 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ,
         preflight_duration_seconds=time.perf_counter() - started_at,
     )
+
+
+def _run_verify_subcommand(verify_argv: Sequence[str]) -> int:
+    """`vv-ai verify` を実行し、判定結果を stdout に JSON で出力する。"""
+    parser = argparse.ArgumentParser(
+        prog="vv-ai verify",
+        description=(
+            "workflow に届いた event を本体実行すべきかを vv-ai.yml と event "
+            "payload だけから判定する。"
+        ),
+    )
+    parser.add_argument(
+        "--event",
+        choices=["issue_comment", "workflow_dispatch"],
+        required=True,
+        help="event 種別を指定する。",
+    )
+    parser.add_argument(
+        "--event-file",
+        type=Path,
+        required=True,
+        help="GitHub event payload JSON のパスを指定する。",
+    )
+    namespace = parser.parse_args(verify_argv)
+
+    try:
+        repo_root = find_repo_root(Path.cwd())
+        result = run_verify(namespace.event, namespace.event_file, repo_root)
+    except (VVAIConfigError, InputError) as exc:
+        print(f"verify エラー: {exc}", file=sys.stderr)
+        return 2
+
+    print(_format_verify_result(result))
+    return 0
+
+
+def _format_verify_result(result: VerifyResult) -> str:
+    """VerifyResult を 1 行 JSON に整形する。"""
+    return json.dumps(result.model_dump(exclude_none=True), ensure_ascii=False)
 
 
 def _handle_silent_skip(result: SilentSkip) -> int:

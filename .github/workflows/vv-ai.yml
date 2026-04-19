@@ -61,7 +61,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    outputs:
+      should_run: ${{ steps.verify.outputs.should_run }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run vv-ai verify
+        id: verify
+        run: |
+          result="$(uvx --from git+https://github.com/Hiroshiba/vv-ai@main \
+                      vv-ai verify \
+                      --event "${{ github.event_name }}" \
+                      --event-file "$GITHUB_EVENT_PATH")"
+          echo "$result"
+          should_run="$(echo "$result" | jq -r '.should_run')"
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+
   run:
+    needs: verify
+    if: needs.verify.outputs.should_run == 'true'
     runs-on: ubuntu-latest
 
     permissions:
