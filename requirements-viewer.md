@@ -1,5 +1,7 @@
 # PROJECT REQUIREMENTS - vv-ai Workflow Viewer
 
+未実装。いつか実装する。
+
 ## SOFTWARE TYPE
 Static Web Application / Internal Tool / Analytics Viewer
 
