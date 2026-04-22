@@ -211,6 +211,8 @@ def _build_codex_command(
         'sandbox_mode="workspace-write"',
         "-c",
         "sandbox_workspace_write.network_access=true",
+        "-c",
+        "model_reasoning_effort=high",
         "--json",
         "-c",
         'shell_environment_policy.inherit="all"',
