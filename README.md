@@ -185,16 +185,22 @@ flowchart TD
   save --> upload
 ```
 
-GitHub 上の副作用はコマンドごとに異なります。
+GitHub 上の副作用はコマンドごとに異なります。artifact は成功、失敗、中断のいずれでも保存を試み、生成されたファイルがあれば GitHub Actions が upload します。
 
 ```mermaid
 flowchart TD
   comment["GitHub コメントで起動"]
   action["GitHub Actions 実行"]
   parse["入力を解釈"]
-  command{"command"}
+  provider_run["provider 実行"]
+  effects{"成功時の後処理"}
+  artifact["session、metrics、report を保存"]
+  upload["artifact があれば upload"]
 
   response["Issue または PR にコメント投稿"]
+  issue_command["issue コマンド"]
+  created_issue["Issue を作成"]
+  created_link["元 Issue または PR に Created コメント"]
   create_tasks["サブ Issue を作成"]
   link_tasks["親 Issue に紐付け"]
   summary["作成したサブ Issue の一覧をコメント投稿"]
@@ -211,32 +217,29 @@ flowchart TD
   pr_push["PR branch へ push"]
   patch["push できない fork PR では patch コメント投稿"]
 
-  artifact["artifact 保存"]
-  reactions["eyes reaction を付与、完了後に除去"]
-
   comment --> action
   action --> parse
-  parse --> command
-  action --> reactions
-  command -- "reply、confirm、requirements、arch、detail、review" --> response
-  command -- "breakdown" --> create_tasks
+  parse --> provider_run
+  provider_run -- "成功、失敗、中断" --> artifact
+  artifact --> upload
+  provider_run -- "成功時" --> effects
+  effects -- "reply、confirm、requirements、arch、detail、review" --> response
+  effects -- "issue" --> issue_command
+  issue_command --> created_issue
+  created_issue --> created_link
+  effects -- "breakdown" --> create_tasks
   create_tasks --> link_tasks
   link_tasks --> summary
-  command -- "implement、Issue 対象" --> issue_impl
+  effects -- "implement、Issue 対象" --> issue_impl
   issue_impl --> branch
   branch --> commit
   commit --> push
   push --> create_pr
-  command -- "implement、PR 対象" --> pr_impl
+  effects -- "implement、PR 対象" --> pr_impl
   pr_impl --> checkout
   checkout --> pr_commit
   pr_commit --> pr_push
   pr_push -- "失敗かつ fork PR" --> patch
-  response --> artifact
-  summary --> artifact
-  create_pr --> artifact
-  pr_push --> artifact
-  patch --> artifact
 ```
 
 ### workflow_dispatch
