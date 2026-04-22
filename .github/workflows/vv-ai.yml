@@ -2,19 +2,30 @@ name: vv-ai
 
 on:
   issue_comment:
-    types: [created]
+    types: [ created ]
   workflow_dispatch:
     inputs:
       command:
         description: "コマンド"
         required: true
         type: choice
-        options: [confirm, requirements, arch, detail, breakdown, implement, review, issue, reply]
+        options:
+          [
+            confirm,
+            requirements,
+            arch,
+            detail,
+            breakdown,
+            implement,
+            review,
+            issue,
+            reply,
+          ]
       target_type:
         description: "対象種別 (issue / pr)"
         required: false
         type: choice
-        options: ["", issue, pr]
+        options: [ "", issue, pr ]
         default: ""
       target_number:
         description: "対象番号"
@@ -32,13 +43,13 @@ on:
         description: "AI プロバイダ (codex / claude)"
         required: false
         type: choice
-        options: ["", codex, claude]
+        options: [ "", codex, claude ]
         default: ""
       session_mode:
         description: "セッション継続方式 (inherit / inherit_or_new / compact / new)"
         required: false
         type: choice
-        options: ["", inherit, inherit_or_new, compact, new]
+        options: [ "", inherit, inherit_or_new, compact, new ]
         default: ""
       dry_run:
         description: "ドライラン"
@@ -189,6 +200,7 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
 
+      # NOTE: パブリックリポジトリの情報はどんなGITHUB_TOKENでも問題なく見れる
       - name: Generate read-only token
         id: readonly-token
         uses: actions/create-github-app-token@v1
