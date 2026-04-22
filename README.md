@@ -56,8 +56,6 @@ provider_priority:
 | `VV_CLAUDE_SETTINGS` | 任意 | モデル名・Base URL・MCP サーバーなどを指定する Claude Code の追加設定 JSON |
 | `VV_CONTEXT7_API_KEY` | 任意 | Context7 MCP の API キー。設定すると Claude Code / Codex 両方で Context7 が有効になる |
 
-`VV_CLAUDE_SETTINGS` に `mcpServers` を含めると MCP サーバーを有効化できます。MCP サーバーが外部 API を呼ぶ場合は `sandbox.network.allowedDomains` に対象ドメインを追加します（デフォルトの `api.github.com` はマージされるため省略可）。
-
 GitHub App にはリポジトリ権限として `Contents: Read & Write` / `Issues: Read & Write` / `Pull requests: Read & Write` / `Workflows: Read & Write` / `Metadata: Read-only` を付与します。
 
 `VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` はツールで設定できます。

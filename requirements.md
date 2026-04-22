@@ -575,6 +575,8 @@ provider_priority:
 1. **shell_environment_policy** でサブプロセスへの環境変数伝播を制御
    - include_only で PATH / HOME 等だけに絞る
    - VV_OPENAI_API_KEY 等を子プロセスに渡さない
+2. **workspace-write のネットワークを有効化**
+   - `gh` から GitHub API を読めるようにする
 
 ### GitHub Actions ステップ分離
 
