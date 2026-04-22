@@ -115,6 +115,130 @@ Issue または PR のコメントで `@vv-ai` で始めると起動します。
 
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。
 
+### 運用フロー
+
+`reply 可` は、その区間で `@vv-ai reply` や通常コメントによる壁打ちを挟めることを表します。
+
+```mermaid
+flowchart TD
+  request["要望または Issue、バグ報告"]
+  confirm["@vv-ai confirm、要望確認"]
+  requirements["@vv-ai requirements、要件定義"]
+  arch["@vv-ai arch、基本設計"]
+  detail["@vv-ai detail、詳細設計"]
+  breakdown["@vv-ai breakdown、タスク分割"]
+  subissues["サブ Issue 群"]
+  implement["@vv-ai implement、実装"]
+  pr["PR 作成または PR 更新"]
+  review["@vv-ai review、レビュー"]
+  review_ok{"レビュー OK"}
+  fix["@vv-ai implement、レビュー対応"]
+  merge["マージ"]
+
+  request -- "reply 可" --> confirm
+  confirm -- "reply 可" --> requirements
+  requirements -- "reply 可" --> arch
+  arch -- "reply 可" --> detail
+  detail -- "reply 可" --> breakdown
+  breakdown -- "reply 可" --> subissues
+  subissues -- "reply 可" --> implement
+  implement -- "reply 可" --> pr
+  pr -- "reply 可" --> review
+  review --> review_ok
+  review_ok -- "はい" --> merge
+  review_ok -- "いいえ、reply 可" --> fix
+  fix -- "reply 可" --> pr
+```
+
+セッションは対象、provider、lane ごとに保存されます。`review` は review lane、それ以外のコマンドは main lane を使います。
+
+```mermaid
+flowchart TD
+  run["vv-ai 実行"]
+  target["対象を解決"]
+  provider["provider を解決"]
+  command{"command"}
+  main_lane["main lane"]
+  review_lane["review lane"]
+  mode{"session_mode"}
+  new_session["新規 session"]
+  restore_check{"保存済み session artifact"}
+  inherit_session["復元して継続"]
+  save["session、metrics、report を保存"]
+  upload["GitHub Actions artifact として upload"]
+
+  run --> target
+  target --> provider
+  provider --> command
+  command -- "review" --> review_lane
+  command -- "review 以外" --> main_lane
+  main_lane --> mode
+  review_lane --> mode
+  mode -- "new" --> new_session
+  mode -- "inherit_or_new" --> restore_check
+  mode -- "inherit" --> inherit_session
+  mode -- "compact" --> inherit_session
+  restore_check -- "あり" --> inherit_session
+  restore_check -- "なし" --> new_session
+  new_session --> save
+  inherit_session --> save
+  save --> upload
+```
+
+GitHub 上の副作用はコマンドごとに異なります。
+
+```mermaid
+flowchart TD
+  comment["GitHub コメントで起動"]
+  action["GitHub Actions 実行"]
+  parse["入力を解釈"]
+  command{"command"}
+
+  response["Issue または PR にコメント投稿"]
+  create_tasks["サブ Issue を作成"]
+  link_tasks["親 Issue に紐付け"]
+  summary["作成したサブ Issue の一覧をコメント投稿"]
+
+  issue_impl["Issue 起点 implement"]
+  branch["作業ブランチ作成"]
+  commit["変更を commit"]
+  push["branch を push"]
+  create_pr["PR 作成"]
+
+  pr_impl["PR 起点 implement"]
+  checkout["PR head branch を checkout"]
+  pr_commit["変更を commit"]
+  pr_push["PR branch へ push"]
+  patch["push できない fork PR では patch コメント投稿"]
+
+  artifact["artifact 保存"]
+  reactions["eyes reaction を付与、完了後に除去"]
+
+  comment --> action
+  action --> parse
+  parse --> command
+  action --> reactions
+  command -- "reply、confirm、requirements、arch、detail、review" --> response
+  command -- "breakdown" --> create_tasks
+  create_tasks --> link_tasks
+  link_tasks --> summary
+  command -- "implement、Issue 対象" --> issue_impl
+  issue_impl --> branch
+  branch --> commit
+  commit --> push
+  push --> create_pr
+  command -- "implement、PR 対象" --> pr_impl
+  pr_impl --> checkout
+  checkout --> pr_commit
+  pr_commit --> pr_push
+  pr_push -- "失敗かつ fork PR" --> patch
+  response --> artifact
+  summary --> artifact
+  create_pr --> artifact
+  pr_push --> artifact
+  patch --> artifact
+```
+
 ### workflow_dispatch
 
 `gh workflow run` で手動起動します。
