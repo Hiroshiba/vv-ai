@@ -82,7 +82,7 @@ export VV_CODEX_HOME=/path/to/codex_home
 `--event local` がデフォルトです。
 
 ```sh
-uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command plan --target-url https://github.com/org/repo/issues/123 --instruction "実装方針を3案ください"
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command requirements --target-url https://github.com/org/repo/issues/123 --instruction "要件を整理して"
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command implement --target-url https://github.com/org/repo/issues/123 --dry-run
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --target-type issue --target-number 123 --instruction "このIssueの要点を教えて"
 ```
@@ -91,7 +91,7 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 
 | 引数 | 説明 |
 | --- | --- |
-| `--command` | `reply` / `plan` / `implement` / `review` / `issue` |
+| `--command` | `reply` / `implement` / `review` / `issue` / `requirements` / `arch` / `detail` / `breakdown` |
 | `--instruction` | 自然言語の指示本文 |
 | `--target-url` | 対象の Issue / PR URL またはローカルパス |
 | `--target-type` | `issue` または `pr` |
@@ -109,7 +109,7 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 Issue または PR のコメントで `@vv-ai` で始めると起動します。
 
 ```
-@vv-ai plan 実装方針を3案ください
+@vv-ai requirements このIssueの要件を整理して
 @vv-ai implement --provider codex このIssueを実装して
 @vv-ai review --session_mode new このPRをレビューして
 ```
