@@ -21,6 +21,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 | コマンド       | 説明                                                         | Issue 上 | PR 上 |
 | -------------- | ------------------------------------------------------------ | -------- | ----- |
 | （省略時）     | **reply**（デフォルト）。指示に対してコメントで返答するだけ   | ✅        | ✅     |
+| `confirm`      | confirm-intent スキルで要望の意図確認を行いコメントで返す    | ✅        | ✅     |
 | `requirements` | define-requirements スキルで要件定義を行いコメントで返す     | ✅        | ✅     |
 | `arch`       | basic-design スキルで基本設計を行いコメントで返す            | ✅        | ✅     |
 | `detail`       | detailed-design スキルで詳細設計を行いコメントで返す         | ✅        | ✅     |
@@ -42,6 +43,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 
 ```
 @vv-ai 調べて要点だけ返して
+@vv-ai confirm
 @vv-ai requirements
 @vv-ai arch 基本設計の方針を示して
 @vv-ai detail
@@ -65,7 +67,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 
 - 手元 PC から `gh workflow run ...` で起動
 - 入力項目:
-  - `command`: reply | requirements | arch | detail | breakdown | implement | review | issue
+  - `command`: confirm | requirements | arch | detail | breakdown | implement | review | issue | reply
   - `target_type`: issue | pr（任意）
   - `target_number`: 番号（任意）
   - `target_url`: Issue/PR URL（任意）
@@ -78,10 +80,10 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
   - `target_url` が優先
 - 対象省略時の扱い:
   - `issue` コマンド: 対象不要（repo 未指定なら workflow のある repo に作成）
-  - `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 対象必須（不足ならエラー終了）
+  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 対象必須（不足ならエラー終了）
 - `instruction` 省略:
   - `reply`: 必須
-  - `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 省略可
+  - `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 省略可
   - `issue`: 必須
 - GitHub 上への可視化: **何もしない**。Actions Run と artifact だけを見る運用
 - 認可: `github.actor == "Hiroshiba"` を必須チェック（workflow 実行権限があっても Hiroshiba 以外は即終了）
@@ -270,7 +272,7 @@ provider_priority:
 
 ### セッションスコープ
 
-- **同一 Issue/PR 内** で `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` は **同じセッション**（main lane）を共有
+- **同一 Issue/PR 内** で `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` は **同じセッション**（main lane）を共有
 - `review` は **別セッション**（review lane）
 - セッションキー: `<backend> / <target> / <provider> / <lane>`
   - 例: `github / org/repo#123 / codex / main`
@@ -697,7 +699,7 @@ provider_priority:
 ## SUCCESS METRICS
 
 - プロトタイプとして 1 リポジトリで安定動作すること
-- Codex / Claude Code の両方で基本フロー（requirements → arch → detail → breakdown → implement → review）が回ること
+- Codex / Claude Code の両方で基本フロー（confirm → requirements → arch → detail → breakdown → implement → review）が回ること
 - セッション継続が機能し、文脈を引き継いだ作業ができること
 - fork PR でも安全に動作すること（API キー漏洩なし）
 - per-run の metrics / report が確実に保存されること

@@ -226,7 +226,7 @@ def _handle_post_execution(
 ) -> GitHubPullRequest | None:
     """コマンド固有の後処理を行う。作成された PR があれば返す。"""
     command_name = ready_execution.command.command
-    if command_name in ("reply", "review", "requirements", "arch", "detail"):
+    if command_name in ("reply", "review", "confirm", "requirements", "arch", "detail"):
         _post_response_comment(ready_execution, execution_result, github_client)
     elif command_name == "breakdown":
         _handle_breakdown_post_execution(repo_root, ready_execution, execution_result, github_client)
@@ -642,7 +642,7 @@ def _post_response_comment(
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
 ) -> None:
-    """reply / review / requirements / arch / detail の応答テキストをコメント投稿する。"""
+    """reply / review / confirm / requirements / arch / detail の応答テキストをコメント投稿する。"""
     command = ready_execution.command
     response_text = execution_result.response_text
     if response_text is None:

@@ -13,6 +13,10 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
         "review-diff スキルを使って、この PR をレビューしてください。"
         "あなたの出力テキストがそのままコメントとして投稿されます。"
     ),
+    "confirm": (
+        "confirm-intent スキルに従って要望の意図確認を行ってください。"
+        "あなたの出力テキストがそのままコメントとして投稿されます。"
+    ),
     "requirements": (
         "define-requirements スキルに従って要件定義を行ってください。"
         "あなたの出力テキストがそのままコメントとして投稿されます。"
