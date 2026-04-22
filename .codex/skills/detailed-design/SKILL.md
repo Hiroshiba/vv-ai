@@ -1,4 +1,5 @@
 ---
+name: detailed-design
 description: 基本設計に基づいて実装に必要な詳細を具体化する。fresh session が隠れた文脈なしで実装着手できるレベルまで落とす。コード変更はしない。
 ---
 

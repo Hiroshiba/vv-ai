@@ -1,6 +1,6 @@
 ---
+name: issue-close
 description: GitHub Issue をクローズする。コメント追加も行う。
-allowed-tools: Bash(gh issue close:*), Bash(gh issue comment:*)
 ---
 
 # Issue クローズ

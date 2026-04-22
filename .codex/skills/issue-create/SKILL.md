@@ -1,6 +1,6 @@
 ---
+name: issue-create
 description: GitHub Issue を作成する。親 Issue が指定された場合はサブ Issue として紐付ける。
-allowed-tools: Bash(gh issue create:*), Bash(gh api:*)
 ---
 
 # Issue 作成

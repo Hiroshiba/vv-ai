@@ -1,4 +1,5 @@
 ---
+name: diary
 description: 実装作業の日誌を diary/YYYY-MM-DD_HHmmss.md に作成する。実装の振り返りに使う。
 ---
 

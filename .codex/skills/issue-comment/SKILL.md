@@ -1,6 +1,6 @@
 ---
+name: issue-comment
 description: GitHub Issue にコメントを投稿する。
-allowed-tools: Bash(gh issue comment:*)
 ---
 
 # Issue コメント投稿
