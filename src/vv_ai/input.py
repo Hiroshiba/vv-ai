@@ -11,12 +11,18 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from vv_ai.config import ProviderName
 
-CommandName = Literal["reply", "plan", "implement", "review", "issue"]
+CommandName = Literal[
+    "reply", "implement", "review", "issue",
+    "requirements", "arch", "detail", "breakdown",
+]
 EventName = Literal["issue_comment", "workflow_dispatch", "local"]
 SessionMode = Literal["inherit", "inherit_or_new", "compact", "new"]
 TargetType = Literal["issue", "pr"]
 
-_COMMAND_NAMES: set[str] = {"reply", "plan", "implement", "review", "issue"}
+_COMMAND_NAMES: set[str] = {
+    "reply", "implement", "review", "issue",
+    "requirements", "arch", "detail", "breakdown",
+}
 
 
 class InputError(Exception):

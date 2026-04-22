@@ -35,10 +35,23 @@ class TestParseCommentInvocation:
         assert result.command == "reply"
         assert result.instruction == "要約して"
 
-    def test_command_plan(self) -> None:
-        result = parse_comment_invocation("@vv-ai plan 実装方針を3案ください")
-        assert result.command == "plan"
-        assert result.instruction == "実装方針を3案ください"
+    def test_command_requirements(self) -> None:
+        result = parse_comment_invocation("@vv-ai requirements")
+        assert result.command == "requirements"
+        assert result.instruction is None
+
+    def test_command_arch(self) -> None:
+        result = parse_comment_invocation("@vv-ai arch 基本設計してください")
+        assert result.command == "arch"
+        assert result.instruction == "基本設計してください"
+
+    def test_command_detail(self) -> None:
+        result = parse_comment_invocation("@vv-ai detail")
+        assert result.command == "detail"
+
+    def test_command_breakdown(self) -> None:
+        result = parse_comment_invocation("@vv-ai breakdown")
+        assert result.command == "breakdown"
 
     def test_command_implement(self) -> None:
         result = parse_comment_invocation("@vv-ai implement このIssueを実装して")
@@ -100,9 +113,9 @@ class TestParseCommentInvocation:
             parse_comment_invocation("@vv-ai review --session new")
 
     def test_leading_whitespace(self) -> None:
-        result = parse_comment_invocation("  @vv-ai plan 方針出して")
-        assert result.command == "plan"
-        assert result.instruction == "方針出して"
+        result = parse_comment_invocation("  @vv-ai arch 基本設計して")
+        assert result.command == "arch"
+        assert result.instruction == "基本設計して"
 
     def test_error_not_vv_ai_prefix(self) -> None:
         with pytest.raises(InputError):
@@ -140,7 +153,7 @@ class TestBuildRawInputFromCli:
 
     def test_dry_run(self) -> None:
         cli = CLIInput(
-            command="plan",
+            command="arch",
             target_url="https://github.com/org/repo/issues/1",
             dry_run=True,
         )
@@ -150,7 +163,7 @@ class TestBuildRawInputFromCli:
     def test_event_file_rejects_direct_args(self) -> None:
         cli = CLIInput(
             event_file="/tmp/event.json",
-            command="plan",
+            command="arch",
         )
         with pytest.raises(InputError):
             build_raw_input_from_cli(cli)
@@ -171,10 +184,10 @@ class TestBuildRawInputFromIssueCommentEvent:
         })
 
     def test_issue_comment(self) -> None:
-        event = self._make_event("@vv-ai plan 方針出して", pr=False)
+        event = self._make_event("@vv-ai arch 基本設計して", pr=False)
         raw = build_raw_input_from_issue_comment_event(event)
         assert raw.event_name == "issue_comment"
-        assert raw.command == "plan"
+        assert raw.command == "arch"
         assert raw.target_type == "issue"
         assert raw.target_number == 42
         assert raw.repository_full_name == "org/repo"
@@ -266,7 +279,7 @@ class TestResolveRawInput:
     def test_target_url_sets_has_target(self) -> None:
         raw = RawInput(
             event_name="local",
-            command="plan",
+            command="arch",
             target_url="https://github.com/org/repo/issues/1",
         )
         resolved = resolve_raw_input(raw)
@@ -276,7 +289,7 @@ class TestResolveRawInput:
     def test_target_type_and_number(self) -> None:
         raw = RawInput(
             event_name="local",
-            command="plan",
+            command="arch",
             target_type="pr",
             target_number=5,
         )
@@ -286,14 +299,14 @@ class TestResolveRawInput:
         assert resolved.target_number == 5
 
     def test_target_type_without_number_raises(self) -> None:
-        raw = RawInput(event_name="local", command="plan", target_type="issue")
+        raw = RawInput(event_name="local", command="arch", target_type="issue")
         with pytest.raises(ResolutionError, match="target_type.*target_number"):
             resolve_raw_input(raw)
 
     def test_target_number_zero_raises(self) -> None:
         raw = RawInput(
             event_name="local",
-            command="plan",
+            command="arch",
             target_type="issue",
             target_number=0,
         )
@@ -313,7 +326,7 @@ class TestResolveRawInput:
     def test_empty_instruction_normalized_to_none(self) -> None:
         raw = RawInput(
             event_name="local",
-            command="plan",
+            command="arch",
             instruction="   ",
             target_url="https://github.com/org/repo/issues/1",
         )
@@ -340,3 +353,18 @@ class TestResolveRawInput:
         )
         resolved = resolve_raw_input(raw)
         assert resolved.repo == "explicit/repo"
+
+    def test_breakdown_requires_target(self) -> None:
+        raw = RawInput(event_name="local", command="breakdown")
+        with pytest.raises(ResolutionError, match="target"):
+            resolve_raw_input(raw)
+
+    def test_breakdown_ignores_repo_fallback(self) -> None:
+        raw = RawInput(
+            event_name="local",
+            command="breakdown",
+            target_url="https://github.com/org/repo/issues/1",
+            repository_full_name="fallback/repo",
+        )
+        resolved = resolve_raw_input(raw)
+        assert resolved.repo is None

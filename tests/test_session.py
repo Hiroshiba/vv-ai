@@ -22,7 +22,7 @@ def _make_command() -> ResolvedCommand:
     return ResolvedCommand.model_validate(
         {
             "event_name": "local",
-            "command": "plan",
+            "command": "arch",
             "has_target": True,
             "target": ResolvedTarget(
                 backend="local",
@@ -168,7 +168,7 @@ class TestResolveSessionDefault:
         command = ResolvedCommand.model_validate(
             {
                 "event_name": "local",
-                "command": "plan",
+                "command": "arch",
                 "has_target": True,
                 "session_mode": None,
                 "target": ResolvedTarget(

@@ -74,6 +74,7 @@ class GitHubIssue(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    id: int
     repository_full_name: str
     number: int
     title: str
@@ -131,18 +132,13 @@ class GitHubClient:
         """Issue を取得する。"""
         raw_issue = self._run_json(
             [
-                "issue",
-                "view",
-                str(number),
-                "--repo",
-                repository_full_name,
-                "--json",
-                "number,title,body,state,author,url",
+                "api",
+                f"{_build_issues_path(repository_full_name)}/{_require_positive_id(number, 'number')}",
             ]
         )
         if not isinstance(raw_issue, dict):
             raise GitHubClientError("Issue 取得結果の JSON 形式が不正です")
-        return _build_issue(repository_full_name, raw_issue)
+        return _build_issue_from_rest(repository_full_name, raw_issue)
 
     def get_pull_request(
         self,
@@ -236,6 +232,27 @@ class GitHubClient:
         if not isinstance(payload, dict):
             raise GitHubClientError("Issue 作成結果の JSON 形式が不正です")
         return _build_issue_from_rest(repository_full_name, payload)
+
+    def add_sub_issue(
+        self,
+        repository_full_name: str,
+        parent_number: int,
+        child_issue_id: int,
+    ) -> None:
+        """親 Issue にサブ Issue を紐付ける。"""
+        self._run_json(
+            [
+                "api",
+                "--method",
+                "POST",
+                (
+                    f"repos/{_require_repository_full_name(repository_full_name)}"
+                    f"/issues/{_require_positive_id(parent_number, 'parent_number')}/sub_issues"
+                ),
+                "-F",
+                f"sub_issue_id={_require_positive_id(child_issue_id, 'child_issue_id')}",
+            ]
+        )
 
     def create_pull_request(
         self,
@@ -541,19 +558,6 @@ def _parse_github_datetime(value: str) -> datetime:
         raise GitHubClientError(f"artifact の日時形式が不正です: {value}") from exc
 
 
-def _build_issue(repository_full_name: str, raw_issue: dict[str, object]) -> GitHubIssue:
-    """Issue JSON を model へ変換する。"""
-    payload = {
-        "repository_full_name": repository_full_name,
-        "number": raw_issue.get("number"),
-        "title": raw_issue.get("title"),
-        "body": _coerce_text(raw_issue.get("body")),
-        "state": raw_issue.get("state"),
-        "author": _build_actor(raw_issue.get("author")),
-        "url": raw_issue.get("url"),
-    }
-    return _validate_model(GitHubIssue, payload, "Issue")
-
 
 def _build_issue_from_rest(
     repository_full_name: str,
@@ -561,6 +565,7 @@ def _build_issue_from_rest(
 ) -> GitHubIssue:
     """REST Issue JSON を model へ変換する。"""
     payload = {
+        "id": raw_issue.get("id"),
         "repository_full_name": repository_full_name,
         "number": raw_issue.get("number"),
         "title": raw_issue.get("title"),

@@ -9,7 +9,7 @@ on:
         description: "コマンド"
         required: true
         type: choice
-        options: [reply, plan, implement, review, issue]
+        options: [reply, implement, review, issue, requirements, arch, detail, breakdown]
       target_type:
         description: "対象種別 (issue / pr)"
         required: false

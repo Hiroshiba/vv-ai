@@ -18,13 +18,16 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 
 ### サブコマンド一覧
 
-| コマンド    | 説明                                                         | Issue 上 | PR 上 |
-| ----------- | ------------------------------------------------------------ | -------- | ----- |
-| （省略時）  | **reply**（デフォルト）。指示に対してコメントで返答するだけ   | ✅        | ✅     |
-| `plan`      | 計画（タスク分解・方針）をコメントで返す                     | ✅        | ✅     |
-| `implement` | 実装して PR 作成、または既存 PR に追コミット                 | ✅        | ✅     |
-| `review`    | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
-| `issue`     | 自然言語指示から Issue を作成                                | ✅        | ✅     |
+| コマンド       | 説明                                                         | Issue 上 | PR 上 |
+| -------------- | ------------------------------------------------------------ | -------- | ----- |
+| （省略時）     | **reply**（デフォルト）。指示に対してコメントで返答するだけ   | ✅        | ✅     |
+| `requirements` | define-requirements スキルで要件定義を行いコメントで返す     | ✅        | ✅     |
+| `arch`       | basic-design スキルで基本設計を行いコメントで返す            | ✅        | ✅     |
+| `detail`       | detailed-design スキルで詳細設計を行いコメントで返す         | ✅        | ✅     |
+| `breakdown`    | task-breakdown スキルでタスク分割し、サブ Issue を作成する   | ✅        | —      |
+| `implement`    | 実装して PR 作成、または既存 PR に追コミット                 | ✅        | ✅     |
+| `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
+| `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
 
 ### オプション
 
@@ -39,7 +42,10 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 
 ```
 @vv-ai 調べて要点だけ返して
-@vv-ai plan 実装方針を3案ください
+@vv-ai requirements
+@vv-ai arch 基本設計の方針を示して
+@vv-ai detail
+@vv-ai breakdown
 @vv-ai implement --provider codex このIssueを実装して
 @vv-ai review --session_mode inherit このPRをレビューして
 @vv-ai issue --repo org/repo この不具合をIssue化して
@@ -59,7 +65,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 
 - 手元 PC から `gh workflow run ...` で起動
 - 入力項目:
-  - `command`: reply | plan | implement | review | issue
+  - `command`: reply | requirements | arch | detail | breakdown | implement | review | issue
   - `target_type`: issue | pr（任意）
   - `target_number`: 番号（任意）
   - `target_url`: Issue/PR URL（任意）
@@ -72,10 +78,10 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
   - `target_url` が優先
 - 対象省略時の扱い:
   - `issue` コマンド: 対象不要（repo 未指定なら workflow のある repo に作成）
-  - `reply` / `plan` / `implement` / `review`: 対象必須（不足ならエラー終了）
+  - `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 対象必須（不足ならエラー終了）
 - `instruction` 省略:
   - `reply`: 必須
-  - `plan` / `implement` / `review`: 省略可
+  - `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 省略可
   - `issue`: 必須
 - GitHub 上への可視化: **何もしない**。Actions Run と artifact だけを見る運用
 - 認可: `github.actor == "Hiroshiba"` を必須チェック（workflow 実行権限があっても Hiroshiba 以外は即終了）
@@ -264,7 +270,7 @@ provider_priority:
 
 ### セッションスコープ
 
-- **同一 Issue/PR 内** で `reply` / `plan` / `implement` は **同じセッション**（main lane）を共有
+- **同一 Issue/PR 内** で `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` は **同じセッション**（main lane）を共有
 - `review` は **別セッション**（review lane）
 - セッションキー: `<backend> / <target> / <provider> / <lane>`
   - 例: `github / org/repo#123 / codex / main`
@@ -691,7 +697,7 @@ provider_priority:
 ## SUCCESS METRICS
 
 - プロトタイプとして 1 リポジトリで安定動作すること
-- Codex / Claude Code の両方で基本フロー（plan → implement → review）が回ること
+- Codex / Claude Code の両方で基本フロー（requirements → arch → detail → breakdown → implement → review）が回ること
 - セッション継続が機能し、文脈を引き継いだ作業ができること
 - fork PR でも安全に動作すること（API キー漏洩なし）
 - per-run の metrics / report が確実に保存されること

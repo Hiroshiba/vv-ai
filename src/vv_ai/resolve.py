@@ -64,7 +64,7 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
     target_url, target_type, target_number, has_target = _resolve_target_fields(raw_input)
     repo = _resolve_repo(command, raw_input)
 
-    if command in {"reply", "plan", "implement", "review"} and not has_target:
+    if command in {"reply", "implement", "review", "requirements", "arch", "detail", "breakdown"} and not has_target:
         raise ResolutionError(f"`{command}` コマンドには target 指定が必要です")
     if command in {"reply", "issue"} and instruction is None:
         raise ResolutionError(f"`{command}` コマンドには instruction が必要です")
@@ -157,7 +157,7 @@ def _resolve_target_fields(
 
 
 def _resolve_repo(command: CommandName, raw_input: RawInput) -> str | None:
-    """Issue 作成時の対象 repository を確定する。"""
+    """Issue 作成先の repository を確定する。"""
     if command != "issue":
         return raw_input.repo
     return raw_input.repo or raw_input.repository_full_name

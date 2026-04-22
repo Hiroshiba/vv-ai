@@ -14,7 +14,7 @@ def _make_command(**overrides: object) -> ResolvedCommand:
     """テスト用の最小 ResolvedCommand を生成する。"""
     defaults: dict[str, object] = {
         "event_name": "local",
-        "command": "plan",
+        "command": "arch",
         "has_target": True,
     }
     defaults.update(overrides)

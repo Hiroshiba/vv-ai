@@ -30,7 +30,7 @@ def _make_command(**overrides: object) -> ResolvedCommand:
     """テスト用の最小 ResolvedCommand を生成する。"""
     defaults: dict[str, object] = {
         "event_name": "local",
-        "command": "plan",
+        "command": "arch",
         "has_target": True,
         "dry_run": True,
         "target": ResolvedTarget(
@@ -183,7 +183,7 @@ class TestDryRunSuppression:
         github_client.create_issue.assert_not_called()
 
     def test_dryrun_suppresses_response_comment(self) -> None:
-        ready = _make_ready_execution(command=_make_command(command="plan"))
+        ready = _make_ready_execution(command=_make_command(command="arch"))
         result = _make_execution_result("success", response_text="計画です")
         github_client = MagicMock()
 
@@ -192,7 +192,7 @@ class TestDryRunSuppression:
         github_client.create_issue_comment.assert_not_called()
 
     def test_non_dryrun_posts_response_comment(self) -> None:
-        ready = _make_ready_execution(command=_make_command(command="plan", dry_run=False))
+        ready = _make_ready_execution(command=_make_command(command="arch", dry_run=False))
         result = _make_execution_result("success", response_text="計画です")
         github_client = MagicMock()
 

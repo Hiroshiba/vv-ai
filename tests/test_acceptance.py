@@ -272,7 +272,7 @@ class TestIssueCommentEvent:
     def test_authorized_user_exits_zero(self, tmp_path: Path) -> None:
         _write_config(tmp_path)
         event_path = self._write_event_file(
-            tmp_path, "@vv-ai plan 方針を教えて", "Hiroshiba"
+            tmp_path, "@vv-ai arch 基本設計して", "Hiroshiba"
         )
         argv = [
             "--event", "issue_comment",
@@ -291,7 +291,7 @@ class TestIssueCommentEvent:
         """allowed_users 外のユーザーは silent skip で exit code 0。"""
         _write_config(tmp_path)
         event_path = self._write_event_file(
-            tmp_path, "@vv-ai plan 方針を教えて", "unknown-user"
+            tmp_path, "@vv-ai arch 基本設計して", "unknown-user"
         )
         argv = [
             "--event", "issue_comment",

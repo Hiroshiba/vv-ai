@@ -71,10 +71,10 @@ def _make_resolved_session(
 
 
 class TestGitHubTargetDryRun:
-    def test_plan_github_issue_exits_zero(self, tmp_path: Path) -> None:
+    def test_arch_github_issue_exits_zero(self, tmp_path: Path) -> None:
         _write_config(tmp_path)
         argv = [
-            "--command", "plan",
+            "--command", "arch",
             "--target-url", "https://github.com/org/repo/issues/1",
             "--instruction", "テスト指示",
             "--provider", "codex",
@@ -100,7 +100,7 @@ class TestGitHubTargetDryRun:
         mock_save.assert_called_once()
 
         ready_execution = mock_provider.call_args[0][1]
-        assert ready_execution.command.command == "plan"
+        assert ready_execution.command.command == "arch"
         assert ready_execution.command.dry_run is True
         assert ready_execution.command.target is not None
         assert ready_execution.command.target.backend == "github"
@@ -149,7 +149,7 @@ class TestInputErrors:
     def test_missing_target_exits_2(self, tmp_path: Path) -> None:
         _write_config(tmp_path)
         argv = [
-            "--command", "plan",
+            "--command", "arch",
             "--instruction", "テスト指示",
             "--provider", "codex",
             "--session_mode", "new",
@@ -185,7 +185,7 @@ class TestProviderFailure:
     def test_provider_error_exits_1_and_saves(self, tmp_path: Path) -> None:
         _write_config(tmp_path)
         argv = [
-            "--command", "plan",
+            "--command", "arch",
             "--target-url", "https://github.com/org/repo/issues/1",
             "--instruction", "テスト指示",
             "--provider", "codex",

@@ -64,7 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--command",
-        choices=["reply", "plan", "implement", "review", "issue"],
+        choices=["reply", "implement", "review", "issue", "requirements", "arch", "detail", "breakdown"],
         help="実行コマンドを指定します。",
     )
     parser.add_argument("--instruction", help="自然言語の指示本文です。")

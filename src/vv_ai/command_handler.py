@@ -25,6 +25,7 @@ from vv_ai.git_ops import (
 from vv_ai.github import (
     GitHubClient,
     GitHubClientError,
+    GitHubIssue,
     GitHubPullRequest,
     GitHubReactionContent,
     build_github_client,
@@ -52,9 +53,14 @@ def run_command(
     if command.command == "review" and (target is None or target.kind != "pr"):
         raise CommandError("`review` コマンドは PR を対象に指定してください")
 
+    if command.command == "breakdown" and (
+        target is None or target.kind != "issue" or target.backend != "github"
+    ):
+        raise CommandError("`breakdown` コマンドは GitHub Issue を対象に指定してください")
+
     github_client = (
         build_github_client()
-        if _is_github_target(target) or command.command == "issue"
+        if _is_github_target(target) or command.command in {"issue", "breakdown"}
         else None
     )
 
@@ -220,8 +226,10 @@ def _handle_post_execution(
 ) -> GitHubPullRequest | None:
     """コマンド固有の後処理を行う。作成された PR があれば返す。"""
     command_name = ready_execution.command.command
-    if command_name in ("reply", "plan", "review"):
+    if command_name in ("reply", "review", "requirements", "arch", "detail"):
         _post_response_comment(ready_execution, execution_result, github_client)
+    elif command_name == "breakdown":
+        _handle_breakdown_post_execution(ready_execution, execution_result, github_client)
     elif command_name == "issue":
         _handle_issue_post_execution(ready_execution, execution_result, github_client)
     elif command_name == "implement" and implement_branch_name is not None:
@@ -506,12 +514,118 @@ def _handle_issue_post_execution(
             print(f"Issue リンクのコメント投稿に失敗しました: {exc}", file=sys.stderr)
 
 
+def _parse_breakdown_output(response_text: str) -> list[tuple[str, str]]:
+    """AI の出力から複数タスクの (title, body) リストを抽出する。"""
+    blocks = []
+    current: list[str] = []
+    for line in response_text.splitlines():
+        if line.strip() == "TASK:":
+            if current:
+                blocks.append("\n".join(current))
+            current = []
+        else:
+            current.append(line)
+    if current:
+        blocks.append("\n".join(current))
+
+    tasks = []
+    for block in blocks:
+        lines = block.split("\n")
+        non_empty = [ln for ln in lines if ln.strip()]
+        if not non_empty:
+            continue
+        title_line = non_empty[0] if non_empty else ""
+        if not title_line.startswith("TITLE:"):
+            raise CommandError(
+                "AI 出力が期待するフォーマットではありません。TASK: の次の行は `TITLE: <タイトル>` である必要があります"
+            )
+        title = title_line[len("TITLE:"):].strip()
+        if not title:
+            raise CommandError("AI 出力の TITLE が空です")
+        body_index = None
+        for i, line in enumerate(lines):
+            if line.strip() == "BODY:":
+                body_index = i
+                break
+        if body_index is None:
+            raise CommandError(
+                "AI 出力が期待するフォーマットではありません。TITLE: の後に `BODY:` が必要です"
+            )
+        body = "\n".join(lines[body_index + 1:])
+        tasks.append((title, body))
+
+    if not tasks:
+        raise CommandError("AI 出力にタスクが含まれていません")
+    return tasks
+
+
+def _handle_breakdown_post_execution(
+    ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
+    github_client: GitHubClient | None,
+) -> None:
+    """breakdown コマンドの後処理（複数サブ Issue 作成）を行う。"""
+    command = ready_execution.command
+    response_text = execution_result.response_text
+
+    if execution_result.status != "success":
+        return
+
+    if response_text is None:
+        raise CommandError("AI からの応答がありません")
+
+    tasks = _parse_breakdown_output(response_text)
+    target = command.target
+
+    if command.dry_run:
+        repo = command.repo or (target.repository_full_name if target else None) or "(不明)"
+        print(f"[dry-run] サブ Issue 作成をスキップします。repo: {repo}, タスク数: {len(tasks)}")
+        for title, _ in tasks:
+            print(f"  - {title}")
+        return
+
+    assert github_client is not None
+    assert target is not None
+    assert target.number is not None
+    assert target.repository_full_name is not None
+
+    repo = target.repository_full_name
+
+    created: list[GitHubIssue] = []
+    for title, body in tasks:
+        try:
+            issue = github_client.create_issue(repo, title, body)
+        except GitHubClientError as exc:
+            raise CommandError(str(exc)) from exc
+        try:
+            github_client.add_sub_issue(repo, target.number, issue.id)
+        except GitHubClientError as exc:
+            print(f"サブ Issue 紐付けに失敗しました（続行）: {exc}", file=sys.stderr)
+        created.append(issue)
+        print(f"サブ Issue を作成しました: {issue.url}")
+
+    if (
+        command.comment_id is not None
+        and target.repository_full_name is not None
+    ):
+        links = "\n".join(f"- {issue.url}" for issue in created)
+        summary = f"サブ Issue を {len(created)} 件作成しました:\n{links}"
+        try:
+            github_client.create_issue_comment(
+                target.repository_full_name,
+                target.number,
+                summary,
+            )
+        except GitHubClientError as exc:
+            print(f"サマリコメント投稿に失敗しました: {exc}", file=sys.stderr)
+
+
 def _post_response_comment(
     ready_execution: ReadyExecution,
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
 ) -> None:
-    """reply / plan / review の応答テキストをコメント投稿する。"""
+    """reply / review / requirements / arch / detail の応答テキストをコメント投稿する。"""
     command = ready_execution.command
     response_text = execution_result.response_text
     if response_text is None:
