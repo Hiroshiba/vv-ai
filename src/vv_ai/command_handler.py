@@ -229,7 +229,7 @@ def _handle_post_execution(
     if command_name in ("reply", "review", "requirements", "arch", "detail"):
         _post_response_comment(ready_execution, execution_result, github_client)
     elif command_name == "breakdown":
-        _handle_breakdown_post_execution(ready_execution, execution_result, github_client)
+        _handle_breakdown_post_execution(repo_root, ready_execution, execution_result, github_client)
     elif command_name == "issue":
         _handle_issue_post_execution(ready_execution, execution_result, github_client)
     elif command_name == "implement" and implement_branch_name is not None:
@@ -514,52 +514,69 @@ def _handle_issue_post_execution(
             print(f"Issue リンクのコメント投稿に失敗しました: {exc}", file=sys.stderr)
 
 
-def _parse_breakdown_output(response_text: str) -> list[tuple[str, str]]:
-    """AI の出力から複数タスクの (title, body) リストを抽出する。"""
-    blocks = []
-    current: list[str] = []
+def _parse_single_task_file(content: str, filename: str) -> tuple[str, str]:
+    """タスクファイルの内容から (title, body) を抽出する。"""
+    lines = content.split("\n")
+    non_empty = [ln for ln in lines if ln.strip()]
+    if not non_empty:
+        raise CommandError(f"タスクファイルが空です: {filename}")
+    title_line = non_empty[0]
+    if not title_line.startswith("TITLE:"):
+        raise CommandError(
+            f"{filename}: 先頭行は `TITLE: <タイトル>` である必要があります"
+        )
+    title = title_line[len("TITLE:"):].strip()
+    if not title:
+        raise CommandError(f"{filename}: TITLE が空です")
+    body_index = None
+    for i, line in enumerate(lines):
+        if line.strip() == "BODY:":
+            body_index = i
+            break
+    if body_index is None:
+        raise CommandError(f"{filename}: TITLE の後に `BODY:` が必要です")
+    body = "\n".join(lines[body_index + 1:])
+    return title, body
+
+
+def _parse_breakdown_dir(
+    response_text: str, repo_root: Path
+) -> list[tuple[str, str]]:
+    """AI の出力からタスクディレクトリを特定し、(title, body) リストを返す。"""
+    breakdown_dir: Path | None = None
     for line in response_text.splitlines():
-        if line.strip() == "TASK:":
-            if current:
-                blocks.append("\n".join(current))
-            current = []
-        else:
-            current.append(line)
-    if current:
-        blocks.append("\n".join(current))
-
+        stripped = line.strip()
+        if stripped.startswith("BREAKDOWN_DIR:"):
+            dir_path = stripped[len("BREAKDOWN_DIR:"):].strip()
+            breakdown_dir = Path(dir_path)
+            break
+    if breakdown_dir is None:
+        raise CommandError("AI 出力に BREAKDOWN_DIR: が含まれていません")
+    if not breakdown_dir.is_absolute():
+        breakdown_dir = repo_root / breakdown_dir
+    breakdown_dir = breakdown_dir.resolve()
+    hiho_temp = (repo_root / "hiho_temp").resolve()
+    if not breakdown_dir.is_relative_to(hiho_temp):
+        raise CommandError(
+            f"タスクディレクトリは hiho_temp 配下である必要があります: {breakdown_dir}"
+        )
+    if not breakdown_dir.is_dir():
+        raise CommandError(f"タスクディレクトリが存在しません: {breakdown_dir}")
+    md_files = sorted(breakdown_dir.glob("*.md"))
+    if not md_files:
+        raise CommandError(f"タスクディレクトリにファイルがありません: {breakdown_dir}")
     tasks = []
-    for block in blocks:
-        lines = block.split("\n")
-        non_empty = [ln for ln in lines if ln.strip()]
-        if not non_empty:
-            continue
-        title_line = non_empty[0] if non_empty else ""
-        if not title_line.startswith("TITLE:"):
-            raise CommandError(
-                "AI 出力が期待するフォーマットではありません。TASK: の次の行は `TITLE: <タイトル>` である必要があります"
-            )
-        title = title_line[len("TITLE:"):].strip()
-        if not title:
-            raise CommandError("AI 出力の TITLE が空です")
-        body_index = None
-        for i, line in enumerate(lines):
-            if line.strip() == "BODY:":
-                body_index = i
-                break
-        if body_index is None:
-            raise CommandError(
-                "AI 出力が期待するフォーマットではありません。TITLE: の後に `BODY:` が必要です"
-            )
-        body = "\n".join(lines[body_index + 1:])
-        tasks.append((title, body))
-
-    if not tasks:
-        raise CommandError("AI 出力にタスクが含まれていません")
+    for md_file in md_files:
+        if md_file.is_symlink():
+            raise CommandError(f"タスクファイルがシンボリックリンクです: {md_file.name}")
+        content = md_file.read_text(encoding="utf-8")
+        task = _parse_single_task_file(content, md_file.name)
+        tasks.append(task)
     return tasks
 
 
 def _handle_breakdown_post_execution(
+    repo_root: Path,
     ready_execution: ReadyExecution,
     execution_result: ExecutionResult,
     github_client: GitHubClient | None,
@@ -574,7 +591,7 @@ def _handle_breakdown_post_execution(
     if response_text is None:
         raise CommandError("AI からの応答がありません")
 
-    tasks = _parse_breakdown_output(response_text)
+    tasks = _parse_breakdown_dir(response_text, repo_root)
     target = command.target
 
     if command.dry_run:
