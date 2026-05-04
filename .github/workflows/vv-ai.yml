@@ -94,7 +94,7 @@ jobs:
             -H "Accept: application/vnd.github.raw" > /tmp/vv-ai.yml
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
 
       - name: Run vv-ai verify
         id: verify
@@ -121,7 +121,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
 
@@ -166,7 +166,7 @@ jobs:
           fi
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
 
       - name: Install age
         run: |
@@ -210,7 +210,7 @@ jobs:
       # NOTE: パブリックリポジトリの情報はどんなGITHUB_TOKENでも問題なく見れる
       - name: Generate read-only token
         id: readonly-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.VV_AI_APP_ID }}
           private-key: ${{ secrets.VV_AI_APP_PRIVATE_KEY }}
@@ -218,7 +218,7 @@ jobs:
 
       - name: Generate write token
         id: write-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.VV_AI_APP_ID }}
           private-key: ${{ secrets.VV_AI_APP_PRIVATE_KEY }}
@@ -296,7 +296,7 @@ jobs:
 
       - name: Upload session artifact
         if: always() && steps.artifact_paths.outputs.session_path != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.artifact_paths.outputs.session_name }}
           path: ${{ steps.artifact_paths.outputs.session_path }}
@@ -304,7 +304,7 @@ jobs:
 
       - name: Upload session artifact (forked)
         if: always() && steps.artifact_paths.outputs.session_path_1 != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.artifact_paths.outputs.session_name_1 }}
           path: ${{ steps.artifact_paths.outputs.session_path_1 }}
@@ -312,7 +312,7 @@ jobs:
 
       - name: Upload metrics artifact
         if: always() && steps.artifact_paths.outputs.metrics_path != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.artifact_paths.outputs.metrics_name }}
           path: ${{ steps.artifact_paths.outputs.metrics_path }}
@@ -320,7 +320,7 @@ jobs:
 
       - name: Upload report artifact
         if: always() && steps.artifact_paths.outputs.report_path != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.artifact_paths.outputs.report_name }}
           path: ${{ steps.artifact_paths.outputs.report_path }}
