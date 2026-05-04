@@ -75,11 +75,12 @@ def build_provider_prompt(
     ready_execution: ReadyExecution,
     past_vvai_comments: list[str],
     implement_branch_name: str | None,
+    worktree_ref: str | None,
 ) -> str:
     """コンテキストと指示を組み合わせたプロンプト文字列を返す。"""
     sections: list[str] = []
 
-    sections.append(_build_header(ready_execution, implement_branch_name))
+    sections.append(_build_header(ready_execution, implement_branch_name, worktree_ref))
 
     if ready_execution.resolved_session is not None:
         restore_manifest = ready_execution.resolved_session.restore_manifest
@@ -109,6 +110,7 @@ def build_provider_prompt(
 def _build_header(
     ready_execution: ReadyExecution,
     implement_branch_name: str | None,
+    worktree_ref: str | None,
 ) -> str:
     """定型ヘッダ文字列を返す。"""
     command = ready_execution.command
@@ -138,4 +140,8 @@ def _build_header(
             lines.append(
                 f"現在のブランチ: `{implement_branch_name}`。このブランチ上で作業してください。"
             )
+    elif worktree_ref is not None:
+        lines.append(
+            f"現在の参照: `{worktree_ref}`。この内容を前提に作業してください。"
+        )
     return "\n".join(lines)

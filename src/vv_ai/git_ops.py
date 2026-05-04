@@ -100,6 +100,11 @@ def fetch_remote(repo_root: Path, remote: str) -> None:
     run_git_command(repo_root, "fetch", remote)
 
 
+def checkout_ref(repo_root: Path, ref_name: str) -> None:
+    """指定 ref をチェックアウトする。"""
+    run_git_command(repo_root, "checkout", ref_name)
+
+
 def fetch_and_checkout_branch(repo_root: Path, branch_name: str) -> None:
     """リモートブランチを fetch してチェックアウトする。"""
     run_git_command(repo_root, "fetch", "origin", branch_name)

@@ -33,12 +33,14 @@ allowed_users:
 provider_priority:
   - codex
   - claude
+pull_request_target_branch: master
 ```
 
 | 項目 | 必須 | 説明 |
 | --- | --- | --- |
 | `allowed_users` | 必須 | コマンド実行を許可する GitHub ユーザーの一覧 |
 | `provider_priority` | 任意 | プロバイダの優先順。デフォルトは `[codex, claude]` |
+| `pull_request_target_branch` | 任意 | PR の向き先ブランチ。未指定時はリポジトリのデフォルトブランチ |
 
 ### Secrets
 
@@ -128,15 +130,11 @@ gh workflow run vv-ai.yml \
 
 入力項目: `command`, `target_type`, `target_number`, `target_url`, `instruction`, `provider`, `session_mode`, `dry_run`, `repo`
 
-実行結果は GitHub Actions の Run と artifact から確認します。コメントやリアクションは返しません。
-
 ### 導入手順
 
 1. `.github/workflows/vv-ai.yml` をリポジトリにコピーする
 2. リポジトリの Settings > Secrets and variables > Actions に必要な Secret を登録する
 3. リポジトリルートに `vv-ai.yml` を配置する
-
-workflow には `contents: write`, `issues: write`, `pull-requests: write` の権限が必要です。
 
 ## Reusable Workflow 化の前提
 

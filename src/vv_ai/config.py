@@ -25,6 +25,7 @@ class VVAIConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     allowed_users: list[str] = Field(min_length=1)
+    pull_request_target_branch: str | None = None
     provider_priority: list[ProviderName] = Field(
         default_factory=lambda: ["codex", "claude"],
         min_length=1,
@@ -37,6 +38,17 @@ class VVAIConfig(BaseModel):
         normalized = [user.strip() for user in value]
         if any(not user for user in normalized):
             raise ValueError("allowed_users に空文字は指定できません")
+        return normalized
+
+    @field_validator("pull_request_target_branch")
+    @classmethod
+    def validate_pull_request_target_branch(cls, value: str | None) -> str | None:
+        """空文字や前後空白だけの PR 作成先ブランチ名を弾く。"""
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("pull_request_target_branch に空文字は指定できません")
         return normalized
 
 

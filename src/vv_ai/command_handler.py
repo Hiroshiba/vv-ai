@@ -10,6 +10,7 @@ from vv_ai.execution import ExecutionResult, ExecutionStatus
 from vv_ai.git_ops import (
     GitOpsError,
     checkout_fork_pr,
+    checkout_ref,
     commit_all_changes,
     create_and_checkout_branch,
     fetch_and_checkout_branch,
@@ -38,6 +39,11 @@ from vv_ai.resolve import ResolvedTarget
 
 class CommandError(Exception):
     """コマンド実行の前提条件エラー。"""
+
+
+_ISSUE_CONTEXT_COMMANDS = frozenset(
+    {"confirm", "reply", "requirements", "arch", "detail", "breakdown"}
+)
 
 
 def run_command(
@@ -85,6 +91,7 @@ def run_command(
     pr_info: GitHubPullRequest | None = None
     head_sha_before: str | None = None
     fork_base_ref: str | None = None
+    worktree_ref: str | None = None
     execution_result: ExecutionResult | None = None
     created_pr: GitHubPullRequest | None = None
     finalize_status: ExecutionStatus = "failure"
@@ -96,26 +103,25 @@ def run_command(
             start_point: str | None = None
             if _is_github_target(target):
                 assert github_client is not None
-                assert target.repository_full_name is not None
-                try:
-                    repo_info = github_client.get_repo_info(target.repository_full_name)
-                except GitHubClientError as exc:
-                    raise CommandError(str(exc)) from exc
-                if repo_info.is_fork:
-                    assert repo_info.parent_full_name is not None
-                    assert repo_info.parent_default_branch is not None
-                    upstream_url = f"https://github.com/{repo_info.parent_full_name}"
-                    try:
-                        setup_upstream_remote(repo_root, upstream_url)
-                        fetch_remote(repo_root, "upstream")
-                    except GitOpsError as exc:
-                        raise CommandError(str(exc)) from exc
-                    fork_base_ref = f"upstream/{repo_info.parent_default_branch}"
-                    start_point = fork_base_ref
+                fork_base_ref = _resolve_fork_base_ref(repo_root, target, github_client)
+                start_point = fork_base_ref
             try:
                 create_and_checkout_branch(repo_root, implement_branch_name, start_point)
             except GitOpsError as exc:
                 raise CommandError(str(exc)) from exc
+        elif (
+            command.command in _ISSUE_CONTEXT_COMMANDS
+            and target is not None
+            and target.kind == "issue"
+            and _is_github_target(target)
+        ):
+            assert github_client is not None
+            worktree_ref = _resolve_fork_base_ref(repo_root, target, github_client)
+            if worktree_ref is not None:
+                try:
+                    checkout_ref(repo_root, worktree_ref)
+                except GitOpsError as exc:
+                    raise CommandError(str(exc)) from exc
         elif command.command == "implement" and target is not None and target.kind == "pr":
             assert target.repository_full_name is not None
             assert target.number is not None
@@ -146,7 +152,7 @@ def run_command(
             head_sha_before = get_head_sha(repo_root)
 
         provider_prompt = build_provider_prompt(
-            ready_execution, past_vvai_comments, implement_branch_name
+            ready_execution, past_vvai_comments, implement_branch_name, worktree_ref
         )
         execution_result = execute_provider(
             repo_root,
@@ -192,6 +198,31 @@ def run_command(
 def _is_github_target(target: ResolvedTarget | None) -> bool:
     """GitHub backend の target かどうかを返す。"""
     return target is not None and target.backend == "github"
+
+
+def _resolve_fork_base_ref(
+    repo_root: Path,
+    target: ResolvedTarget,
+    github_client: GitHubClient,
+) -> str | None:
+    """fork repo なら parent default branch の ref を返し、必要な remote を準備する。"""
+    assert target.repository_full_name is not None
+    try:
+        repo_info = github_client.get_repo_info(target.repository_full_name)
+    except GitHubClientError as exc:
+        raise CommandError(str(exc)) from exc
+    if not repo_info.is_fork:
+        return None
+
+    assert repo_info.parent_full_name is not None
+    assert repo_info.parent_default_branch is not None
+    upstream_url = f"https://github.com/{repo_info.parent_full_name}"
+    try:
+        setup_upstream_remote(repo_root, upstream_url)
+        fetch_remote(repo_root, "upstream")
+    except GitOpsError as exc:
+        raise CommandError(str(exc)) from exc
+    return f"upstream/{repo_info.parent_default_branch}"
 
 
 def _fetch_past_vvai_comments(
@@ -277,10 +308,12 @@ def _handle_implement_issue_post_execution(
     assert target.number is not None
     assert github_client is not None
 
-    try:
-        base_branch = github_client.get_default_branch(target.repository_full_name)
-    except GitHubClientError as exc:
-        raise CommandError(str(exc)) from exc
+    base_branch = ready_execution.config.pull_request_target_branch
+    if base_branch is None:
+        try:
+            base_branch = github_client.get_default_branch(target.repository_full_name)
+        except GitHubClientError as exc:
+            raise CommandError(str(exc)) from exc
 
     commit_message = f"vv-ai: implement for #{target.number}"
     try:
