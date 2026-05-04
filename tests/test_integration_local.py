@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from vv_ai.cli import main
 from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
 from vv_ai.resolve import BackendName
+from vv_ai.github import RepoInfo
 from vv_ai.metrics_artifact import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
 from vv_ai.report_artifact import ReportSections
 from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
@@ -84,13 +85,17 @@ class TestGitHubTargetDryRun:
         session = _make_resolved_session("github", "org/repo#1", "codex")
         result = _make_execution_result("success", "テスト応答")
         env_patch = {"VV_OPENAI_API_KEY": "dummy-key"}
+        github_client = MagicMock()
+        github_client.get_repo_info.return_value = RepoInfo(
+            is_fork=False, parent_full_name=None, parent_default_branch=None
+        )
 
         with (
             patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
             patch("vv_ai.cli.resolve_session", return_value=session),
             patch("vv_ai.command_handler.execute_provider", return_value=result) as mock_provider,
             patch("vv_ai.cli.save_execution_artifacts", return_value=MagicMock(spec=SavedExecutionArtifacts)) as mock_save,
-            patch("vv_ai.command_handler.build_github_client", return_value=MagicMock()),
+            patch("vv_ai.command_handler.build_github_client", return_value=github_client),
             patch.dict("os.environ", env_patch),
         ):
             exit_code = main(argv)

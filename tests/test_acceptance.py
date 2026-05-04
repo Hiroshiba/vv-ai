@@ -202,7 +202,7 @@ class TestReviewDryRun:
         assert exit_code == 0
 
     def test_review_issue_exits_1(self, tmp_path: Path) -> None:
-        """review コマンドに Issue target を指定すると CommandError で exit code 1。"""
+        """review コマンドに Issue target を指定すると exit code 1。"""
         _write_config(tmp_path)
         argv = [
             "--command", "review",

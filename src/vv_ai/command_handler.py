@@ -37,10 +37,6 @@ from vv_ai.provider_execution import execute_provider
 from vv_ai.resolve import ResolvedTarget
 
 
-class CommandError(Exception):
-    """コマンド実行の前提条件エラー。"""
-
-
 _ISSUE_CONTEXT_COMMANDS = frozenset(
     {"confirm", "reply", "requirements", "arch", "detail", "breakdown"}
 )
@@ -57,12 +53,12 @@ def run_command(
     target = command.target
 
     if command.command == "review" and (target is None or target.kind != "pr"):
-        raise CommandError("`review` コマンドは PR を対象に指定してください")
+        raise RuntimeError("`review` コマンドは PR を対象に指定してください")
 
     if command.command == "breakdown" and (
         target is None or target.kind != "issue" or target.backend != "github"
     ):
-        raise CommandError("`breakdown` コマンドは GitHub Issue を対象に指定してください")
+        raise RuntimeError("`breakdown` コマンドは GitHub Issue を対象に指定してください")
 
     github_client = (
         build_github_client()
@@ -105,10 +101,7 @@ def run_command(
                 assert github_client is not None
                 fork_base_ref = _resolve_fork_base_ref(repo_root, target, github_client)
                 start_point = fork_base_ref
-            try:
-                create_and_checkout_branch(repo_root, implement_branch_name, start_point)
-            except GitOpsError as exc:
-                raise CommandError(str(exc)) from exc
+            create_and_checkout_branch(repo_root, implement_branch_name, start_point)
         elif (
             command.command in _ISSUE_CONTEXT_COMMANDS
             and target is not None
@@ -118,35 +111,23 @@ def run_command(
             assert github_client is not None
             worktree_ref = _resolve_fork_base_ref(repo_root, target, github_client)
             if worktree_ref is not None:
-                try:
-                    checkout_ref(repo_root, worktree_ref)
-                except GitOpsError as exc:
-                    raise CommandError(str(exc)) from exc
+                checkout_ref(repo_root, worktree_ref)
         elif command.command == "implement" and target is not None and target.kind == "pr":
             assert target.repository_full_name is not None
             assert target.number is not None
             if not _is_github_target(target):
-                raise CommandError("ローカル PR への implement は未対応です")
+                raise RuntimeError("ローカル PR への implement は未対応です")
             assert github_client is not None
-            try:
-                pr_info = github_client.get_pull_request(
-                    target.repository_full_name, target.number
-                )
-            except GitHubClientError as exc:
-                raise CommandError(str(exc)) from exc
+            pr_info = github_client.get_pull_request(
+                target.repository_full_name, target.number
+            )
             implement_branch_name = pr_info.head_ref_name
             if pr_info.is_cross_repository:
-                try:
-                    checkout_fork_pr(
-                        repo_root, target.repository_full_name, target.number
-                    )
-                except GitOpsError as exc:
-                    raise CommandError(str(exc)) from exc
+                checkout_fork_pr(
+                    repo_root, target.repository_full_name, target.number
+                )
             else:
-                try:
-                    fetch_and_checkout_branch(repo_root, implement_branch_name)
-                except GitOpsError as exc:
-                    raise CommandError(str(exc)) from exc
+                fetch_and_checkout_branch(repo_root, implement_branch_name)
 
         if pr_info is not None and pr_info.is_cross_repository:
             head_sha_before = get_head_sha(repo_root)
@@ -207,21 +188,15 @@ def _resolve_fork_base_ref(
 ) -> str | None:
     """fork repo なら parent default branch の ref を返し、必要な remote を準備する。"""
     assert target.repository_full_name is not None
-    try:
-        repo_info = github_client.get_repo_info(target.repository_full_name)
-    except GitHubClientError as exc:
-        raise CommandError(str(exc)) from exc
+    repo_info = github_client.get_repo_info(target.repository_full_name)
     if not repo_info.is_fork:
         return None
 
     assert repo_info.parent_full_name is not None
     assert repo_info.parent_default_branch is not None
     upstream_url = f"https://github.com/{repo_info.parent_full_name}"
-    try:
-        setup_upstream_remote(repo_root, upstream_url)
-        fetch_remote(repo_root, "upstream")
-    except GitOpsError as exc:
-        raise CommandError(str(exc)) from exc
+    setup_upstream_remote(repo_root, upstream_url)
+    fetch_remote(repo_root, "upstream")
     return f"upstream/{repo_info.parent_default_branch}"
 
 
@@ -310,51 +285,33 @@ def _handle_implement_issue_post_execution(
 
     base_branch = ready_execution.config.pull_request_target_branch
     if base_branch is None:
-        try:
-            base_branch = github_client.get_default_branch(target.repository_full_name)
-        except GitHubClientError as exc:
-            raise CommandError(str(exc)) from exc
+        base_branch = github_client.get_default_branch(target.repository_full_name)
 
     commit_message = f"vv-ai: implement for #{target.number}"
-    try:
-        committed = commit_all_changes(repo_root, commit_message)
-    except GitOpsError as exc:
-        raise CommandError(str(exc)) from exc
+    committed = commit_all_changes(repo_root, commit_message)
     if committed:
         print(f"ワーキングツリーの変更をコミットしました: {commit_message}")
 
     commits_ahead_ref = fork_base_ref if fork_base_ref is not None else base_branch
-    try:
-        ahead = has_commits_ahead(repo_root, commits_ahead_ref)
-    except GitOpsError as exc:
-        raise CommandError(str(exc)) from exc
+    ahead = has_commits_ahead(repo_root, commits_ahead_ref)
     if not ahead:
         print("変更コミットがないため push と PR 作成をスキップします")
         return None
 
-    try:
-        push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
-    except GitOpsError as exc:
-        raise CommandError(str(exc)) from exc
+    push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
 
-    try:
-        issue = github_client.get_issue(target.repository_full_name, target.number)
-    except GitHubClientError as exc:
-        raise CommandError(str(exc)) from exc
+    issue = github_client.get_issue(target.repository_full_name, target.number)
     pr_title = issue.title
     pr_body = f"Closes #{target.number}"
 
-    try:
-        pr = github_client.create_pull_request(
-            target.repository_full_name,
-            pr_title,
-            pr_body,
-            implement_branch_name,
-            base_branch,
-            maintainer_can_modify=True,
-        )
-    except GitHubClientError as exc:
-        raise CommandError(str(exc)) from exc
+    pr = github_client.create_pull_request(
+        target.repository_full_name,
+        pr_title,
+        pr_body,
+        implement_branch_name,
+        base_branch,
+        maintainer_can_modify=True,
+    )
     print(f"PR を作成しました: {pr.url}")
     return pr
 
@@ -384,18 +341,12 @@ def _handle_implement_pr_post_execution(
     assert target.number is not None
 
     commit_message = f"vv-ai: implement for PR #{target.number}"
-    try:
-        committed = commit_all_changes(repo_root, commit_message)
-    except GitOpsError as exc:
-        raise CommandError(str(exc)) from exc
+    committed = commit_all_changes(repo_root, commit_message)
     if committed:
         print(f"ワーキングツリーの変更をコミットしました: {commit_message}")
 
     if pr_info is None or not pr_info.is_cross_repository:
-        try:
-            push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
-        except GitOpsError as exc:
-            raise CommandError(str(exc)) from exc
+        push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
         print(f"ブランチ `{implement_branch_name}` を push しました。")
         return
 
@@ -481,16 +432,16 @@ def _parse_issue_output(response_text: str) -> tuple[str, str]:
     lines = response_text.split("\n")
 
     if not lines or not lines[0].startswith("TITLE:"):
-        raise CommandError(
+        raise RuntimeError(
             "AI 出力が期待するフォーマットではありません。1行目は `TITLE: <タイトル>` である必要があります"
         )
 
     title = lines[0][len("TITLE:"):].strip()
     if not title:
-        raise CommandError("AI 出力の TITLE が空です")
+        raise RuntimeError("AI 出力の TITLE が空です")
 
     if len(lines) < 2 or lines[1].strip() != "BODY:":
-        raise CommandError(
+        raise RuntimeError(
             "AI 出力が期待するフォーマットではありません。2行目は `BODY:` である必要があります"
         )
 
@@ -511,22 +462,19 @@ def _handle_issue_post_execution(
         return
 
     if response_text is None:
-        raise CommandError("AI からの応答がありません")
+        raise RuntimeError("AI からの応答がありません")
 
     title, body = _parse_issue_output(response_text)
     repo = command.repo
     if repo is None:
-        raise CommandError("Issue 作成先リポジトリが不明です")
+        raise RuntimeError("Issue 作成先リポジトリが不明です")
 
     if command.dry_run:
         print(f"[dry-run] Issue 作成をスキップします。repo: {repo}, title: {title}")
         return
 
     assert github_client is not None
-    try:
-        issue = github_client.create_issue(repo, title, body)
-    except GitHubClientError as exc:
-        raise CommandError(str(exc)) from exc
+    issue = github_client.create_issue(repo, title, body)
 
     print(f"Issue を作成しました: {issue.url}")
 
@@ -552,22 +500,22 @@ def _parse_single_task_file(content: str, filename: str) -> tuple[str, str]:
     lines = content.split("\n")
     non_empty = [ln for ln in lines if ln.strip()]
     if not non_empty:
-        raise CommandError(f"タスクファイルが空です: {filename}")
+        raise RuntimeError(f"タスクファイルが空です: {filename}")
     title_line = non_empty[0]
     if not title_line.startswith("TITLE:"):
-        raise CommandError(
+        raise RuntimeError(
             f"{filename}: 先頭行は `TITLE: <タイトル>` である必要があります"
         )
     title = title_line[len("TITLE:"):].strip()
     if not title:
-        raise CommandError(f"{filename}: TITLE が空です")
+        raise RuntimeError(f"{filename}: TITLE が空です")
     body_index = None
     for i, line in enumerate(lines):
         if line.strip() == "BODY:":
             body_index = i
             break
     if body_index is None:
-        raise CommandError(f"{filename}: TITLE の後に `BODY:` が必要です")
+        raise RuntimeError(f"{filename}: TITLE の後に `BODY:` が必要です")
     body = "\n".join(lines[body_index + 1:])
     return title, body
 
@@ -584,24 +532,24 @@ def _parse_breakdown_dir(
             breakdown_dir = Path(dir_path)
             break
     if breakdown_dir is None:
-        raise CommandError("AI 出力に BREAKDOWN_DIR: が含まれていません")
+        raise RuntimeError("AI 出力に BREAKDOWN_DIR: が含まれていません")
     if not breakdown_dir.is_absolute():
         breakdown_dir = repo_root / breakdown_dir
     breakdown_dir = breakdown_dir.resolve()
     hiho_temp = (repo_root / "hiho_temp").resolve()
     if not breakdown_dir.is_relative_to(hiho_temp):
-        raise CommandError(
+        raise RuntimeError(
             f"タスクディレクトリは hiho_temp 配下である必要があります: {breakdown_dir}"
         )
     if not breakdown_dir.is_dir():
-        raise CommandError(f"タスクディレクトリが存在しません: {breakdown_dir}")
+        raise RuntimeError(f"タスクディレクトリが存在しません: {breakdown_dir}")
     md_files = sorted(breakdown_dir.glob("*.md"))
     if not md_files:
-        raise CommandError(f"タスクディレクトリにファイルがありません: {breakdown_dir}")
+        raise RuntimeError(f"タスクディレクトリにファイルがありません: {breakdown_dir}")
     tasks = []
     for md_file in md_files:
         if md_file.is_symlink():
-            raise CommandError(f"タスクファイルがシンボリックリンクです: {md_file.name}")
+            raise RuntimeError(f"タスクファイルがシンボリックリンクです: {md_file.name}")
         content = md_file.read_text(encoding="utf-8")
         task = _parse_single_task_file(content, md_file.name)
         tasks.append(task)
@@ -622,7 +570,7 @@ def _handle_breakdown_post_execution(
         return
 
     if response_text is None:
-        raise CommandError("AI からの応答がありません")
+        raise RuntimeError("AI からの応答がありません")
 
     tasks = _parse_breakdown_dir(response_text, repo_root)
     target = command.target
@@ -643,10 +591,7 @@ def _handle_breakdown_post_execution(
 
     created: list[GitHubIssue] = []
     for title, body in tasks:
-        try:
-            issue = github_client.create_issue(repo, title, body)
-        except GitHubClientError as exc:
-            raise CommandError(str(exc)) from exc
+        issue = github_client.create_issue(repo, title, body)
         try:
             github_client.add_sub_issue(repo, target.number, issue.id)
         except GitHubClientError as exc:
