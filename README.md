@@ -133,8 +133,9 @@ gh workflow run vv-ai.yml \
 ### 導入手順
 
 1. `.github/workflows/vv-ai.yml` をリポジトリにコピーする
-2. リポジトリの Settings > Secrets and variables > Actions に必要な Secret を登録する
-3. リポジトリルートに `vv-ai.yml` を配置する
+2. `.codex/` と `.claude/` をリポジトリにコピーする
+3. リポジトリの Settings > Secrets and variables > Actions に必要な Secret を登録する
+4. リポジトリルートに `vv-ai.yml` を配置する
 
 ## Reusable Workflow 化の前提
 
