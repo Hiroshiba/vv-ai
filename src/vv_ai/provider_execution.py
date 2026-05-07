@@ -56,6 +56,13 @@ _ALLOWED_ENV_KEYS = frozenset(
 _CODEX_SHELL_ENV_ALLOWLIST = json.dumps(
     ["PATH", "HOME", "USER", "LANG", "TERM", "SHELL", "TMPDIR", "GH_TOKEN"]
 )
+_CODEX_WEB_SEARCH_DISABLE_OPTIONS = (
+    "--disable",
+    "web_search_request",
+    "--disable",
+    "web_search_cached",
+)
+_CLAUDE_WEB_SEARCH_DISALLOWED_TOOL = "WebSearch"
 
 _DENY_READ_PATHS = [
     "/home/runner/.vv-secrets/**",
@@ -213,6 +220,7 @@ def _build_codex_command(
         "sandbox_workspace_write.network_access=true",
         "-c",
         "model_reasoning_effort=high",
+        *_CODEX_WEB_SEARCH_DISABLE_OPTIONS,
         "--json",
         "-c",
         'shell_environment_policy.inherit="all"',
@@ -455,6 +463,8 @@ def _build_claude_command(
         "--bare",
         "--permission-mode",
         "acceptEdits",
+        "--disallowedTools",
+        _CLAUDE_WEB_SEARCH_DISALLOWED_TOOL,
         "--settings",
         settings_json,
     ]
