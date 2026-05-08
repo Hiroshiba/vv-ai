@@ -241,7 +241,7 @@ class TestDryRunSuppression:
 
 
 class TestImplementResponseComment:
-    def test_implement_issue_posts_response_to_created_pr(self) -> None:
+    def test_implement_issue_does_not_post_response_to_created_pr(self) -> None:
         ready = _make_ready_execution(
             command=_make_command(command="implement", dry_run=False)
         )
@@ -269,9 +269,15 @@ class TestImplementResponseComment:
                 {},
             )
 
-        github_client.create_issue_comment.assert_called_once_with(
-            "org/repo", 12, "実装完了"
+        github_client.create_pull_request.assert_called_once_with(
+            "org/repo",
+            "テスト Issue",
+            "Closes #1",
+            "vv-ai/issue-1-abc123",
+            "main",
+            maintainer_can_modify=True,
         )
+        github_client.create_issue_comment.assert_not_called()
 
     def test_implement_pr_posts_response_to_target_pr(self) -> None:
         ready = _make_ready_execution(

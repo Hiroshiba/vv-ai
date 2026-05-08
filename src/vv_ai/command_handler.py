@@ -313,13 +313,6 @@ def _handle_implement_issue_post_execution(
         maintainer_can_modify=True,
     )
     print(f"PR を作成しました: {pr.url}")
-    _post_implement_response_comment(
-        ready_execution,
-        execution_result,
-        github_client,
-        pr.repository_full_name,
-        pr.number,
-    )
     return pr
 
 
@@ -462,7 +455,7 @@ def _post_implement_response_comment(
     repository_full_name: str,
     number: int,
 ) -> None:
-    """implement の応答テキストを PR にコメント投稿する。"""
+    """PR 起点 implement の応答テキストを PR にコメント投稿する。"""
     response_text = execution_result.response_text
     if response_text is None:
         return
