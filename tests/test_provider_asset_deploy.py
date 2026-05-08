@@ -8,12 +8,12 @@ from pathlib import Path
 import pytest
 
 from vv_ai.github import GitHubTree, GitHubTreeEntry
-from vv_ai.provider_asset_sync import (
+from vv_ai.provider_asset_deploy import (
     ProviderAssetFile,
-    ProviderAssetSyncError,
+    ProviderAssetDeployError,
     resolve_vv_ai_commit_id,
-    sync_claude_provider_assets,
-    sync_codex_provider_assets,
+    deploy_claude_provider_assets,
+    deploy_codex_provider_assets,
 )
 
 
@@ -49,7 +49,7 @@ class _FakeGitHubClient:
 def _patch_commit_id(monkeypatch: pytest.MonkeyPatch) -> None:
     """commit id 解決を固定する。"""
     monkeypatch.setattr(
-        "vv_ai.provider_asset_sync.resolve_vv_ai_commit_id",
+        "vv_ai.provider_asset_deploy.resolve_vv_ai_commit_id",
         lambda: "a" * 40,
     )
 
@@ -61,7 +61,7 @@ def _patch_client(
 ) -> None:
     """GitHub client を固定応答に差し替える。"""
     monkeypatch.setattr(
-        "vv_ai.provider_asset_sync.build_github_client_with_token",
+        "vv_ai.provider_asset_deploy.build_github_client_with_token",
         lambda token: _FakeGitHubClient(tree, blobs),
     )
 
@@ -71,7 +71,7 @@ def test_resolve_vv_ai_commit_id_reads_direct_url(
 ) -> None:
     """direct_url.json の vcs_info.commit_id を返す。"""
     monkeypatch.setattr(
-        "vv_ai.provider_asset_sync.metadata.distribution",
+        "vv_ai.provider_asset_deploy.metadata.distribution",
         lambda name: _FakeDistribution(
             json.dumps({"vcs_info": {"commit_id": "b" * 40}})
         ),
@@ -85,11 +85,11 @@ def test_resolve_vv_ai_commit_id_rejects_missing_commit(
 ) -> None:
     """commit_id が無い direct_url.json は拒否する。"""
     monkeypatch.setattr(
-        "vv_ai.provider_asset_sync.metadata.distribution",
+        "vv_ai.provider_asset_deploy.metadata.distribution",
         lambda name: _FakeDistribution(json.dumps({"dir_info": {"editable": True}})),
     )
 
-    with pytest.raises(ProviderAssetSyncError, match="commit id"):
+    with pytest.raises(ProviderAssetDeployError, match="commit id"):
         resolve_vv_ai_commit_id()
 
 
@@ -110,11 +110,11 @@ def test_missing_token_uses_default_github_client(
         ],
     )
     monkeypatch.setattr(
-        "vv_ai.provider_asset_sync.build_github_client",
+        "vv_ai.provider_asset_deploy.build_github_client",
         lambda: _FakeGitHubClient(tree, {"skill": b"codex skill"}),
     )
 
-    result = sync_codex_provider_assets({}, tmp_path)
+    result = deploy_codex_provider_assets({}, tmp_path)
 
     assert result.copied_files == 1
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").is_file()
@@ -143,16 +143,16 @@ def test_fallback_gh_token_is_used(
         return _FakeGitHubClient(tree, {"skill": b"codex skill"})
 
     monkeypatch.setattr(
-        "vv_ai.provider_asset_sync.build_github_client_with_token",
+        "vv_ai.provider_asset_deploy.build_github_client_with_token",
         fake_build_client,
     )
 
-    sync_codex_provider_assets({"GH_TOKEN": "gh-token"}, tmp_path)
+    deploy_codex_provider_assets({"GH_TOKEN": "gh-token"}, tmp_path)
 
     assert used_tokens == ["gh-token"]
 
 
-def test_sync_codex_provider_assets_writes_skill(
+def test_deploy_codex_provider_assets_writes_skill(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -170,7 +170,7 @@ def test_sync_codex_provider_assets_writes_skill(
     )
     _patch_client(monkeypatch, tree, {"skill": b"codex skill"})
 
-    result = sync_codex_provider_assets(
+    result = deploy_codex_provider_assets(
         {"VV_GH_READONLY_TOKEN": "token"},
         tmp_path,
     )
@@ -180,7 +180,7 @@ def test_sync_codex_provider_assets_writes_skill(
     assert result.overwritten_files == 0
 
 
-def test_sync_claude_provider_assets_writes_skill(
+def test_deploy_claude_provider_assets_writes_skill(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -198,7 +198,7 @@ def test_sync_claude_provider_assets_writes_skill(
     )
     _patch_client(monkeypatch, tree, {"skill": b"claude skill"})
 
-    result = sync_claude_provider_assets(
+    result = deploy_claude_provider_assets(
         {"VV_GH_READONLY_TOKEN": "token"},
         tmp_path,
     )
@@ -208,7 +208,7 @@ def test_sync_claude_provider_assets_writes_skill(
     assert result.overwritten_files == 0
 
 
-def test_sync_overwrites_changed_file_with_warning(
+def test_deploy_overwrites_changed_file_with_warning(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -222,9 +222,9 @@ def test_sync_overwrites_changed_file_with_warning(
         content=b"new",
     )
 
-    from vv_ai.provider_asset_sync import _sync_provider_asset_files
+    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
 
-    result = _sync_provider_asset_files("codex", [file], tmp_path)
+    result = _deploy_provider_asset_files("codex", [file], tmp_path)
 
     assert path.read_bytes() == b"new"
     assert result.copied_files == 0
@@ -232,7 +232,7 @@ def test_sync_overwrites_changed_file_with_warning(
     assert "上書きしました" in capsys.readouterr().err
 
 
-def test_sync_same_file_without_warning(
+def test_deploy_same_file_without_warning(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -246,9 +246,9 @@ def test_sync_same_file_without_warning(
         content=b"same",
     )
 
-    from vv_ai.provider_asset_sync import _sync_provider_asset_files
+    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
 
-    result = _sync_provider_asset_files("codex", [file], tmp_path)
+    result = _deploy_provider_asset_files("codex", [file], tmp_path)
 
     assert result.copied_files == 0
     assert result.overwritten_files == 0
@@ -263,8 +263,8 @@ def test_truncated_tree_raises(
     _patch_commit_id(monkeypatch)
     _patch_client(monkeypatch, GitHubTree(truncated=True, tree=[]), {})
 
-    with pytest.raises(ProviderAssetSyncError, match="不完全"):
-        sync_codex_provider_assets({"VV_GH_READONLY_TOKEN": "token"}, tmp_path)
+    with pytest.raises(ProviderAssetDeployError, match="不完全"):
+        deploy_codex_provider_assets({"VV_GH_READONLY_TOKEN": "token"}, tmp_path)
 
 
 def test_destination_type_mismatch_raises(tmp_path: Path) -> None:
@@ -277,7 +277,7 @@ def test_destination_type_mismatch_raises(tmp_path: Path) -> None:
         content=b"content",
     )
 
-    from vv_ai.provider_asset_sync import _sync_provider_asset_files
+    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
 
-    with pytest.raises(ProviderAssetSyncError, match="ディレクトリ"):
-        _sync_provider_asset_files("codex", [file], tmp_path)
+    with pytest.raises(ProviderAssetDeployError, match="ディレクトリ"):
+        _deploy_provider_asset_files("codex", [file], tmp_path)

@@ -25,10 +25,10 @@ from vv_ai.metrics_artifact import (
     StepMetric,
 )
 from vv_ai.preflight import ReadyExecution
-from vv_ai.provider_asset_sync import (
-    ProviderAssetSyncError,
-    sync_claude_provider_assets,
-    sync_codex_provider_assets,
+from vv_ai.provider_asset_deploy import (
+    ProviderAssetDeployError,
+    deploy_claude_provider_assets,
+    deploy_codex_provider_assets,
 )
 from vv_ai.report_artifact import ReportSections
 from vv_ai.session import SessionStateRef
@@ -172,7 +172,7 @@ def _execute_codex(
             _deploy_provider_session_dir(
                 session.restored_provider_session_path, codex_home
             )
-        _sync_codex_assets_before_execution(env, codex_home)
+        _deploy_codex_assets_before_execution(env, codex_home)
 
         execution_started_at = time.perf_counter()
         proc = subprocess.run(
@@ -300,27 +300,27 @@ def _resolve_codex_home_from_env(codex_env: Mapping[str, str]) -> Path:
     return Path(codex_home)
 
 
-def _sync_codex_assets_before_execution(
+def _deploy_codex_assets_before_execution(
     env: Mapping[str, str],
     codex_home: Path,
 ) -> None:
     """Codex 実行前に provider asset を配置する。"""
     try:
-        sync_codex_provider_assets(env, codex_home)
-    except ProviderAssetSyncError as exc:
+        deploy_codex_provider_assets(env, codex_home)
+    except ProviderAssetDeployError as exc:
         raise ProviderExecutionError(
             f"Codex provider asset の配置に失敗しました: {exc}"
         ) from exc
 
 
-def _sync_claude_assets_before_execution(
+def _deploy_claude_assets_before_execution(
     env: Mapping[str, str],
     claude_home: Path,
 ) -> None:
     """Claude 実行前に provider asset を配置する。"""
     try:
-        sync_claude_provider_assets(env, claude_home)
-    except ProviderAssetSyncError as exc:
+        deploy_claude_provider_assets(env, claude_home)
+    except ProviderAssetDeployError as exc:
         raise ProviderExecutionError(
             f"Claude provider asset の配置に失敗しました: {exc}"
         ) from exc
@@ -458,7 +458,7 @@ def _execute_claude(
             _deploy_provider_session_dir(
                 session.restored_provider_session_path, project_dir
             )
-        _sync_claude_assets_before_execution(env, Path.home() / ".claude")
+        _deploy_claude_assets_before_execution(env, Path.home() / ".claude")
 
         execution_started_at = time.perf_counter()
         proc = subprocess.run(

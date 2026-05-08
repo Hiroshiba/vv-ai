@@ -89,7 +89,7 @@ def test_build_codex_env_does_not_set_codex_home_when_missing(tmp_path: Path) ->
     assert "CODEX_HOME" not in env
 
 
-def test_execute_codex_syncs_after_restore_before_subprocess(
+def test_execute_codex_deploys_after_restore_before_subprocess(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -105,8 +105,8 @@ def test_execute_codex_syncs_after_restore_before_subprocess(
     def fake_deploy(source: str, destination: Path) -> None:
         events.append("restore")
 
-    def fake_sync(env, codex_home: Path) -> None:
-        events.append("sync")
+    def fake_deploy_assets(env, codex_home: Path) -> None:
+        events.append("deploy")
 
     def fake_run(
         command: Sequence[str],
@@ -122,7 +122,7 @@ def test_execute_codex_syncs_after_restore_before_subprocess(
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr("vv_ai.provider_execution._deploy_provider_session_dir", fake_deploy)
-    monkeypatch.setattr("vv_ai.provider_execution._sync_codex_assets_before_execution", fake_sync)
+    monkeypatch.setattr("vv_ai.provider_execution._deploy_codex_assets_before_execution", fake_deploy_assets)
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     result = _execute_codex(
@@ -134,11 +134,11 @@ def test_execute_codex_syncs_after_restore_before_subprocess(
         skip_api_key_check=False,
     )
 
-    assert events == ["restore", "sync", "run"]
+    assert events == ["restore", "deploy", "run"]
     assert result.response_text == "Codex 応答"
 
 
-def test_execute_claude_syncs_after_restore_before_subprocess(
+def test_execute_claude_deploys_after_restore_before_subprocess(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -154,8 +154,8 @@ def test_execute_claude_syncs_after_restore_before_subprocess(
     def fake_deploy(source: str, destination: Path) -> None:
         events.append("restore")
 
-    def fake_sync(env, claude_home: Path) -> None:
-        events.append("sync")
+    def fake_deploy_assets(env, claude_home: Path) -> None:
+        events.append("deploy")
 
     def fake_run(
         command: Sequence[str],
@@ -181,7 +181,7 @@ def test_execute_claude_syncs_after_restore_before_subprocess(
         )
 
     monkeypatch.setattr("vv_ai.provider_execution._deploy_provider_session_dir", fake_deploy)
-    monkeypatch.setattr("vv_ai.provider_execution._sync_claude_assets_before_execution", fake_sync)
+    monkeypatch.setattr("vv_ai.provider_execution._deploy_claude_assets_before_execution", fake_deploy_assets)
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     result = _execute_claude(
@@ -193,5 +193,5 @@ def test_execute_claude_syncs_after_restore_before_subprocess(
         skip_api_key_check=True,
     )
 
-    assert events == ["restore", "sync", "run"]
+    assert events == ["restore", "deploy", "run"]
     assert result.response_text == "Claude 応答"

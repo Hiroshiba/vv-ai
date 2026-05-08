@@ -31,7 +31,7 @@ _PROVIDER_DIRECTORIES: dict[ProviderName, tuple[str, ...]] = {
 }
 
 
-class ProviderAssetSyncError(Exception):
+class ProviderAssetDeployError(Exception):
     """provider asset の配置に失敗したことを表す例外。"""
 
 
@@ -45,7 +45,7 @@ class ProviderAssetFile:
 
 
 @dataclass(frozen=True)
-class ProviderAssetSyncResult:
+class ProviderAssetDeployResult:
     """provider asset 配置結果を表す。"""
 
     provider: ProviderName
@@ -54,22 +54,22 @@ class ProviderAssetSyncResult:
     overwritten_files: int
 
 
-def sync_codex_provider_assets(
+def deploy_codex_provider_assets(
     env: Mapping[str, str],
     codex_home: Path,
-) -> ProviderAssetSyncResult:
+) -> ProviderAssetDeployResult:
     """Codex 用 provider asset を CODEX_HOME へ配置する。"""
     files = _fetch_provider_asset_files("codex", env)
-    return _sync_provider_asset_files("codex", files, codex_home)
+    return _deploy_provider_asset_files("codex", files, codex_home)
 
 
-def sync_claude_provider_assets(
+def deploy_claude_provider_assets(
     env: Mapping[str, str],
     claude_home: Path,
-) -> ProviderAssetSyncResult:
+) -> ProviderAssetDeployResult:
     """Claude 用 provider asset を ~/.claude へ配置する。"""
     files = _fetch_provider_asset_files("claude", env)
-    return _sync_provider_asset_files("claude", files, claude_home)
+    return _deploy_provider_asset_files("claude", files, claude_home)
 
 
 def resolve_vv_ai_commit_id() -> str:
@@ -77,23 +77,23 @@ def resolve_vv_ai_commit_id() -> str:
     try:
         direct_url_text = metadata.distribution("vv-ai").read_text("direct_url.json")
     except metadata.PackageNotFoundError as exc:
-        raise ProviderAssetSyncError("vv-ai の配布メタデータが見つかりません") from exc
+        raise ProviderAssetDeployError("vv-ai の配布メタデータが見つかりません") from exc
     if direct_url_text is None:
-        raise ProviderAssetSyncError("vv-ai の direct_url.json が見つかりません")
+        raise ProviderAssetDeployError("vv-ai の direct_url.json が見つかりません")
     try:
         direct_url = json.loads(direct_url_text)
     except json.JSONDecodeError as exc:
-        raise ProviderAssetSyncError(
+        raise ProviderAssetDeployError(
             "vv-ai の direct_url.json が JSON として不正です"
         ) from exc
     if not isinstance(direct_url, dict):
-        raise ProviderAssetSyncError("vv-ai の direct_url.json の形式が不正です")
+        raise ProviderAssetDeployError("vv-ai の direct_url.json の形式が不正です")
     vcs_info = direct_url.get("vcs_info")
     if not isinstance(vcs_info, dict):
-        raise ProviderAssetSyncError("vv-ai の commit id を取得できません")
+        raise ProviderAssetDeployError("vv-ai の commit id を取得できません")
     commit_id = vcs_info.get("commit_id")
     if not isinstance(commit_id, str) or commit_id == "":
-        raise ProviderAssetSyncError("vv-ai の commit id を取得できません")
+        raise ProviderAssetDeployError("vv-ai の commit id を取得できません")
     return commit_id
 
 
@@ -107,7 +107,7 @@ def _fetch_provider_asset_files(
     try:
         tree = client.get_repository_tree(_VV_AI_REPOSITORY, commit_id)
         if tree.truncated:
-            raise ProviderAssetSyncError(
+            raise ProviderAssetDeployError(
                 "vv-ai provider asset の tree 取得結果が不完全です"
             )
         root = _PROVIDER_ROOTS[provider]
@@ -130,17 +130,17 @@ def _fetch_provider_asset_files(
                 )
             )
     except GitHubClientError as exc:
-        raise ProviderAssetSyncError("vv-ai provider asset の取得に失敗しました") from exc
+        raise ProviderAssetDeployError("vv-ai provider asset の取得に失敗しました") from exc
     if len(files) == 0:
-        raise ProviderAssetSyncError(f"{provider} 用 provider asset が見つかりません")
+        raise ProviderAssetDeployError(f"{provider} 用 provider asset が見つかりません")
     return files
 
 
-def _sync_provider_asset_files(
+def _deploy_provider_asset_files(
     provider: ProviderName,
     files: list[ProviderAssetFile],
     destination_root: Path,
-) -> ProviderAssetSyncResult:
+) -> ProviderAssetDeployResult:
     """provider asset ファイル群を provider home へ配置する。"""
     copied_files = 0
     overwritten_files = 0
@@ -152,7 +152,7 @@ def _sync_provider_asset_files(
             copied_files += 1
         if overwritten:
             overwritten_files += 1
-    return ProviderAssetSyncResult(
+    return ProviderAssetDeployResult(
         provider=provider,
         destination_root=destination_root,
         copied_files=copied_files,
@@ -169,9 +169,9 @@ def _write_provider_asset_file(
     destination = destination_root / file.destination_relative_path
     try:
         if destination.exists() and destination.is_dir():
-            raise ProviderAssetSyncError(f"`{destination}` はディレクトリです")
+            raise ProviderAssetDeployError(f"`{destination}` はディレクトリです")
         if destination.parent.exists() and not destination.parent.is_dir():
-            raise ProviderAssetSyncError(
+            raise ProviderAssetDeployError(
                 f"`{destination.parent}` はディレクトリではありません"
             )
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -183,7 +183,7 @@ def _write_provider_asset_file(
             return False, False
         destination.write_bytes(file.content)
     except OSError as exc:
-        raise ProviderAssetSyncError(f"`{destination}` の配置に失敗しました") from exc
+        raise ProviderAssetDeployError(f"`{destination}` の配置に失敗しました") from exc
     print(
         f"vv-ai provider asset を上書きしました: provider={provider}, path={destination}",
         file=sys.stderr,
