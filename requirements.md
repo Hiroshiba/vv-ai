@@ -535,9 +535,7 @@ provider_priority:
   - org / repo / Issue(or PR) 番号
   - 実行タスクの定型文（「plan を実行してください」等）
   - `@vv-ai ...` コメント本文（そのまま）
-  - target context として Issue/PR のタイトル・description・コメント
-    - 同じ provider セッション中に同じ target context は 1 回だけ渡す
-    - 継続セッションでは前回以降に追加または編集された target context だけ渡す
+  - Issue/PR のタイトル・description・コメント
 
 ### 起動定型プロンプト（AI に伝える情報）
 
