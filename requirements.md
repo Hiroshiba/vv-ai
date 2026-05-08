@@ -465,7 +465,9 @@ provider_priority:
 
 ### 結果の通知
 
-- Issue 起点で PR を作成した場合: 作成した PR に AI の応答テキストをコメント投稿
+- Issue 起点で PR を作成した場合: AI の応答テキストをコメント投稿しない
+- PR 起点で push に成功した場合: 対象 PR に AI の応答テキストをコメント投稿
+- fork PR への push に失敗した場合: patch コメント内に AI の応答テキストを含める
 
 ### Runner 側の前処理
 
