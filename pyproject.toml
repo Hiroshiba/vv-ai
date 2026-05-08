@@ -11,7 +11,6 @@ dependencies = [
 
 [project.scripts]
 vv-ai = "vv_ai.cli:main"
-onetask = "onetask.cli:main"
 set-codex-auth-secret = "tools.set_codex_auth_secret:main"
 set-claude-settings-secret = "tools.set_claude_settings_secret:main"
 
@@ -23,7 +22,7 @@ build-backend = "uv_build"
 exclude-newer = "1 week"
 
 [tool.uv.build-backend]
-module-name = ["vv_ai", "onetask", "tools"]
+module-name = ["vv_ai", "tools"]
 
 [dependency-groups]
 dev = [
