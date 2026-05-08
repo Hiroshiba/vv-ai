@@ -13,8 +13,11 @@ from vv_ai.session import (
     SessionKey,
     SessionResolutionError,
     SessionStateRef,
+    TargetContextState,
+    _build_manifest_from_restored_artifact,
     _resolve_restore_state,
 )
+from vv_ai.session_artifact import RestoredSessionArtifact, SessionArtifactMeta
 
 
 def _make_command() -> ResolvedCommand:
@@ -190,3 +193,34 @@ class TestResolveSessionDefault:
         assert resolved.requested_mode == "inherit_or_new"
         assert resolved.restore_strategy == "new"
         assert resolved.restore_manifest is None
+
+
+def test_build_manifest_from_restored_artifact_keeps_target_context_state() -> None:
+    state = TargetContextState(
+        title_hash="title",
+        description_hash="description",
+        comment_hashes={"1": "comment"},
+    )
+    artifact = RestoredSessionArtifact(
+        artifact_name="artifact",
+        artifact_path="/tmp/artifact.tar.age",
+        restored_dir="/tmp/restored",
+        provider_session_path=None,
+        meta=SessionArtifactMeta(
+            workflow_id="wf-old",
+            saved_at="2026-04-15T00:00:00Z",
+            session_key="github/org/repo#1/codex/main",
+            provider="codex",
+            lane="main",
+            backend="github",
+            target_key="org/repo#1",
+            branch_name="main",
+            head_sha="sha",
+            provider_session_id="session-id",
+            target_context_state=state,
+        ),
+    )
+
+    manifest = _build_manifest_from_restored_artifact(artifact)
+
+    assert manifest.state_ref.target_context_state == state

@@ -107,6 +107,7 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 ### コメント起動
 
 Issue または PR のコメントで `@vv-ai` で始めると起動します。
+対象のタイトル、description、コメントも AI に渡されます。
 
 `instruction` は実際の指示に置き換えます。角括弧で囲んだ部分は省略できます。
 

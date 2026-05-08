@@ -24,6 +24,7 @@ from vv_ai.session import (
     SessionKey,
     SessionLane,
     SessionStateRef,
+    TargetContextState,
 )
 from vv_ai.session_store import load_latest_session_manifest, save_session_manifest
 
@@ -68,6 +69,7 @@ class SessionArtifactMeta(BaseModel):
     head_sha: str
     allow_edits_notice_posted: bool = False
     provider_session_id: str | None = None
+    target_context_state: TargetContextState | None = None
 
 
 class SavedSessionArtifact(BaseModel):
@@ -395,6 +397,7 @@ def _build_session_artifact_meta(
         head_sha=snapshot.head_sha,
         allow_edits_notice_posted=allow_edits_notice_posted,
         provider_session_id=state_ref.provider_session_id,
+        target_context_state=state_ref.target_context_state,
     )
 
 

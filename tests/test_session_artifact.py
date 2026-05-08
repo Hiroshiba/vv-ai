@@ -26,6 +26,7 @@ from vv_ai.session import (
     SessionKey,
     SessionLane,
     SessionStateRef,
+    TargetContextState,
 )
 from vv_ai.session_artifact import (
     SessionArtifactError,
@@ -256,6 +257,27 @@ class TestSaveAndListSessionManifest:
         data = json.loads(path.read_text(encoding="utf-8"))
         manifest = SavedSessionManifest.model_validate(data)
         assert manifest.workflow_id == "run-100"
+
+    def test_save_keeps_target_context_state(self, tmp_path: Path) -> None:
+        key = _make_session_key("github", "org/repo#1", "codex", "main")
+        ref = SessionStateRef(
+            target_context_state=TargetContextState(
+                title_hash="title",
+                description_hash="description",
+                comment_hashes={"1": "comment"},
+            )
+        )
+        path = save_session_manifest(
+            tmp_path,
+            "run-100",
+            key,
+            ref,
+            saved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        data = json.loads(path.read_text(encoding="utf-8"))
+        manifest = SavedSessionManifest.model_validate(data)
+
+        assert manifest.state_ref.target_context_state == ref.target_context_state
 
     def test_list_returns_saved_manifests(self, tmp_path: Path) -> None:
         key = _make_session_key("github", "org/repo#1", "codex", "main")
