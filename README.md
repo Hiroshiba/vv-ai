@@ -109,9 +109,6 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 Issue または PR のコメントで `@vv-ai` で始めると起動します。
 
 `instruction` は実際の指示に置き換えます。角括弧で囲んだ部分は省略できます。
-コマンドを省略して `@vv-ai instruction` と書いた場合は `reply` として扱います。
-先頭語が既存コマンド名と一致する場合はコマンドとして扱います。
-既存コマンド名から始まる自然文に返答してほしい場合は `@vv-ai reply instruction` と書きます。
 
 Issue / PR で使えるコマンド:
 
