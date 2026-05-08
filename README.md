@@ -108,11 +108,30 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 
 Issue または PR のコメントで `@vv-ai` で始めると起動します。
 
+`instruction` は実際の指示に置き換えます。角括弧で囲んだ部分は省略できます。
+
+Issue / PR で使えるコマンド:
+
 ```
-@vv-ai confirm この変更要望の意図を確認して
-@vv-ai requirements このIssueの要件を整理して
-@vv-ai implement --provider codex このIssueを実装して
-@vv-ai review --session_mode new このPRをレビューして
+@vv-ai [reply] instruction
+@vv-ai confirm [instruction]
+@vv-ai requirements [instruction]
+@vv-ai arch [instruction]
+@vv-ai detail [instruction]
+@vv-ai implement [instruction]
+@vv-ai issue [--repo org/repo] instruction
+```
+
+Issue でのみ使えるコマンド:
+
+```
+@vv-ai breakdown [instruction]
+```
+
+PR でのみ使えるコマンド:
+
+```
+@vv-ai review [instruction]
 ```
 
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。
