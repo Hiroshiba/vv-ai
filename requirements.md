@@ -456,8 +456,7 @@ provider_priority:
 
 - 毎回 **新規ブランチ + 新規 PR** を作成
 - ブランチ名: `vv-ai/issue-<番号>-<6〜8桁ランダム英数字>`
-- AI の最終出力を `TITLE:` / `BODY:` 形式で受け取り、PR タイトルと description に使う
-- `TITLE:` を PR タイトル、`BODY:` 以降を PR description とする
+- PR タイトル / description は AI の最終出力から決定
 - runner 側では Issue クローズ文言を追加しない
 - AI の応答テキストをコメント投稿しない
 - 複数回実行しても毎回新規（既存 PR への自動更新はしない。既存 PR で作業させたい場合はコメントで追加指示）
@@ -474,11 +473,7 @@ provider_priority:
 
 ### プロンプト
 
-- Issue 起点 `implement` の出力は以下の形式にする
-  - 1行目: `TITLE: <タイトル文字列>`
-  - 2行目: `BODY:`
-  - 3行目以降: Markdown 本文
-- タイトルと本文以外の余計な出力は含めない
+- Issue 起点の PR タイトル / description 出力形式は `issue` コマンドと同じ
 
 ---
 
