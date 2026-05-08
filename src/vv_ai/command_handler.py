@@ -331,11 +331,13 @@ def _handle_implement_issue_post_execution(
         print("変更コミットがないため push と PR 作成をスキップします")
         return None
 
-    push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
+    response_text = execution_result.response_text
+    if response_text is None:
+        raise RuntimeError("AI からの PR タイトルと本文がありません")
 
-    issue = github_client.get_issue(target.repository_full_name, target.number)
-    pr_title = issue.title
-    pr_body = f"Closes #{target.number}"
+    pr_title, pr_body = _parse_title_body_output(response_text)
+
+    push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
 
     pr = github_client.create_pull_request(
         target.repository_full_name,
@@ -503,8 +505,8 @@ def _post_implement_response_comment(
         print(f"implement 応答コメント投稿に失敗しました: {exc}", file=sys.stderr)
 
 
-def _parse_issue_output(response_text: str) -> tuple[str, str]:
-    """AI の出力から Issue タイトルと本文を抽出する。"""
+def _parse_title_body_output(response_text: str) -> tuple[str, str]:
+    """AI の出力からタイトルと本文を抽出する。"""
     lines = response_text.split("\n")
 
     if not lines or not lines[0].startswith("TITLE:"):
@@ -540,7 +542,7 @@ def _handle_issue_post_execution(
     if response_text is None:
         raise RuntimeError("AI からの応答がありません")
 
-    title, body = _parse_issue_output(response_text)
+    title, body = _parse_title_body_output(response_text)
     repo = command.repo
     if repo is None:
         raise RuntimeError("Issue 作成先リポジトリが不明です")
