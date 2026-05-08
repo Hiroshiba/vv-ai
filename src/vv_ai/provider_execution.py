@@ -25,6 +25,12 @@ from vv_ai.metrics_artifact import (
     StepMetric,
 )
 from vv_ai.preflight import ReadyExecution
+from vv_ai.provider_asset_sync import (
+    ProviderAssetSyncError,
+    sync_claude_provider_assets,
+    sync_codex_provider_assets,
+    warn_provider_asset_overwrites,
+)
 from vv_ai.report_artifact import ReportSections
 from vv_ai.session import SessionStateRef
 
@@ -145,6 +151,28 @@ def execute_provider(
     raise AssertionError(f"未対応の provider です: {provider_name}")
 
 
+def _sync_codex_provider_assets(codex_home: Path) -> None:
+    """Codex 用アセットを同期する。"""
+    try:
+        results = sync_codex_provider_assets(codex_home)
+    except ProviderAssetSyncError as exc:
+        raise ProviderExecutionError(
+            f"Codex provider asset の同期に失敗しました: {exc}"
+        ) from exc
+    warn_provider_asset_overwrites(results)
+
+
+def _sync_claude_provider_assets(claude_home: Path) -> None:
+    """Claude 用アセットを同期する。"""
+    try:
+        results = sync_claude_provider_assets(claude_home)
+    except ProviderAssetSyncError as exc:
+        raise ProviderExecutionError(
+            f"Claude provider asset の同期に失敗しました: {exc}"
+        ) from exc
+    warn_provider_asset_overwrites(results)
+
+
 def _execute_codex(
     repo_root: Path,
     ready_execution: ReadyExecution,
@@ -160,13 +188,14 @@ def _execute_codex(
     try:
         command = _build_codex_command(ready_execution, output_file, provider_prompt)
         codex_env = _build_codex_env(env, skip_api_key_check)
+        codex_home = Path(codex_env.get("CODEX_HOME", str(Path.home() / ".codex")))
 
         session = ready_execution.resolved_session
         if session is not None and session.restored_provider_session_path is not None:
-            codex_home = codex_env.get("CODEX_HOME", str(Path.home() / ".codex"))
             _deploy_provider_session_dir(
-                session.restored_provider_session_path, Path(codex_home)
+                session.restored_provider_session_path, codex_home
             )
+        _sync_codex_provider_assets(codex_home)
 
         execution_started_at = time.perf_counter()
         proc = subprocess.run(
@@ -409,6 +438,7 @@ def _execute_claude(
             _deploy_provider_session_dir(
                 session.restored_provider_session_path, project_dir
             )
+        _sync_claude_provider_assets(Path.home() / ".claude")
 
         execution_started_at = time.perf_counter()
         proc = subprocess.run(
