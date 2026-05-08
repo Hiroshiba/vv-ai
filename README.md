@@ -108,21 +108,61 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 
 Issue または PR のコメントで `@vv-ai` で始めると起動します。
 
+`instruction` は実際の指示に置き換えます。角括弧で囲んだ部分は省略できます。
+
+`reply` は Issue / PR で使います。指示本文が必須です。
+
 ```
-@vv-ai [command] [instruction]
+@vv-ai [reply] instruction
 ```
 
-`command` を省略すると `reply` として扱います。
+`confirm` は Issue / PR で使います。指示本文は任意です。
 
-- `reply`: Issue / PR で使います。指示本文が必須です。例: `@vv-ai このIssueの要点を教えて`
-- `confirm`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai confirm 変更意図を確認して`
-- `requirements`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai requirements`
-- `arch`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai arch 基本設計して`
-- `detail`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai detail`
-- `breakdown`: Issue で使います。指示本文は任意です。例: `@vv-ai breakdown`
-- `implement`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai implement`
-- `review`: PR で使います。指示本文は任意です。例: `@vv-ai review`
-- `issue`: Issue / PR で使います。指示本文が必須です。作成先は `--repo org/repo` で指定できます。例: `@vv-ai issue --repo org/repo この不具合をIssue化して`
+```
+@vv-ai confirm [instruction]
+```
+
+`requirements` は Issue / PR で使います。指示本文は任意です。
+
+```
+@vv-ai requirements [instruction]
+```
+
+`arch` は Issue / PR で使います。指示本文は任意です。
+
+```
+@vv-ai arch [instruction]
+```
+
+`detail` は Issue / PR で使います。指示本文は任意です。
+
+```
+@vv-ai detail [instruction]
+```
+
+`breakdown` は Issue で使います。指示本文は任意です。
+
+```
+@vv-ai breakdown [instruction]
+```
+
+`implement` は Issue / PR で使います。指示本文は任意です。
+
+```
+@vv-ai implement [instruction]
+```
+
+`review` は PR で使います。指示本文は任意です。
+
+```
+@vv-ai review [instruction]
+```
+
+`issue` は Issue / PR で使います。指示本文が必須です。作成先は `--repo org/repo` で指定できます。
+
+```
+@vv-ai issue [--repo org/repo] instruction
+```
 
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。
 
