@@ -109,39 +109,20 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 Issue または PR のコメントで `@vv-ai` で始めると起動します。
 
 ```
-@vv-ai [command] [options] [instruction]
+@vv-ai [command] [instruction]
 ```
 
-`command` を省略すると `reply` として扱います。対象はコメントした Issue または PR です。`--target-url` や `--target-number` は指定しません。
+`command` を省略すると `reply` として扱います。
 
-共通オプション:
-
-| オプション | 値 | 説明 |
-| --- | --- | --- |
-| `--provider` | `codex` / `claude` | 使用する AI プロバイダ |
-| `--session_mode` | `inherit` / `inherit_or_new` / `compact` / `new` | セッション継続方式 |
-| `--dry-run` | なし | GitHub への外部反映を行わない |
-| `--repo` | `org/repo` | `issue` コマンドの Issue 作成先 |
-
-`instruction` が `--` で始まる場合は、オプション解釈を止めるため `--` を挟みます。
-
-```
-@vv-ai implement -- --dry-run を説明文として扱って
-```
-
-コマンド別の必要項目:
-
-| コマンド | 起動できる場所 | instruction | 追加で使うオプション | 例 |
-| --- | --- | --- | --- | --- |
-| 省略または `reply` | Issue / PR | 必須 | 共通オプション | `@vv-ai このIssueの要点を教えて` |
-| `confirm` | Issue / PR | 任意 | 共通オプション | `@vv-ai confirm 変更意図を確認して` |
-| `requirements` | Issue / PR | 任意 | 共通オプション | `@vv-ai requirements` |
-| `arch` | Issue / PR | 任意 | 共通オプション | `@vv-ai arch 基本設計して` |
-| `detail` | Issue / PR | 任意 | 共通オプション | `@vv-ai detail` |
-| `breakdown` | Issue | 任意 | 共通オプション | `@vv-ai breakdown` |
-| `implement` | Issue / PR | 任意 | 共通オプション | `@vv-ai implement --provider codex` |
-| `review` | PR | 任意 | 共通オプション | `@vv-ai review --session_mode new` |
-| `issue` | Issue / PR | 必須 | `--repo` | `@vv-ai issue --repo org/repo この不具合をIssue化して` |
+- `reply`: Issue / PR で使います。指示本文が必須です。例: `@vv-ai このIssueの要点を教えて`
+- `confirm`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai confirm 変更意図を確認して`
+- `requirements`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai requirements`
+- `arch`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai arch 基本設計して`
+- `detail`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai detail`
+- `breakdown`: Issue で使います。指示本文は任意です。例: `@vv-ai breakdown`
+- `implement`: Issue / PR で使います。指示本文は任意です。例: `@vv-ai implement`
+- `review`: PR で使います。指示本文は任意です。例: `@vv-ai review`
+- `issue`: Issue / PR で使います。指示本文が必須です。作成先は `--repo org/repo` で指定できます。例: `@vv-ai issue --repo org/repo この不具合をIssue化して`
 
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。
 
