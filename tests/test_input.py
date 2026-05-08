@@ -35,6 +35,11 @@ class TestParseCommentInvocation:
         assert result.command == "reply"
         assert result.instruction == "要約して"
 
+    def test_command_reply_explicit_for_command_word(self) -> None:
+        result = parse_comment_invocation("@vv-ai reply confirm について教えて")
+        assert result.command == "reply"
+        assert result.instruction == "confirm について教えて"
+
     def test_command_requirements(self) -> None:
         result = parse_comment_invocation("@vv-ai requirements")
         assert result.command == "requirements"
@@ -92,11 +97,9 @@ class TestParseCommentInvocation:
         result = parse_comment_invocation("@vv-ai issue --repo org/repo Issue化して")
         assert result.repo == "org/repo"
 
-    def test_double_dash_separator(self) -> None:
-        result = parse_comment_invocation("@vv-ai implement -- --dry-run は指示文です")
-        assert result.command == "implement"
-        assert result.dry_run is False
-        assert result.instruction == "--dry-run は指示文です"
+    def test_error_double_dash_separator(self) -> None:
+        with pytest.raises(InputError, match="未対応のオプションです: --"):
+            parse_comment_invocation("@vv-ai implement -- --dry-run は指示文です")
 
     def test_multiple_options(self) -> None:
         result = parse_comment_invocation(
@@ -193,6 +196,15 @@ class TestBuildRawInputFromIssueCommentEvent:
         assert raw.repository_full_name == "org/repo"
         assert raw.actor == "Hiroshiba"
         assert raw.comment_id == 100
+
+    def test_issue_comment_reply_implicit(self) -> None:
+        event = self._make_event("@vv-ai 要約して", pr=False)
+        raw = build_raw_input_from_issue_comment_event(event)
+        assert raw.event_name == "issue_comment"
+        assert raw.command == "reply"
+        assert raw.instruction == "要約して"
+        assert raw.target_type == "issue"
+        assert raw.target_number == 42
 
     def test_pr_comment(self) -> None:
         event = self._make_event("@vv-ai review", pr=True)

@@ -262,9 +262,6 @@ def parse_comment_invocation(comment_body: str) -> CommentInvocation:
 
     while index < len(tokens):
         token = tokens[index]
-        if token == "--":
-            instruction_tokens = tokens[index + 1 :]
-            break
         if token == "--dry-run":
             dry_run = True
             index += 1
