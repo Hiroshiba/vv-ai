@@ -374,7 +374,7 @@ def _build_cancelled_result(
             execution_duration_seconds,
         ),
         provider_specific=ProviderSpecificMetrics(),
-        state_ref=SessionStateRef(),
+        state_ref=_build_failure_state_ref(ready_execution),
         provider_session_path=None,
         allow_edits_notice_posted=False,
         response_text=None,
@@ -414,7 +414,7 @@ def _build_failure_result(
             execution_duration_seconds,
         ),
         provider_specific=ProviderSpecificMetrics(),
-        state_ref=SessionStateRef(),
+        state_ref=_build_failure_state_ref(ready_execution),
         provider_session_path=None,
         allow_edits_notice_posted=False,
         response_text=None,
@@ -430,6 +430,19 @@ def _build_steps(
         "preflight": StepMetric(duration_seconds=preflight_duration_seconds),
         "execution": StepMetric(duration_seconds=execution_duration_seconds),
     }
+
+
+def _build_failure_state_ref(ready_execution: ReadyExecution) -> SessionStateRef:
+    """失敗時に保存する session state を返す。"""
+    session = ready_execution.resolved_session
+    if session is None:
+        return SessionStateRef()
+    state_ref = session.state_ref
+    if state_ref is None:
+        return SessionStateRef()
+    if state_ref.target_context_state is None:
+        return SessionStateRef()
+    return SessionStateRef(target_context_state=state_ref.target_context_state)
 
 
 def _format_exception(error: BaseException) -> str:

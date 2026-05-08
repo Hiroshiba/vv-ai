@@ -136,6 +136,8 @@ PR でのみ使えるコマンド:
 
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。
 
+対象の Issue または PR のタイトル、description、コメントも AI に渡します。
+
 ### workflow_dispatch
 
 `gh workflow run` で手動起動します。

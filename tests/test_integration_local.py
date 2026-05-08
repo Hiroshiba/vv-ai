@@ -7,10 +7,10 @@ from unittest.mock import MagicMock, patch
 
 from vv_ai.cli import main
 from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
-from vv_ai.resolve import BackendName
-from vv_ai.github import RepoInfo
+from vv_ai.github import GitHubActor, GitHubIssue, RepoInfo
 from vv_ai.metrics_artifact import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
 from vv_ai.report_artifact import ReportSections
+from vv_ai.resolve import BackendName
 from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
 
 
@@ -89,6 +89,17 @@ class TestGitHubTargetDryRun:
         github_client.get_repo_info.return_value = RepoInfo(
             is_fork=False, parent_full_name=None, parent_default_branch=None
         )
+        github_client.get_issue.return_value = GitHubIssue(
+            id=1,
+            repository_full_name="org/repo",
+            number=1,
+            title="テスト Issue",
+            body="Issue 本文",
+            state="OPEN",
+            author=GitHubActor(login="Hiroshiba"),
+            url="https://github.com/org/repo/issues/1",
+        )
+        github_client.list_issue_comments.return_value = []
 
         with (
             patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
