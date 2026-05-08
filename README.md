@@ -110,58 +110,28 @@ Issue または PR のコメントで `@vv-ai` で始めると起動します。
 
 `instruction` は実際の指示に置き換えます。角括弧で囲んだ部分は省略できます。
 
-`reply` は Issue / PR で使います。指示本文が必須です。
+Issue / PR で使えるコマンド:
 
 ```
 @vv-ai [reply] instruction
-```
-
-`confirm` は Issue / PR で使います。指示本文は任意です。
-
-```
 @vv-ai confirm [instruction]
-```
-
-`requirements` は Issue / PR で使います。指示本文は任意です。
-
-```
 @vv-ai requirements [instruction]
-```
-
-`arch` は Issue / PR で使います。指示本文は任意です。
-
-```
 @vv-ai arch [instruction]
-```
-
-`detail` は Issue / PR で使います。指示本文は任意です。
-
-```
 @vv-ai detail [instruction]
+@vv-ai implement [instruction]
+@vv-ai issue [--repo org/repo] instruction
 ```
 
-`breakdown` は Issue で使います。指示本文は任意です。
+Issue で使えるコマンド:
 
 ```
 @vv-ai breakdown [instruction]
 ```
 
-`implement` は Issue / PR で使います。指示本文は任意です。
-
-```
-@vv-ai implement [instruction]
-```
-
-`review` は PR で使います。指示本文は任意です。
+PR で使えるコマンド:
 
 ```
 @vv-ai review [instruction]
-```
-
-`issue` は Issue / PR で使います。指示本文が必須です。作成先は `--repo org/repo` で指定できます。
-
-```
-@vv-ai issue [--repo org/repo] instruction
 ```
 
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。
