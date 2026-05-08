@@ -538,8 +538,6 @@ provider_priority:
   - target context として Issue/PR のタイトル・description・コメント
     - 同じ provider セッション中に同じ target context は 1 回だけ渡す
     - 継続セッションでは前回以降に追加または編集された target context だけ渡す
-    - 現在の起動コメントは今回の指示として渡し、コメント履歴としては重複して渡さない
-    - PR review thread の個別コメントは渡さない
 
 ### 起動定型プロンプト（AI に伝える情報）
 
