@@ -122,13 +122,13 @@ Issue / PR で使えるコマンド:
 @vv-ai issue [--repo org/repo] instruction
 ```
 
-Issue で使えるコマンド:
+Issue でのみ使えるコマンド:
 
 ```
 @vv-ai breakdown [instruction]
 ```
 
-PR で使えるコマンド:
+PR でのみ使えるコマンド:
 
 ```
 @vv-ai review [instruction]
