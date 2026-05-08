@@ -14,6 +14,24 @@ from vv_ai.provider_asset_sync import (
 )
 
 
+def test_packaged_provider_assets_refer_to_root_assets() -> None:
+    root = Path(__file__).resolve().parents[1]
+    pairs = [
+        (
+            root / "src/vv_ai/.codex/skills/detailed-design/SKILL.md",
+            root / ".codex/skills/detailed-design/SKILL.md",
+        ),
+        (
+            root / "src/vv_ai/.claude/skills/detailed-design/SKILL.md",
+            root / ".claude/skills/detailed-design/SKILL.md",
+        ),
+    ]
+
+    for package_path, root_path in pairs:
+        assert package_path.is_symlink()
+        assert package_path.resolve() == root_path.resolve()
+
+
 def test_codex_provider_assets_sync_detailed_design(tmp_path: Path) -> None:
     results = sync_codex_provider_assets(tmp_path)
 
