@@ -313,6 +313,13 @@ def _handle_implement_issue_post_execution(
         maintainer_can_modify=True,
     )
     print(f"PR を作成しました: {pr.url}")
+    _post_implement_response_comment(
+        ready_execution,
+        execution_result,
+        github_client,
+        pr.repository_full_name,
+        pr.number,
+    )
     return pr
 
 
@@ -348,12 +355,27 @@ def _handle_implement_pr_post_execution(
     if pr_info is None or not pr_info.is_cross_repository:
         push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
         print(f"ブランチ `{implement_branch_name}` を push しました。")
+        assert target.repository_full_name is not None
+        _post_implement_response_comment(
+            ready_execution,
+            execution_result,
+            github_client,
+            target.repository_full_name,
+            target.number,
+        )
         return
 
     assert target.repository_full_name is not None
 
     if try_push_current_branch(repo_root, env.get("GITHUB_TOKEN")):
         print(f"fork ブランチ `{implement_branch_name}` を push しました。")
+        _post_implement_response_comment(
+            ready_execution,
+            execution_result,
+            github_client,
+            target.repository_full_name,
+            target.number,
+        )
         return
 
     _post_fork_patch_fallback(
@@ -405,8 +427,14 @@ def _post_fork_patch_fallback(
         execution_result.allow_edits_notice_posted = True
 
     truncated = patch[:60000]
+    response_text = execution_result.response_text
+    response_block = ""
+    if response_text is not None:
+        response_block = f"{response_text}\n\n---\n\n"
+
     body = (
         "fork リポジトリへの push ができなかったため、変更内容を patch として提示します。\n\n"
+        f"{response_block}"
         f"```diff\n{truncated}\n```"
         f"{notice}"
     )
@@ -425,6 +453,28 @@ def _get_allow_edits_notice_posted(ready_execution: ReadyExecution) -> bool:
     if session is None:
         return False
     return session.allow_edits_notice_posted
+
+
+def _post_implement_response_comment(
+    ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
+    github_client: GitHubClient | None,
+    repository_full_name: str,
+    number: int,
+) -> None:
+    """implement の応答テキストを PR にコメント投稿する。"""
+    response_text = execution_result.response_text
+    if response_text is None:
+        return
+
+    if ready_execution.command.dry_run or github_client is None:
+        print(response_text)
+        return
+
+    try:
+        github_client.create_issue_comment(repository_full_name, number, response_text)
+    except GitHubClientError as exc:
+        print(f"implement 応答コメント投稿に失敗しました: {exc}", file=sys.stderr)
 
 
 def _parse_issue_output(response_text: str) -> tuple[str, str]:

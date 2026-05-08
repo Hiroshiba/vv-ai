@@ -14,6 +14,7 @@ from vv_ai.command_handler import (
 )
 from vv_ai.config import VVAIConfig
 from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
+from vv_ai.github import GitHubActor, GitHubIssue, GitHubPullRequest
 from vv_ai.metrics_artifact import (
     MetricsBehavior,
     MetricsUsage,
@@ -129,6 +130,41 @@ def _make_saved_artifacts() -> MagicMock:
     return MagicMock(spec=SavedExecutionArtifacts)
 
 
+def _make_github_issue() -> GitHubIssue:
+    """テスト用の GitHubIssue を生成する。"""
+    return GitHubIssue(
+        id=1,
+        repository_full_name="org/repo",
+        number=1,
+        title="テスト Issue",
+        body="テスト本文",
+        state="OPEN",
+        author=GitHubActor(login="Hiroshiba"),
+        url="https://github.com/org/repo/issues/1",
+    )
+
+
+def _make_github_pr(
+    number: int,
+    is_cross_repository: bool,
+) -> GitHubPullRequest:
+    """テスト用の GitHubPullRequest を生成する。"""
+    return GitHubPullRequest(
+        repository_full_name="org/repo",
+        number=number,
+        title="テスト PR",
+        body="テスト本文",
+        state="OPEN",
+        author=GitHubActor(login="Hiroshiba"),
+        url=f"https://github.com/org/repo/pull/{number}",
+        head_ref_name="feature-branch",
+        base_ref_name="main",
+        head_repository_full_name="org/repo",
+        is_cross_repository=is_cross_repository,
+        maintainer_can_modify=True,
+    )
+
+
 class TestDryRunSuppression:
     def test_dryrun_suppresses_implement_issue_push(self) -> None:
         ready = _make_ready_execution(command=_make_command(command="implement"))
@@ -142,6 +178,7 @@ class TestDryRunSuppression:
             mock_push.assert_not_called()
 
         github_client.create_pull_request.assert_not_called()
+        github_client.create_issue_comment.assert_not_called()
 
     def test_dryrun_suppresses_implement_pr_push(self) -> None:
         ready = _make_ready_execution(
@@ -161,6 +198,8 @@ class TestDryRunSuppression:
                 Path("/dummy"), ready, result, github_client, "feature-branch", None, None, {}
             )
             mock_push.assert_not_called()
+
+        github_client.create_issue_comment.assert_not_called()
 
     def test_dryrun_suppresses_issue_creation(self) -> None:
         ready = _make_ready_execution(
@@ -199,6 +238,114 @@ class TestDryRunSuppression:
         _post_response_comment(ready, result, github_client)
 
         github_client.create_issue_comment.assert_called_once()
+
+
+class TestImplementResponseComment:
+    def test_implement_issue_posts_response_to_created_pr(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="implement", dry_run=False)
+        )
+        result = _make_execution_result("success", response_text="実装完了")
+        github_client = MagicMock()
+        github_client.get_default_branch.return_value = "main"
+        github_client.get_issue.return_value = _make_github_issue()
+        github_client.create_pull_request.return_value = _make_github_pr(
+            number=12,
+            is_cross_repository=False,
+        )
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
+            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
+            patch("vv_ai.command_handler.push_branch"),
+        ):
+            _handle_implement_issue_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "vv-ai/issue-1-abc123",
+                None,
+                {},
+            )
+
+        github_client.create_issue_comment.assert_called_once_with(
+            "org/repo", 12, "実装完了"
+        )
+
+    def test_implement_pr_posts_response_to_target_pr(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(
+                command="implement",
+                dry_run=False,
+                target=ResolvedTarget(
+                    backend="github",
+                    kind="pr",
+                    canonical_id="org/repo#2",
+                    repository_full_name="org/repo",
+                    number=2,
+                ),
+            )
+        )
+        result = _make_execution_result("success", response_text="追コミット完了")
+        github_client = MagicMock()
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
+            patch("vv_ai.command_handler.push_branch"),
+        ):
+            _handle_implement_pr_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "feature-branch",
+                _make_github_pr(number=2, is_cross_repository=False),
+                None,
+                {},
+            )
+
+        github_client.create_issue_comment.assert_called_once_with(
+            "org/repo", 2, "追コミット完了"
+        )
+
+    def test_fork_patch_comment_includes_response_text(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(
+                command="implement",
+                dry_run=False,
+                target=ResolvedTarget(
+                    backend="github",
+                    kind="pr",
+                    canonical_id="org/repo#3",
+                    repository_full_name="org/repo",
+                    number=3,
+                ),
+            )
+        )
+        result = _make_execution_result("success", response_text="追加実装完了")
+        github_client = MagicMock()
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
+            patch("vv_ai.command_handler.try_push_current_branch", return_value=False),
+            patch("vv_ai.command_handler.generate_patch", return_value="diff --git a/a b/a"),
+        ):
+            _handle_implement_pr_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "feature-branch",
+                _make_github_pr(number=3, is_cross_repository=True),
+                "base-sha",
+                {},
+            )
+
+        github_client.create_issue_comment.assert_called_once()
+        _, _, body = github_client.create_issue_comment.call_args.args
+        assert "追加実装完了" in body
+        assert "```diff\ndiff --git a/a b/a\n```" in body
 
 
 class TestFinallySaveGuarantee:

@@ -137,9 +137,10 @@ class TestImplementIssueDryRun:
         ]
         session = _make_resolved_session("github", "org/repo#1", "codex")
         result = _make_execution_result("success", "実装完了")
+        mock_gh = MagicMock()
 
         with contextlib.ExitStack() as stack:
-            _enter_common_patches(stack, tmp_path, session, result, MagicMock())
+            _enter_common_patches(stack, tmp_path, session, result, mock_gh)
             mock_branch = stack.enter_context(
                 patch("vv_ai.command_handler.create_and_checkout_branch")
             )
@@ -147,6 +148,7 @@ class TestImplementIssueDryRun:
 
         assert exit_code == 0
         mock_branch.assert_called_once()
+        mock_gh.create_issue_comment.assert_not_called()
 
 
 class TestImplementPRDryRun:
@@ -178,6 +180,7 @@ class TestImplementPRDryRun:
         assert exit_code == 0
         mock_gh.get_pull_request.assert_called_once_with("org/repo", 5)
         mock_checkout.assert_called_once()
+        mock_gh.create_issue_comment.assert_not_called()
 
 
 class TestReviewDryRun:
