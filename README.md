@@ -136,6 +136,16 @@ PR でのみ使えるコマンド:
 
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。
 
+### Target context
+
+GitHub Issue または PR を対象にした実行では、対象のタイトル、description、コメントを provider へ渡します。
+
+同じ provider セッションを継続する場合、同じ target context はセッション中に 1 回だけ渡します。2 回目以降の実行では、前回以降に追加または編集された情報だけを渡します。
+
+`session_mode` が `new` の場合、または `inherit_or_new` で復元できるセッションがない場合は、その時点の target context をすべて渡します。
+
+現在の起動コメントは今回の指示として渡し、コメント履歴としては重複して渡しません。PR review thread の個別コメントは target context に含めません。
+
 ### workflow_dispatch
 
 `gh workflow run` で手動起動します。

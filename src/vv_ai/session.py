@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from vv_ai.artifact_crypto import ArtifactCryptoError, resolve_age_secret_key
 from vv_ai.github import GitHubClientError, build_github_client
@@ -38,6 +38,17 @@ class SessionKey(BaseModel):
     canonical_key: str
 
 
+class TargetContextState(BaseModel):
+    """provider に渡した target context の version 群。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = 1
+    title_hash: str | None = None
+    description_hash: str | None = None
+    comment_hashes: dict[str, str] = Field(default_factory=dict)
+
+
 class SessionStateRef(BaseModel):
     """provider 固有 session の参照情報。"""
 
@@ -46,6 +57,7 @@ class SessionStateRef(BaseModel):
     provider_session_id: str | None = None
     summary_path: str | None = None
     artifact_hint: str | None = None
+    target_context_state: TargetContextState | None = None
 
 
 class SavedSessionManifest(BaseModel):
@@ -309,5 +321,6 @@ def _build_manifest_from_restored_artifact(
         state_ref=SessionStateRef(
             provider_session_id=meta.provider_session_id,
             artifact_hint=restored_artifact.artifact_path,
+            target_context_state=meta.target_context_state,
         ),
     )

@@ -73,7 +73,7 @@ _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
 
 def build_provider_prompt(
     ready_execution: ReadyExecution,
-    past_vvai_comments: list[str],
+    target_context_block: str | None,
     implement_branch_name: str | None,
     worktree_ref: str | None,
 ) -> str:
@@ -100,9 +100,8 @@ def build_provider_prompt(
     if instruction is not None:
         sections.append(f"指示:\n{instruction}")
 
-    if past_vvai_comments:
-        past_block = "\n---\n".join(past_vvai_comments)
-        sections.append(f"過去の @vv-ai コメント（補助コンテキスト）:\n{past_block}")
+    if target_context_block is not None:
+        sections.append(f"対象の Issue / PR コンテキスト:\n{target_context_block}")
 
     return "\n\n".join(sections)
 

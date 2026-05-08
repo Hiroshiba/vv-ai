@@ -35,6 +35,12 @@ from vv_ai.preflight import ReadyExecution
 from vv_ai.prompt import build_provider_prompt
 from vv_ai.provider_execution import execute_provider
 from vv_ai.resolve import ResolvedTarget
+from vv_ai.session import SessionStateRef, TargetContextState
+from vv_ai.target_context import (
+    build_target_context,
+    empty_target_context_state,
+    merge_target_context_state,
+)
 
 
 _ISSUE_CONTEXT_COMMANDS = frozenset(
@@ -80,8 +86,6 @@ def run_command(
             command.comment_id,
             "eyes",
         )
-
-    past_vvai_comments = _fetch_past_vvai_comments(github_client, target)
 
     implement_branch_name: str | None = None
     pr_info: GitHubPullRequest | None = None
@@ -132,8 +136,19 @@ def run_command(
         if pr_info is not None and pr_info.is_cross_repository:
             head_sha_before = get_head_sha(repo_root)
 
+        target_context = build_target_context(
+            github_client,
+            target,
+            command.comment_id,
+            _get_target_context_state(ready_execution),
+            pr_info,
+        )
+        _remember_target_context_state(ready_execution, target_context.state)
         provider_prompt = build_provider_prompt(
-            ready_execution, past_vvai_comments, implement_branch_name, worktree_ref
+            ready_execution,
+            target_context.prompt_block,
+            implement_branch_name,
+            worktree_ref,
         )
         execution_result = execute_provider(
             repo_root,
@@ -141,6 +156,14 @@ def run_command(
             env,
             preflight_duration_seconds,
             provider_prompt,
+        )
+        execution_result = execution_result.model_copy(
+            update={
+                "state_ref": merge_target_context_state(
+                    execution_result.state_ref,
+                    target_context.state,
+                )
+            }
         )
 
         created_pr = _handle_post_execution(
@@ -200,23 +223,33 @@ def _resolve_fork_base_ref(
     return f"upstream/{repo_info.parent_default_branch}"
 
 
-def _fetch_past_vvai_comments(
-    github_client: GitHubClient | None,
-    target: ResolvedTarget | None,
-) -> list[str]:
-    """過去の @vv-ai コメントを取得する。"""
-    if github_client is None or target is None:
-        return []
-    if target.repository_full_name is None or target.number is None:
-        return []
-    try:
-        comments = github_client.list_issue_comments(
-            target.repository_full_name, target.number
-        )
-    except GitHubClientError as exc:
-        print(f"過去コメント取得に失敗しました: {exc}", file=sys.stderr)
-        return []
-    return [c.body for c in comments if c.body.startswith("@vv-ai")]
+def _get_target_context_state(
+    ready_execution: ReadyExecution,
+) -> TargetContextState:
+    """復元済み target context state を返す。"""
+    session = ready_execution.resolved_session
+    if session is None:
+        return empty_target_context_state()
+    state_ref = session.state_ref
+    if state_ref is None:
+        return empty_target_context_state()
+    if state_ref.target_context_state is None:
+        return empty_target_context_state()
+    return state_ref.target_context_state
+
+
+def _remember_target_context_state(
+    ready_execution: ReadyExecution,
+    target_context_state: TargetContextState,
+) -> None:
+    """今回 prompt に入れた target context state を保存候補へ反映する。"""
+    session = ready_execution.resolved_session
+    if session is None:
+        return
+    state_ref = session.state_ref
+    if state_ref is None:
+        state_ref = SessionStateRef()
+    session.state_ref = merge_target_context_state(state_ref, target_context_state)
 
 
 def _handle_post_execution(
