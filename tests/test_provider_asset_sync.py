@@ -1,4 +1,4 @@
-"""provider asset 同期の単体テスト。"""
+"""provider asset 配置の単体テスト。"""
 
 from __future__ import annotations
 
@@ -93,22 +93,70 @@ def test_resolve_vv_ai_commit_id_rejects_missing_commit(
         resolve_vv_ai_commit_id()
 
 
-def test_missing_readonly_token_raises(
+def test_missing_token_uses_default_github_client(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """VV_GH_READONLY_TOKEN が無い場合は同期しない。"""
+    """token が無い場合は gh の既存認証を使う。"""
     _patch_commit_id(monkeypatch)
+    tree = GitHubTree(
+        truncated=False,
+        tree=[
+            GitHubTreeEntry(
+                path=".codex/skills/detailed-design/SKILL.md",
+                type="blob",
+                sha="skill",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "vv_ai.provider_asset_sync.build_github_client",
+        lambda: _FakeGitHubClient(tree, {"skill": b"codex skill"}),
+    )
 
-    with pytest.raises(ProviderAssetSyncError, match="VV_GH_READONLY_TOKEN"):
-        sync_codex_provider_assets({}, tmp_path)
+    result = sync_codex_provider_assets({}, tmp_path)
+
+    assert result.copied_files == 1
+    assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").is_file()
+
+
+def test_fallback_gh_token_is_used(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VV_GH_READONLY_TOKEN が無い場合は GH_TOKEN を使う。"""
+    _patch_commit_id(monkeypatch)
+    tree = GitHubTree(
+        truncated=False,
+        tree=[
+            GitHubTreeEntry(
+                path=".codex/skills/detailed-design/SKILL.md",
+                type="blob",
+                sha="skill",
+            )
+        ],
+    )
+    used_tokens: list[str] = []
+
+    def fake_build_client(token: str) -> _FakeGitHubClient:
+        used_tokens.append(token)
+        return _FakeGitHubClient(tree, {"skill": b"codex skill"})
+
+    monkeypatch.setattr(
+        "vv_ai.provider_asset_sync.build_github_client_with_token",
+        fake_build_client,
+    )
+
+    sync_codex_provider_assets({"GH_TOKEN": "gh-token"}, tmp_path)
+
+    assert used_tokens == ["gh-token"]
 
 
 def test_sync_codex_provider_assets_writes_skill(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Codex asset を CODEX_HOME へ同期する。"""
+    """Codex asset を CODEX_HOME へ配置する。"""
     _patch_commit_id(monkeypatch)
     tree = GitHubTree(
         truncated=False,
@@ -136,7 +184,7 @@ def test_sync_claude_provider_assets_writes_skill(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Claude asset を ~/.claude へ同期する。"""
+    """Claude asset を ~/.claude へ配置する。"""
     _patch_commit_id(monkeypatch)
     tree = GitHubTree(
         truncated=False,
@@ -211,7 +259,7 @@ def test_truncated_tree_raises(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """tree が truncated の場合は同期しない。"""
+    """tree が truncated の場合は配置しない。"""
     _patch_commit_id(monkeypatch)
     _patch_client(monkeypatch, GitHubTree(truncated=True, tree=[]), {})
 
@@ -220,7 +268,7 @@ def test_truncated_tree_raises(
 
 
 def test_destination_type_mismatch_raises(tmp_path: Path) -> None:
-    """同期先にディレクトリがある場合は同期しない。"""
+    """配置先にディレクトリがある場合は配置しない。"""
     path = tmp_path / "skills" / "detailed-design" / "SKILL.md"
     path.mkdir(parents=True)
     file = ProviderAssetFile(

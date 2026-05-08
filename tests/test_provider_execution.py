@@ -93,7 +93,7 @@ def test_execute_codex_syncs_after_restore_before_subprocess(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """_execute_codex は session restore 後、subprocess 前に asset 同期する。"""
+    """_execute_codex は session restore 後、subprocess 前に asset 配置する。"""
     events: list[str] = []
     restored_dir = tmp_path / "restored"
     restored_dir.mkdir()
@@ -142,7 +142,7 @@ def test_execute_claude_syncs_after_restore_before_subprocess(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """_execute_claude は session restore 後、subprocess 前に asset 同期する。"""
+    """_execute_claude は session restore 後、subprocess 前に asset 配置する。"""
     events: list[str] = []
     restored_dir = tmp_path / "restored"
     restored_dir.mkdir()

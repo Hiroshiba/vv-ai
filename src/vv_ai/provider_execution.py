@@ -304,12 +304,12 @@ def _sync_codex_assets_before_execution(
     env: Mapping[str, str],
     codex_home: Path,
 ) -> None:
-    """Codex 実行前に provider asset を同期する。"""
+    """Codex 実行前に provider asset を配置する。"""
     try:
         sync_codex_provider_assets(env, codex_home)
     except ProviderAssetSyncError as exc:
         raise ProviderExecutionError(
-            f"Codex provider asset の同期に失敗しました: {exc}"
+            f"Codex provider asset の配置に失敗しました: {exc}"
         ) from exc
 
 
@@ -317,12 +317,12 @@ def _sync_claude_assets_before_execution(
     env: Mapping[str, str],
     claude_home: Path,
 ) -> None:
-    """Claude 実行前に provider asset を同期する。"""
+    """Claude 実行前に provider asset を配置する。"""
     try:
         sync_claude_provider_assets(env, claude_home)
     except ProviderAssetSyncError as exc:
         raise ProviderExecutionError(
-            f"Claude provider asset の同期に失敗しました: {exc}"
+            f"Claude provider asset の配置に失敗しました: {exc}"
         ) from exc
 
 
