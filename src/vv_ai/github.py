@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
+import os
 import subprocess
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from collections.abc import Callable, Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -112,6 +115,25 @@ class GitHubArtifact(BaseModel):
     name: str
     created_at: str
     archive_download_url: str
+
+
+class GitHubTreeEntry(BaseModel):
+    """GitHub git tree の entry を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    type: str
+    sha: str
+
+
+class GitHubTree(BaseModel):
+    """GitHub git tree の取得結果を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tree: list[GitHubTreeEntry]
+    truncated: bool
 
 
 type GitHubTargetDetails = GitHubIssue | GitHubPullRequest
@@ -351,6 +373,44 @@ class GitHubClient:
                 f"`{destination_path}` への artifact 保存に失敗しました"
             ) from exc
 
+    def get_repository_tree(
+        self,
+        repository_full_name: str,
+        ref: str,
+    ) -> GitHubTree:
+        """repository の recursive git tree を取得する。"""
+        payload = self._run_json(
+            [
+                "api",
+                (
+                    f"repos/{_require_repository_full_name(repository_full_name)}"
+                    f"/git/trees/{_require_non_empty_text(ref, 'ref')}?recursive=1"
+                ),
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("git tree 取得結果の JSON 形式が不正です")
+        return _build_tree(payload)
+
+    def get_repository_blob(
+        self,
+        repository_full_name: str,
+        sha: str,
+    ) -> bytes:
+        """repository の git blob を bytes で取得する。"""
+        payload = self._run_json(
+            [
+                "api",
+                (
+                    f"repos/{_require_repository_full_name(repository_full_name)}"
+                    f"/git/blobs/{_require_non_empty_text(sha, 'sha')}"
+                ),
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("git blob 取得結果の JSON 形式が不正です")
+        return _decode_blob(payload)
+
     def add_issue_comment_reaction(
         self,
         repository_full_name: str,
@@ -458,8 +518,26 @@ def build_github_client() -> GitHubClient:
     return GitHubClient(run_gh_text, run_gh_binary)
 
 
+def build_github_client_with_token(token: str) -> GitHubClient:
+    """指定 token を GH_TOKEN として使う client を返す。"""
+    if token.strip() == "":
+        raise GitHubClientError("GitHub token が空です")
+    env = dict(os.environ)
+    env["GH_TOKEN"] = token
+    env.pop("GITHUB_TOKEN", None)
+    return GitHubClient(
+        lambda args: run_gh_text_with_env(args, env),
+        lambda args: run_gh_binary_with_env(args, env),
+    )
+
+
 def run_gh_text(args: Sequence[str]) -> str:
     """`gh` を実行して標準出力を返す。"""
+    return run_gh_text_with_env(args, os.environ)
+
+
+def run_gh_text_with_env(args: Sequence[str], env: Mapping[str, str]) -> str:
+    """指定 env で `gh` を実行して標準出力を返す。"""
     try:
         completed = subprocess.run(
             args,
@@ -467,6 +545,7 @@ def run_gh_text(args: Sequence[str]) -> str:
             capture_output=True,
             text=True,
             encoding="utf-8",
+            env=env,
         )
     except OSError as exc:
         raise GitHubClientError(f"`gh` の実行に失敗しました: {exc}") from exc
@@ -484,12 +563,18 @@ def run_gh_text(args: Sequence[str]) -> str:
 
 def run_gh_binary(args: Sequence[str]) -> bytes:
     """`gh` を実行して標準出力 bytes を返す。"""
+    return run_gh_binary_with_env(args, os.environ)
+
+
+def run_gh_binary_with_env(args: Sequence[str], env: Mapping[str, str]) -> bytes:
+    """指定 env で `gh` を実行して標準出力 bytes を返す。"""
     try:
         completed = subprocess.run(
             args,
             check=False,
             capture_output=True,
             text=False,
+            env=env,
         )
     except OSError as exc:
         raise GitHubClientError(f"`gh` の実行に失敗しました: {exc}") from exc
@@ -543,6 +628,47 @@ def _build_artifact(raw_artifact: object) -> GitHubArtifact:
         ) from exc
     except ValidationError as exc:
         raise GitHubClientError("artifact 一覧の値が不正です") from exc
+
+
+def _build_tree(payload: dict[str, object]) -> GitHubTree:
+    """git tree JSON を model へ変換する。"""
+    raw_tree = payload.get("tree")
+    if not isinstance(raw_tree, list):
+        raise GitHubClientError("git tree 取得結果の `tree` が不正です")
+    truncated = payload.get("truncated")
+    if not isinstance(truncated, bool):
+        raise GitHubClientError("git tree 取得結果の `truncated` が不正です")
+    entries: list[GitHubTreeEntry] = []
+    for raw_entry in raw_tree:
+        if not isinstance(raw_entry, dict):
+            raise GitHubClientError("git tree entry の JSON 形式が不正です")
+        entries.append(
+            _validate_model(
+                GitHubTreeEntry,
+                {
+                    "path": raw_entry.get("path"),
+                    "type": raw_entry.get("type"),
+                    "sha": raw_entry.get("sha"),
+                },
+                "git tree entry",
+            )
+        )
+    return GitHubTree(tree=entries, truncated=truncated)
+
+
+def _decode_blob(payload: dict[str, object]) -> bytes:
+    """git blob JSON を bytes へ変換する。"""
+    encoding = payload.get("encoding")
+    if encoding != "base64":
+        raise GitHubClientError(f"git blob encoding が未対応です: {encoding}")
+    content = payload.get("content")
+    if not isinstance(content, str) or content == "":
+        raise GitHubClientError("git blob content が不正です")
+    try:
+        normalized_content = "".join(content.split())
+        return base64.b64decode(normalized_content, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise GitHubClientError("git blob content の base64 が不正です") from exc
 
 
 def _artifact_sort_key(artifact: GitHubArtifact) -> tuple[datetime, int]:

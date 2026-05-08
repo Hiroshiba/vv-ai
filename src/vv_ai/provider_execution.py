@@ -25,6 +25,11 @@ from vv_ai.metrics_artifact import (
     StepMetric,
 )
 from vv_ai.preflight import ReadyExecution
+from vv_ai.provider_asset_sync import (
+    ProviderAssetSyncError,
+    sync_claude_provider_assets,
+    sync_codex_provider_assets,
+)
 from vv_ai.report_artifact import ReportSections
 from vv_ai.session import SessionStateRef
 
@@ -160,13 +165,14 @@ def _execute_codex(
     try:
         command = _build_codex_command(ready_execution, output_file, provider_prompt)
         codex_env = _build_codex_env(env, skip_api_key_check)
+        codex_home = _resolve_codex_home_from_env(codex_env)
 
         session = ready_execution.resolved_session
         if session is not None and session.restored_provider_session_path is not None:
-            codex_home = codex_env.get("CODEX_HOME", str(Path.home() / ".codex"))
             _deploy_provider_session_dir(
-                session.restored_provider_session_path, Path(codex_home)
+                session.restored_provider_session_path, codex_home
             )
+        _sync_codex_assets_before_execution(env, codex_home)
 
         execution_started_at = time.perf_counter()
         proc = subprocess.run(
@@ -254,6 +260,9 @@ def _build_codex_env(
 ) -> dict[str, str]:
     """Codex プロセスに渡す環境変数を構築する。"""
     sanitized = _build_sanitized_env(env)
+    codex_home = _resolve_codex_home(env)
+    if codex_home is not None:
+        sanitized["CODEX_HOME"] = str(codex_home)
     if skip_api_key_check:
         return sanitized
 
@@ -266,15 +275,55 @@ def _build_codex_env(
 
     # TODO: GitHub-hosted runner (ephemeral) では実行後に更新された auth.json を
     #       secret に書き戻す仕組みが必要。現時点では毎回 secret から注入する運用。
-    codex_home = env.get(_CODEX_HOME_ENV, "").strip()
-    if codex_home and (Path(codex_home) / "auth.json").is_file():
-        sanitized["CODEX_HOME"] = codex_home
+    if codex_home is not None and (codex_home / "auth.json").is_file():
         return sanitized
 
     raise ProviderExecutionError(
         f"認証に必要な環境変数 `{_CODEX_OPENAI_API_KEY_FILE_ENV}` /"
         f" `{_CODEX_OPENAI_API_KEY_ENV}` / `{_CODEX_HOME_ENV}` のいずれも設定されていません"
     )
+
+
+def _resolve_codex_home(env: Mapping[str, str]) -> Path | None:
+    """VV_CODEX_HOME から Codex home を返す。"""
+    codex_home = env.get(_CODEX_HOME_ENV, "").strip()
+    if codex_home == "":
+        return None
+    return Path(codex_home)
+
+
+def _resolve_codex_home_from_env(codex_env: Mapping[str, str]) -> Path:
+    """Codex 実行環境から実際の Codex home を返す。"""
+    codex_home = codex_env.get("CODEX_HOME", "").strip()
+    if codex_home == "":
+        return Path.home() / ".codex"
+    return Path(codex_home)
+
+
+def _sync_codex_assets_before_execution(
+    env: Mapping[str, str],
+    codex_home: Path,
+) -> None:
+    """Codex 実行前に provider asset を同期する。"""
+    try:
+        sync_codex_provider_assets(env, codex_home)
+    except ProviderAssetSyncError as exc:
+        raise ProviderExecutionError(
+            f"Codex provider asset の同期に失敗しました: {exc}"
+        ) from exc
+
+
+def _sync_claude_assets_before_execution(
+    env: Mapping[str, str],
+    claude_home: Path,
+) -> None:
+    """Claude 実行前に provider asset を同期する。"""
+    try:
+        sync_claude_provider_assets(env, claude_home)
+    except ProviderAssetSyncError as exc:
+        raise ProviderExecutionError(
+            f"Claude provider asset の同期に失敗しました: {exc}"
+        ) from exc
 
 
 def _parse_codex_jsonl(jsonl_stdout: str, result_text: str) -> _CodexOutput:
@@ -409,6 +458,7 @@ def _execute_claude(
             _deploy_provider_session_dir(
                 session.restored_provider_session_path, project_dir
             )
+        _sync_claude_assets_before_execution(env, Path.home() / ".claude")
 
         execution_started_at = time.perf_counter()
         proc = subprocess.run(
