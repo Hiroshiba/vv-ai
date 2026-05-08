@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from vv_ai.cli import _run_ready_execution
 from vv_ai.command_handler import (
     _handle_implement_issue_post_execution,
@@ -245,10 +247,12 @@ class TestImplementResponseComment:
         ready = _make_ready_execution(
             command=_make_command(command="implement", dry_run=False)
         )
-        result = _make_execution_result("success", response_text="実装完了")
+        result = _make_execution_result(
+            "success",
+            response_text="TITLE: AI PR\nBODY:\nAI が考えた本文",
+        )
         github_client = MagicMock()
         github_client.get_default_branch.return_value = "main"
-        github_client.get_issue.return_value = _make_github_issue()
         github_client.create_pull_request.return_value = _make_github_pr(
             number=12,
             is_cross_repository=False,
@@ -271,13 +275,95 @@ class TestImplementResponseComment:
 
         github_client.create_pull_request.assert_called_once_with(
             "org/repo",
-            "テスト Issue",
-            "Closes #1",
+            "AI PR",
+            "AI が考えた本文",
             "vv-ai/issue-1-abc123",
             "main",
             maintainer_can_modify=True,
         )
+        github_client.get_issue.assert_not_called()
         github_client.create_issue_comment.assert_not_called()
+
+    def test_implement_issue_requires_response_text(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="implement", dry_run=False)
+        )
+        result = _make_execution_result("success", response_text=None)
+        github_client = MagicMock()
+        github_client.get_default_branch.return_value = "main"
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
+            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
+            patch("vv_ai.command_handler.push_branch") as mock_push,
+            pytest.raises(RuntimeError, match="AI からの PR タイトルと本文がありません"),
+        ):
+            _handle_implement_issue_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "vv-ai/issue-1-abc123",
+                None,
+                {},
+            )
+
+        mock_push.assert_not_called()
+        github_client.create_pull_request.assert_not_called()
+
+    def test_implement_issue_requires_title_line(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="implement", dry_run=False)
+        )
+        result = _make_execution_result("success", response_text="BODY:\n本文")
+        github_client = MagicMock()
+        github_client.get_default_branch.return_value = "main"
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
+            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
+            patch("vv_ai.command_handler.push_branch") as mock_push,
+            pytest.raises(RuntimeError, match="1行目は `TITLE: <タイトル>`"),
+        ):
+            _handle_implement_issue_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "vv-ai/issue-1-abc123",
+                None,
+                {},
+            )
+
+        mock_push.assert_not_called()
+        github_client.create_pull_request.assert_not_called()
+
+    def test_implement_issue_requires_body_line(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="implement", dry_run=False)
+        )
+        result = _make_execution_result("success", response_text="TITLE: AI PR\n本文")
+        github_client = MagicMock()
+        github_client.get_default_branch.return_value = "main"
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
+            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
+            patch("vv_ai.command_handler.push_branch") as mock_push,
+            pytest.raises(RuntimeError, match="2行目は `BODY:`"),
+        ):
+            _handle_implement_issue_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "vv-ai/issue-1-abc123",
+                None,
+                {},
+            )
+
+        mock_push.assert_not_called()
+        github_client.create_pull_request.assert_not_called()
 
     def test_implement_pr_posts_response_to_target_pr(self) -> None:
         ready = _make_ready_execution(
