@@ -472,6 +472,9 @@ provider_priority:
 ### プロンプト
 
 - Issue 起点の PR タイトル / description 出力形式は `issue` コマンドと同じ
+- Issue 起点の PR タイトルは Conventional Commits 形式
+- Issue 起点の PR description は元 Issue への参照を含める
+- Issue 起点の PR description は、Issue を解決する内容なら GitHub closing keyword を使ってもよい
 
 ---
 
