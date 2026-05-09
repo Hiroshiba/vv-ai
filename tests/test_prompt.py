@@ -95,11 +95,7 @@ class TestImplementPrompt:
     def test_issue_prompt_mentions_conventional_commit_title(self) -> None:
         prompt = _build_prompt("issue")
 
-        assert "PR タイトルは conventional commit message 形式にしてください。" in prompt
-        assert (
-            "conventional commit の type は Issue の内容と変更内容から判断してください。"
-            in prompt
-        )
+        assert "PR タイトルは Conventional Commits 形式にしてください。" in prompt
 
     def test_issue_prompt_mentions_source_issue_reference(self) -> None:
         prompt = _build_prompt("issue")
@@ -110,12 +106,12 @@ class TestImplementPrompt:
         prompt = _build_prompt("issue")
 
         assert (
-            "Issue を解決する内容なら `Fixes #<番号>` のような GitHub closing keyword を使っても構いません。"
+            "Issue を解決する内容なら GitHub closing keyword を使っても構いません。"
             in prompt
         )
 
     def test_pr_prompt_does_not_mention_created_pr_title_rule(self) -> None:
         prompt = _build_prompt("pr")
 
-        assert "PR タイトルは conventional commit message 形式にしてください。" not in prompt
+        assert "PR タイトルは Conventional Commits 形式にしてください。" not in prompt
         assert "PR 本文には元 Issue への参照を含めてください。" not in prompt
