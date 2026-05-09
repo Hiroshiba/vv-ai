@@ -474,7 +474,6 @@ provider_priority:
 - Issue 起点の PR タイトル / description 出力形式は `issue` コマンドと同じ
 - Issue 起点の PR タイトルは conventional commit message 形式
 - Issue 起点の PR description は元 Issue への参照を含める
-- 元 Issue への参照形式は AI が内容から判断する
 
 ---
 
