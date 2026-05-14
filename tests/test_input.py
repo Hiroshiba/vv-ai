@@ -73,6 +73,11 @@ class TestParseCommentInvocation:
         assert result.command == "issue"
         assert result.instruction == "この不具合をIssue化して"
 
+    def test_command_issue_without_instruction(self) -> None:
+        result = parse_comment_invocation("@vv-ai issue")
+        assert result.command == "issue"
+        assert result.instruction is None
+
     def test_option_dry_run(self) -> None:
         result = parse_comment_invocation("@vv-ai implement --dry-run 修正して")
         assert result.command == "implement"
@@ -253,19 +258,27 @@ class TestResolveRawInput:
         with pytest.raises(ResolutionError, match="target"):
             resolve_raw_input(raw)
 
-    def test_reply_requires_instruction(self) -> None:
+    def test_reply_allows_missing_instruction(self) -> None:
         raw = RawInput(
             event_name="local",
             command="reply",
             target_url="https://github.com/org/repo/issues/1",
         )
-        with pytest.raises(ResolutionError, match="instruction"):
-            resolve_raw_input(raw)
+        resolved = resolve_raw_input(raw)
+        assert resolved.command == "reply"
+        assert resolved.instruction is None
 
-    def test_issue_requires_instruction(self) -> None:
-        raw = RawInput(event_name="local", command="issue")
-        with pytest.raises(ResolutionError, match="instruction"):
-            resolve_raw_input(raw)
+    def test_issue_allows_missing_instruction(self) -> None:
+        raw = RawInput(
+            event_name="local",
+            command="issue",
+            repository_full_name="org/repo",
+        )
+        resolved = resolve_raw_input(raw)
+        assert resolved.command == "issue"
+        assert resolved.instruction is None
+        assert resolved.has_target is False
+        assert resolved.repo == "org/repo"
 
     def test_issue_does_not_require_target(self) -> None:
         raw = RawInput(

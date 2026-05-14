@@ -82,9 +82,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
   - `issue` コマンド: 対象不要（repo 未指定なら workflow のある repo に作成）
   - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 対象必須（不足ならエラー終了）
 - `instruction` 省略:
-  - `reply`: 必須
-  - `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 省略可
-  - `issue`: 必須
+  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue`: 省略可
 - GitHub 上への可視化: **何もしない**。Actions Run と artifact だけを見る運用
 - 認可: `github.actor == "Hiroshiba"` を必須チェック（workflow 実行権限があっても Hiroshiba 以外は即終了）
 - 対象 repo:
