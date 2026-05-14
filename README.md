@@ -4,6 +4,53 @@ Codex CLI と Claude Code CLI を活用し、GitHub Actions とローカル実�
 
 Issue / PR へのコメントやワークフロー手動実行から AI を起動し、計画・実装・レビュー・Issue 作成などのタスクを自動実行します。
 
+## 作業フロー
+
+Issue を起点に、設計から実装、レビュー、マージまで進める基本フローです。矢印の英字は使うコマンド名です。`issue` コマンドはこの図には含めていません。
+
+```mermaid
+flowchart TD
+  issue[["作業対象 Issue"]]
+  intent(["意図確認"])
+  requirements(["要件定義"])
+  arch(["基本設計"])
+  detail(["詳細設計"])
+  breakdown(["タスク分割"])
+  subissues[["サブ Issue 群"]]
+  implement_issue(["実装して PR 作成"])
+  pr[["PR"]]
+  review(["レビュー"])
+  review_result{"レビュー結果"}
+  implement_pr(["レビュー対応を追コミット"])
+  merged[["マージ済み PR"]]
+
+  issue -- "confirm" --> intent
+  intent -- "requirements" --> requirements
+  requirements -- "arch" --> arch
+  arch -- "detail" --> detail
+  detail -- "breakdown" --> breakdown
+  breakdown --> subissues
+  subissues -- "implement" --> implement_issue
+  implement_issue --> pr
+  pr -- "review" --> review
+  review --> review_result
+  review_result -- "OK" --> merged
+  review_result -- "修正あり" --> implement_pr
+  implement_pr --> pr
+
+  class issue,subissues,pr,merged githubObject
+  class intent,requirements,arch,detail,breakdown,implement_issue,review,implement_pr aiStep
+  class review_result decision
+
+  classDef githubObject fill:#e8f3ff,stroke:#2f6f9f,stroke-width:2px
+  classDef aiStep fill:#edf7ed,stroke:#3c7a3c,stroke-width:2px
+  classDef decision fill:#fff4d6,stroke:#9a6a00,stroke-width:2px
+```
+
+- 青: GitHub 上の対象や成果物
+- 緑: vv-ai が実行する工程
+- 黄: 判断
+
 ## セットアップ
 
 前提条件:
