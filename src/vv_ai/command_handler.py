@@ -320,7 +320,12 @@ def _handle_implement_issue_post_execution(
     if base_branch is None:
         base_branch = github_client.get_default_branch(target.repository_full_name)
 
-    commit_message = f"vv-ai: implement for #{target.number}"
+    response_text = execution_result.response_text
+    if response_text is None:
+        raise RuntimeError("AI からの PR タイトル、コミットメッセージ、本文がありません")
+
+    pr_title, commit_message, pr_body = _parse_implement_issue_output(response_text)
+
     committed = commit_all_changes(repo_root, commit_message)
     if committed:
         print(f"ワーキングツリーの変更をコミットしました: {commit_message}")
@@ -330,12 +335,6 @@ def _handle_implement_issue_post_execution(
     if not ahead:
         print("変更コミットがないため push と PR 作成をスキップします")
         return None
-
-    response_text = execution_result.response_text
-    if response_text is None:
-        raise RuntimeError("AI からの PR タイトルと本文がありません")
-
-    pr_title, pr_body = _parse_title_body_output(response_text)
 
     push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
 
@@ -375,7 +374,12 @@ def _handle_implement_pr_post_execution(
     assert target is not None
     assert target.number is not None
 
-    commit_message = f"vv-ai: implement for PR #{target.number}"
+    response_text = execution_result.response_text
+    if response_text is None:
+        raise RuntimeError("AI からのコミットメッセージと本文がありません")
+
+    commit_message, response_body = _parse_implement_pr_output(response_text)
+
     committed = commit_all_changes(repo_root, commit_message)
     if committed:
         print(f"ワーキングツリーの変更をコミットしました: {commit_message}")
@@ -386,10 +390,10 @@ def _handle_implement_pr_post_execution(
         assert target.repository_full_name is not None
         _post_implement_response_comment(
             ready_execution,
-            execution_result,
             github_client,
             target.repository_full_name,
             target.number,
+            response_body,
         )
         return
 
@@ -399,10 +403,10 @@ def _handle_implement_pr_post_execution(
         print(f"fork ブランチ `{implement_branch_name}` を push しました。")
         _post_implement_response_comment(
             ready_execution,
-            execution_result,
             github_client,
             target.repository_full_name,
             target.number,
+            response_body,
         )
         return
 
@@ -415,6 +419,7 @@ def _handle_implement_pr_post_execution(
         target.number,
         pr_info,
         head_sha_before,
+        response_body,
     )
 
 
@@ -427,6 +432,7 @@ def _post_fork_patch_fallback(
     number: int,
     pr_info: GitHubPullRequest,
     head_sha_before: str | None,
+    response_body: str,
 ) -> None:
     """fork PR への push 失敗時に patch コメントを投稿する。"""
     if github_client is None:
@@ -455,10 +461,7 @@ def _post_fork_patch_fallback(
         execution_result.allow_edits_notice_posted = True
 
     truncated = patch[:60000]
-    response_text = execution_result.response_text
-    response_block = ""
-    if response_text is not None:
-        response_block = f"{response_text}\n\n---\n\n"
+    response_block = f"{response_body}\n\n---\n\n" if response_body else ""
 
     body = (
         "fork リポジトリへの push ができなかったため、変更内容を patch として提示します。\n\n"
@@ -485,24 +488,76 @@ def _get_allow_edits_notice_posted(ready_execution: ReadyExecution) -> bool:
 
 def _post_implement_response_comment(
     ready_execution: ReadyExecution,
-    execution_result: ExecutionResult,
     github_client: GitHubClient | None,
     repository_full_name: str,
     number: int,
+    response_body: str,
 ) -> None:
     """PR 起点 implement の応答テキストを PR にコメント投稿する。"""
-    response_text = execution_result.response_text
-    if response_text is None:
-        return
-
     if ready_execution.command.dry_run or github_client is None:
-        print(response_text)
+        print(response_body)
         return
 
     try:
-        github_client.create_issue_comment(repository_full_name, number, response_text)
+        github_client.create_issue_comment(repository_full_name, number, response_body)
     except GitHubClientError as exc:
         print(f"implement 応答コメント投稿に失敗しました: {exc}", file=sys.stderr)
+
+
+def _parse_implement_issue_output(response_text: str) -> tuple[str, str, str]:
+    """Issue 起点 implement の AI 出力から PR タイトル、コミットメッセージ、本文を抽出する。"""
+    lines = response_text.split("\n")
+    title = _parse_required_prefixed_line(lines, 0, "TITLE:", "`TITLE: <タイトル>`")
+    commit_message = _parse_required_prefixed_line(
+        lines,
+        1,
+        "COMMIT_MESSAGE:",
+        "`COMMIT_MESSAGE: <コミットメッセージ>`",
+    )
+    _require_body_line(lines, 2)
+    body = "\n".join(lines[3:])
+    return title, commit_message, body
+
+
+def _parse_implement_pr_output(response_text: str) -> tuple[str, str]:
+    """PR 起点 implement の AI 出力からコミットメッセージと本文を抽出する。"""
+    lines = response_text.split("\n")
+    commit_message = _parse_required_prefixed_line(
+        lines,
+        0,
+        "COMMIT_MESSAGE:",
+        "`COMMIT_MESSAGE: <コミットメッセージ>`",
+    )
+    _require_body_line(lines, 1)
+    body = "\n".join(lines[2:])
+    return commit_message, body
+
+
+def _parse_required_prefixed_line(
+    lines: list[str],
+    index: int,
+    prefix: str,
+    expected: str,
+) -> str:
+    """指定行から必須の prefix 付き値を抽出する。"""
+    if len(lines) <= index or not lines[index].startswith(prefix):
+        raise RuntimeError(
+            f"AI 出力が期待するフォーマットではありません。{index + 1}行目は {expected} である必要があります"
+        )
+
+    value = lines[index][len(prefix):].strip()
+    if not value:
+        label = prefix.removesuffix(":")
+        raise RuntimeError(f"AI 出力の {label} が空です")
+    return value
+
+
+def _require_body_line(lines: list[str], index: int) -> None:
+    """指定行が BODY 行であることを確認する。"""
+    if len(lines) <= index or lines[index].strip() != "BODY:":
+        raise RuntimeError(
+            f"AI 出力が期待するフォーマットではありません。{index + 1}行目は `BODY:` である必要があります"
+        )
 
 
 def _parse_title_body_output(response_text: str) -> tuple[str, str]:
