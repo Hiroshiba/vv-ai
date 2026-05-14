@@ -6,7 +6,7 @@ GitHub Actions ワークフロー + Python CLI ツール（Codex CLI / Claude Co
 
 ## PROJECT OVERVIEW
 
-GitHub の Issue / PR に対してコメントやワークフローディスパッチで AI（Codex CLI / Claude Code CLI）を起動し、計画・実装・レビュー・Issue 作成などのタスクを自動実行する仕組み。ローカル実行にも対応し、GitHub に依存しないローカル Issue / PR 管理もサポートする。各リポジトリにソースをコピーして導入するプロトタイプとして開始し、将来的に Reusable Workflow への切り出しを見据える。
+GitHub の Issue / PR に対してコメントやワークフローディスパッチで AI（Codex CLI / Claude Code CLI）を起動し、計画・実装・レビュー・Issue 作成などのタスクを自動実行する仕組み。ローカル実行は GitHub Actions の再現実行やローカル Issue / PR を使ったデバッグ補助として扱う。各リポジトリにソースをコピーして導入するプロトタイプとして開始し、将来的に Reusable Workflow への切り出しを見据える。
 
 ---
 
@@ -91,11 +91,12 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
   - 通常コマンド: workflow が置かれた repo のみ
   - `issue` コマンドのみ: `--repo` で別 repo も可（任意 OK）
 
-### 3. ローカル CLI
+### 3. ローカル CLI によるデバッグ
 
 - CLI 名: `vv-ai`
 - サブコマンドなし（`vv-ai [options]` で直接実行）
 - workflow 側からもこの CLI を呼ぶ
+- 通常運用の入口ではなく、GitHub Actions の挙動を手元で再現するために使う
 - 入力方法:
   - 直接指定: `--command`, `--instruction`, `--target-url`, `--target-type`, `--target-number`, `--provider`, `--session_mode`, `--dry-run`, `--repo`
   - イベントファイル: `--event-file <json>` で GitHub event payload を読み込み再現実行
@@ -141,8 +142,8 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 
 ### Local Backend
 
-- GitHub 非依存で動作可能
-- ローカル Issue / PR をファイルベースで管理
+- GitHub Actions での処理を手元で再現するための補助 backend
+- ローカル Issue / PR をファイルベースで管理し、デバッグ用 target を作る
 - `--target-url` にローカルパスを指定して起動
 
 ### Backend 判定ルール
@@ -716,7 +717,7 @@ provider_priority:
 - allowed_users の拡張（Team / 権限ベース）
 - 横断的な metrics 集計・分析
 - Report から恒久ルールへの昇格パイプライン（diary → reflect → CLAUDE.md / AGENTS.md）
-- Local backend の拡張
+- ローカルデバッグ補助の拡張
 
 ---
 
@@ -736,7 +737,7 @@ provider_priority:
 ## OPEN QUESTIONS
 
 - `vv-ai.yml` に将来追加する設定項目の洗い出し（session デフォルト、provider 別設定、セキュリティポリシー等）
-- ローカル Issue / PR の操作 CLI（作成・一覧・状態変更等）の詳細設計
+- ローカルデバッグ用 Issue / PR の操作 CLI（作成・一覧・状態変更等）の詳細設計
 - `--instruction` の必須/任意の境界の詳細仕様
 - `--event-file` と直接引数が両方ある場合の優先順位
 - `target_url` と `target_type`/`target_number` が矛盾する場合の扱い

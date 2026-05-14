@@ -1,8 +1,8 @@
 # vv-ai
 
-Codex CLI と Claude Code CLI を活用し、GitHub Actions とローカル実行の両方で動かす AI 自動化ツールキットです。
+Codex CLI と Claude Code CLI を活用し、GitHub Issue / PR 上のコメントや workflow_dispatch から AI を起動する GitHub Actions 向けの自動化ツールキットです。
 
-Issue / PR へのコメントやワークフロー手動実行から AI を起動し、計画・実装・レビュー・Issue 作成などのタスクを自動実行します。
+Issue / PR へのコメントを主な入口として、計画・実装・レビュー・Issue 作成などのタスクを自動実行します。
 
 ## 作業フロー
 
@@ -114,41 +114,6 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-codex-auth-secret --r
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-claude-settings-secret --repo org/repo
 ```
 
-ローカル実行では、環境変数に直接セットするか `_FILE` サフィックスでファイルパスを渡します。
-
-```sh
-export VV_ANTHROPIC_API_KEY_FILE=/path/to/anthropic_key
-export VV_OPENAI_API_KEY_FILE=/path/to/openai_key
-export VV_AI_AGE_PUBLIC_KEY_FILE=/path/to/age_public_key
-export VV_AI_AGE_SECRET_KEY_FILE=/path/to/age_secret_key
-export VV_CODEX_HOME=/path/to/codex_home
-```
-
-## ローカル実行
-
-`--event local` がデフォルトです。
-
-```sh
-uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command requirements --target-url https://github.com/org/repo/issues/123 --instruction "要件を整理して"
-uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command implement --target-url https://github.com/org/repo/issues/123 --dry-run
-uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --target-type issue --target-number 123 --instruction "このIssueの要点を教えて"
-```
-
-主要な引数:
-
-| 引数 | 説明 |
-| --- | --- |
-| `--command` | `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue` / `reply` |
-| `--instruction` | 自然言語の指示本文 |
-| `--target-url` | 対象の Issue / PR URL またはローカルパス |
-| `--target-type` | `issue` または `pr` |
-| `--target-number` | Issue / PR 番号 |
-| `--provider` | `codex` または `claude` |
-| `--session_mode` | `inherit` / `inherit_or_new` / `compact` / `new`。デフォルトは `inherit_or_new` |
-| `--dry-run` | GitHub への外部反映を行わず、artifact のみ保存する |
-| `--repo` | Issue 作成先の `org/repo`。`issue` コマンド専用 |
-| `--event-file` | GitHub event payload JSON を読み込んで再現実行する |
-
 ## GitHub Actions
 
 ### コメント起動
@@ -203,6 +168,43 @@ gh workflow run vv-ai.yml \
 1. `.github/workflows/vv-ai.yml` をリポジトリにコピーする
 2. リポジトリの Settings > Secrets and variables > Actions に必要な Secret を登録する
 3. リポジトリルートに `vv-ai.yml` を配置する
+
+## ローカルデバッグ
+
+ローカル実行は GitHub Actions の再現実行や動作確認のために使います。
+
+`--event local` がデフォルトです。GitHub に反映させず確認する場合は `--dry-run` を付けます。
+
+```sh
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command requirements --target-url https://github.com/org/repo/issues/123 --instruction "要件を整理して"
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command implement --target-url https://github.com/org/repo/issues/123 --dry-run
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --target-type issue --target-number 123 --instruction "このIssueの要点を教えて"
+```
+
+主要な引数:
+
+| 引数 | 説明 |
+| --- | --- |
+| `--command` | `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue` / `reply` |
+| `--instruction` | 自然言語の指示本文 |
+| `--target-url` | 対象の Issue / PR URL またはローカルパス |
+| `--target-type` | `issue` または `pr` |
+| `--target-number` | Issue / PR 番号 |
+| `--provider` | `codex` または `claude` |
+| `--session_mode` | `inherit` / `inherit_or_new` / `compact` / `new`。デフォルトは `inherit_or_new` |
+| `--dry-run` | GitHub への外部反映を行わず、artifact のみ保存する |
+| `--repo` | Issue 作成先の `org/repo`。`issue` コマンド専用 |
+| `--event-file` | GitHub event payload JSON を読み込んで再現実行する |
+
+ローカルデバッグでは、環境変数に直接セットするか `_FILE` サフィックスでファイルパスを渡します。
+
+```sh
+export VV_ANTHROPIC_API_KEY_FILE=/path/to/anthropic_key
+export VV_OPENAI_API_KEY_FILE=/path/to/openai_key
+export VV_AI_AGE_PUBLIC_KEY_FILE=/path/to/age_public_key
+export VV_AI_AGE_SECRET_KEY_FILE=/path/to/age_secret_key
+export VV_CODEX_HOME=/path/to/codex_home
+```
 
 ## Reusable Workflow 化の前提
 
