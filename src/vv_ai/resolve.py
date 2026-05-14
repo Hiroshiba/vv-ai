@@ -64,7 +64,7 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
     target_url, target_type, target_number, has_target = _resolve_target_fields(raw_input)
     repo = _resolve_repo(command, raw_input)
 
-    if command in {"confirm", "reply", "implement", "review", "requirements", "arch", "detail", "breakdown"} and not has_target:
+    if command in {"confirm", "reply", "implement", "review", "requirements", "arch", "detail", "breakdown", "next"} and not has_target:
         raise ResolutionError(f"`{command}` コマンドには target 指定が必要です")
 
     return ResolvedCommand(

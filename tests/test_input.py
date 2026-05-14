@@ -78,6 +78,11 @@ class TestParseCommentInvocation:
         assert result.command == "issue"
         assert result.instruction is None
 
+    def test_command_next(self) -> None:
+        result = parse_comment_invocation("@vv-ai next")
+        assert result.command == "next"
+        assert result.instruction is None
+
     def test_option_dry_run(self) -> None:
         result = parse_comment_invocation("@vv-ai implement --dry-run 修正して")
         assert result.command == "implement"
@@ -115,6 +120,15 @@ class TestParseCommentInvocation:
         assert result.session_mode == "compact"
         assert result.dry_run is True
         assert result.instruction == "実装して"
+
+    def test_next_multiple_options(self) -> None:
+        result = parse_comment_invocation(
+            "@vv-ai next --provider codex --session_mode new --dry-run"
+        )
+        assert result.command == "next"
+        assert result.provider == "codex"
+        assert result.session_mode == "new"
+        assert result.dry_run is True
 
     def test_error_legacy_session_option(self) -> None:
         with pytest.raises(InputError, match="未対応のオプションです: --session"):
@@ -235,6 +249,21 @@ class TestBuildRawInputFromWorkflowDispatchEvent:
         assert raw.target_type == "issue"
         assert raw.target_number == 10
         assert raw.instruction == "実装して"
+
+    def test_next_command(self) -> None:
+        event = WorkflowDispatchEvent.model_validate({
+            "inputs": {
+                "command": "next",
+                "target_type": "issue",
+                "target_number": "10",
+            },
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        })
+        raw = build_raw_input_from_workflow_dispatch_event(event)
+        assert raw.command == "next"
+        assert raw.target_type == "issue"
+        assert raw.target_number == 10
 
     def test_empty_string_becomes_none(self) -> None:
         event = WorkflowDispatchEvent.model_validate({
@@ -381,6 +410,11 @@ class TestResolveRawInput:
 
     def test_breakdown_requires_target(self) -> None:
         raw = RawInput(event_name="local", command="breakdown")
+        with pytest.raises(ResolutionError, match="target"):
+            resolve_raw_input(raw)
+
+    def test_next_requires_target(self) -> None:
+        raw = RawInput(event_name="local", command="next")
         with pytest.raises(ResolutionError, match="target"):
             resolve_raw_input(raw)
 

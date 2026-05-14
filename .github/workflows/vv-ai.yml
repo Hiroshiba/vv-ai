@@ -12,6 +12,7 @@ on:
         options:
           [
             confirm,
+            next,
             requirements,
             arch,
             detail,

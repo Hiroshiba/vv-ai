@@ -62,6 +62,66 @@ def test_get_repository_blob_rejects_unknown_encoding() -> None:
         client.get_repository_blob("org/repo", "abc123")
 
 
+def test_get_issue_parent_number_returns_parent() -> None:
+    """get_issue_parent_number は親 Issue 番号を返す。"""
+    captured_args: list[str] = []
+
+    def fake_runner(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            {
+                "data": {
+                    "repository": {
+                        "issue": {
+                            "parent": {
+                                "number": 12,
+                            },
+                        },
+                    },
+                },
+            }
+        )
+
+    client = GitHubClient(fake_runner, lambda args: b"")
+
+    assert client.get_issue_parent_number("org/repo", 34) == 12
+    assert "graphql" in captured_args
+    assert "owner=org" in captured_args
+    assert "name=repo" in captured_args
+    assert "number=34" in captured_args
+
+
+def test_get_issue_parent_number_returns_none() -> None:
+    """get_issue_parent_number は親 Issue がなければ None を返す。"""
+    client = GitHubClient(
+        lambda args: json.dumps(
+            {
+                "data": {
+                    "repository": {
+                        "issue": {
+                            "parent": None,
+                        },
+                    },
+                },
+            }
+        ),
+        lambda args: b"",
+    )
+
+    assert client.get_issue_parent_number("org/repo", 34) is None
+
+
+def test_get_issue_parent_number_rejects_invalid_payload() -> None:
+    """get_issue_parent_number は不正な payload を拒否する。"""
+    client = GitHubClient(
+        lambda args: json.dumps({"data": {"repository": {"issue": {"parent": {}}}}}),
+        lambda args: b"",
+    )
+
+    with pytest.raises(GitHubClientError, match="親 Issue 番号"):
+        client.get_issue_parent_number("org/repo", 34)
+
+
 def test_build_github_client_with_token_uses_gh_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """build_github_client_with_token は GH_TOKEN を明示した env で gh を実行する。"""
     captured_env: dict[str, str] = {}

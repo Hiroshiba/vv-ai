@@ -39,6 +39,7 @@ from vv_ai.preflight import (
     SilentSkip,
     run_preflight,
 )
+from vv_ai.next_command import NextResolutionError, resolve_next_command
 from vv_ai.provider import ProviderResolutionError
 from vv_ai.command_handler import run_command
 from vv_ai.session import SessionKey
@@ -70,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--command",
-        choices=["confirm", "requirements", "arch", "detail", "breakdown", "implement", "review", "issue", "reply"],
+        choices=["confirm", "requirements", "arch", "detail", "breakdown", "implement", "review", "issue", "reply", "next"],
         help="実行コマンドを指定します。",
     )
     parser.add_argument("--instruction", help="自然言語の指示本文です。")
@@ -136,16 +137,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             resolved_target_command = resolve_target(
                 repo_root, preflight_result.command
             )
+            resolved_next_command = resolve_next_command(
+                repo_root,
+                resolved_target_command,
+                preflight_result.config,
+            )
             resolved_session = resolve_session(
                 repo_root,
                 preflight_result.workflow_id,
-                resolved_target_command,
+                resolved_next_command,
                 preflight_result.resolved_provider,
                 os.environ,
             )
             preflight_result = preflight_result.model_copy(
                 update={
-                    "command": resolved_target_command,
+                    "command": resolved_next_command,
                     "resolved_session": resolved_session,
                 }
             )
@@ -156,6 +162,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         VVAIConfigError,
         PreflightError,
         ProviderResolutionError,
+        NextResolutionError,
         SessionResolutionError,
         TargetResolutionError,
     ) as exc:

@@ -126,6 +126,7 @@ Issue / PR で使えるコマンド:
 
 ```
 @vv-ai [reply] instruction
+@vv-ai next [instruction]
 @vv-ai confirm [instruction]
 @vv-ai requirements [instruction]
 @vv-ai arch [instruction]
@@ -145,6 +146,8 @@ PR でのみ使えるコマンド:
 ```
 @vv-ai review [instruction]
 ```
+
+`next` は同じ Issue / PR 上の過去の vv-ai コマンド履歴から次工程を選び、既存コマンドとして実行します。
 
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。
 
@@ -177,6 +180,7 @@ gh workflow run vv-ai.yml \
 
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command requirements --target-url https://github.com/org/repo/issues/123 --instruction "要件を整理して"
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command next --target-url https://github.com/org/repo/issues/123 --dry-run
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command implement --target-url https://github.com/org/repo/issues/123 --dry-run
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --target-type issue --target-number 123 --instruction "このIssueの要点を教えて"
 ```
@@ -185,7 +189,7 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 
 | 引数 | 説明 |
 | --- | --- |
-| `--command` | `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue` / `reply` |
+| `--command` | `confirm` / `next` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue` / `reply` |
 | `--instruction` | 自然言語の指示本文 |
 | `--target-url` | 対象の Issue / PR URL またはローカルパス |
 | `--target-type` | `issue` または `pr` |

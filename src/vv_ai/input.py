@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from vv_ai.config import ProviderName
 
 CommandName = Literal[
-    "confirm", "reply", "implement", "review", "issue",
+    "confirm", "reply", "implement", "review", "issue", "next",
     "requirements", "arch", "detail", "breakdown",
 ]
 EventName = Literal["issue_comment", "workflow_dispatch", "local"]
@@ -20,7 +20,7 @@ SessionMode = Literal["inherit", "inherit_or_new", "compact", "new"]
 TargetType = Literal["issue", "pr"]
 
 _COMMAND_NAMES: set[str] = {
-    "confirm", "reply", "implement", "review", "issue",
+    "confirm", "reply", "implement", "review", "issue", "next",
     "requirements", "arch", "detail", "breakdown",
 }
 

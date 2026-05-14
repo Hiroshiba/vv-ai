@@ -162,6 +162,46 @@ class GitHubClient:
             raise GitHubClientError("Issue 取得結果の JSON 形式が不正です")
         return _build_issue_from_rest(repository_full_name, raw_issue)
 
+    def get_issue_parent_number(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> int | None:
+        """Issue の親 Issue 番号を返す。"""
+        owner, repo = _split_repository_full_name(repository_full_name)
+        payload = self._run_json(
+            [
+                "api",
+                "graphql",
+                "-f",
+                (
+                    "query=query($owner: String!, $name: String!, $number: Int!) { "
+                    "repository(owner: $owner, name: $name) { "
+                    "issue(number: $number) { parent { number } } } }"
+                ),
+                "-f",
+                f"owner={owner}",
+                "-f",
+                f"name={repo}",
+                "-F",
+                f"number={_require_positive_id(number, 'number')}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("Issue 親取得結果の JSON 形式が不正です")
+
+        data = _require_mapping(payload.get("data"), "data")
+        repository = _require_mapping(data.get("repository"), "data.repository")
+        issue = _require_mapping(repository.get("issue"), "data.repository.issue")
+        parent = issue.get("parent")
+        if parent is None:
+            return None
+        parent_issue = _require_mapping(parent, "data.repository.issue.parent")
+        parent_number = parent_issue.get("number")
+        if not isinstance(parent_number, int) or parent_number <= 0:
+            raise GitHubClientError("親 Issue 番号が不正です")
+        return parent_number
+
     def get_pull_request(
         self,
         repository_full_name: str,
@@ -911,6 +951,13 @@ def _require_repository_full_name(repository_full_name: str) -> str:
     if owner == "" or repo == "":
         raise GitHubClientError("repository_full_name は `org/repo` 形式で指定してください")
     return repository_full_name
+
+
+def _split_repository_full_name(repository_full_name: str) -> tuple[str, str]:
+    """org/repo 形式の repository 名を owner と repo に分ける。"""
+    valid_repository_full_name = _require_repository_full_name(repository_full_name)
+    owner, repo = valid_repository_full_name.split("/")
+    return owner, repo
 
 
 def _require_positive_id(value: int, field_name: str) -> int:

@@ -21,6 +21,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 | コマンド       | 説明                                                         | Issue 上 | PR 上 |
 | -------------- | ------------------------------------------------------------ | -------- | ----- |
 | （省略時）     | **reply**（デフォルト）。指示に対してコメントで返答するだけ   | ✅        | ✅     |
+| `next`         | 過去の vv-ai コマンド履歴から次工程を選んで実行する          | ✅        | ✅     |
 | `confirm`      | confirm-intent スキルで要望の意図確認を行いコメントで返す    | ✅        | ✅     |
 | `requirements` | define-requirements スキルで要件定義を行いコメントで返す     | ✅        | ✅     |
 | `arch`       | basic-design スキルで基本設計を行いコメントで返す            | ✅        | ✅     |
@@ -43,6 +44,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 
 ```
 @vv-ai 調べて要点だけ返して
+@vv-ai next
 @vv-ai confirm
 @vv-ai requirements
 @vv-ai arch 基本設計の方針を示して
@@ -53,6 +55,20 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 @vv-ai issue --repo org/repo この不具合をIssue化して
 @vv-ai implement --dry-run この修正を試してみて
 ```
+
+### `next` コマンド
+
+- `next` は provider 実行前に既存コマンドへ変換する
+- 同じ Issue / PR 上の許可ユーザーによる過去の `@vv-ai <command>` コメントを作成順に見て次工程を決める
+- AI の応答本文は工程判定に使わない
+- `reply` と `issue` は工程履歴に含めない
+- 通常 Issue で履歴がない場合は `confirm`
+- サブ Issue で履歴がない場合は `implement`
+- Issue の工程は `confirm → requirements → arch → detail → breakdown`
+- 親 Issue の `breakdown` 後と Issue の `implement` 後はエラー
+- PR で履歴がない場合は `review`
+- PR の工程は `review → implement → review`
+- `--provider` / `--session_mode` / `--dry-run` / `instruction` は変換後のコマンドへ引き継ぐ
 
 ---
 
@@ -67,7 +83,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 
 - 手元 PC から `gh workflow run ...` で起動
 - 入力項目:
-  - `command`: confirm | requirements | arch | detail | breakdown | implement | review | issue | reply
+  - `command`: confirm | next | requirements | arch | detail | breakdown | implement | review | issue | reply
   - `target_type`: issue | pr（任意）
   - `target_number`: 番号（任意）
   - `target_url`: Issue/PR URL（任意）
@@ -80,9 +96,9 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
   - `target_url` が優先
 - 対象省略時の扱い:
   - `issue` コマンド: 対象不要（repo 未指定なら workflow のある repo に作成）
-  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 対象必須（不足ならエラー終了）
+  - `confirm` / `reply` / `next` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 対象必須（不足ならエラー終了）
 - `instruction` 省略:
-  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue`: 省略可
+  - `confirm` / `reply` / `next` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue`: 省略可
 - GitHub 上への可視化: **何もしない**。Actions Run と artifact だけを見る運用
 - 認可: `github.actor == "Hiroshiba"` を必須チェック（workflow 実行権限があっても Hiroshiba 以外は即終了）
 - 対象 repo:
@@ -273,6 +289,7 @@ provider_priority:
 
 - **同一 Issue/PR 内** で `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` は **同じセッション**（main lane）を共有
 - `review` は **別セッション**（review lane）
+- `next` は変換後のコマンドに従って main lane または review lane を使う
 - セッションキー: `<backend> / <target> / <provider> / <lane>`
   - 例: `github / org/repo#123 / codex / main`
   - 例: `local / issue:login-403-7k2p9a / codex / main`
@@ -712,6 +729,7 @@ provider_priority:
 
 - プロトタイプとして 1 リポジトリで安定動作すること
 - Codex / Claude Code の両方で基本フロー（confirm → requirements → arch → detail → breakdown → implement → review）が回ること
+- `next` で基本フローの次工程を実行できること
 - セッション継続が機能し、文脈を引き継いだ作業ができること
 - fork PR でも安全に動作すること（API キー漏洩なし）
 - per-run の metrics / report が確実に保存されること

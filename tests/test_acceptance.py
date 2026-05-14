@@ -149,12 +149,16 @@ def _enter_common_patches(
     stack.enter_context(
         patch("vv_ai.command_handler.build_github_client", return_value=github_client)
     )
+    stack.enter_context(
+        patch("vv_ai.next_command.build_github_client", return_value=github_client)
+    )
     stack.enter_context(patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}))
     if isinstance(github_client, MagicMock):
         github_client.get_repo_info.return_value = RepoInfo(
             is_fork=False, parent_full_name=None, parent_default_branch=None
         )
         github_client.get_issue.return_value = _make_github_issue("org/repo", 1)
+        github_client.get_issue_parent_number.return_value = None
         github_client.list_issue_comments.return_value = []
     return execute_provider
 
@@ -313,6 +317,26 @@ class TestIssueCommentEvent:
         event_path.write_text(json.dumps(payload), encoding="utf-8")
         return event_path
 
+    def _write_pr_event_file(self, tmp_path: Path, comment_body: str, sender: str) -> Path:
+        """PR comment event payload を JSON ファイルとして書き出す。"""
+        payload = {
+            "action": "created",
+            "comment": {
+                "id": 1001,
+                "body": comment_body,
+                "user": {"login": sender},
+            },
+            "issue": {
+                "number": 42,
+                "pull_request": {"url": "https://api.github.com/repos/org/repo/pulls/42"},
+            },
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": sender},
+        }
+        event_path = tmp_path / "event.json"
+        event_path.write_text(json.dumps(payload), encoding="utf-8")
+        return event_path
+
     def test_authorized_user_exits_zero(self, tmp_path: Path) -> None:
         _write_config(tmp_path)
         event_path = self._write_event_file(
@@ -369,6 +393,88 @@ class TestIssueCommentEvent:
         assert "Issue 本文" in provider_prompt
         assert "過去コメント" in provider_prompt
         assert "@vv-ai arch 基本設計して" not in provider_prompt
+
+    def test_next_issue_without_history_runs_confirm(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_event_file(
+            tmp_path, "@vv-ai next", "Hiroshiba"
+        )
+        argv = [
+            "--event", "issue_comment",
+            "--event-file", str(event_path),
+        ]
+        session = _make_resolved_session("github", "org/repo#42", "codex")
+        result = _make_execution_result("success", "確認事項です")
+        mock_gh = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack, tmp_path, session, result, mock_gh
+            )
+            exit_code = main(argv)
+
+        ready_execution = execute_provider.call_args.args[1]
+        assert exit_code == 0
+        assert ready_execution.command.command == "confirm"
+
+    def test_next_pr_after_review_runs_implement(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_pr_event_file(
+            tmp_path, "@vv-ai next --dry-run", "Hiroshiba"
+        )
+        argv = [
+            "--event", "issue_comment",
+            "--event-file", str(event_path),
+        ]
+        session = _make_resolved_session("github", "org/repo#42", "codex")
+        result = _make_execution_result("success", "追加実装しました")
+        mock_gh = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack, tmp_path, session, result, mock_gh
+            )
+            mock_gh.list_issue_comments.return_value = [
+                _make_github_comment(1000, "@vv-ai review"),
+                _make_github_comment(1001, "@vv-ai next --dry-run"),
+            ]
+            mock_gh.get_pull_request.return_value = _make_github_pr(
+                "org/repo", 42, "feature-branch"
+            )
+            stack.enter_context(
+                patch("vv_ai.command_handler.fetch_and_checkout_branch")
+            )
+            exit_code = main(argv)
+
+        ready_execution = execute_provider.call_args.args[1]
+        assert exit_code == 0
+        assert ready_execution.command.command == "implement"
+
+    def test_next_issue_after_breakdown_exits_2(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_event_file(
+            tmp_path, "@vv-ai next", "Hiroshiba"
+        )
+        argv = [
+            "--event", "issue_comment",
+            "--event-file", str(event_path),
+        ]
+        session = _make_resolved_session("github", "org/repo#42", "codex")
+        result = _make_execution_result("success", "実行されません")
+        mock_gh = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack, tmp_path, session, result, mock_gh
+            )
+            mock_gh.list_issue_comments.return_value = [
+                _make_github_comment(1000, "@vv-ai breakdown"),
+                _make_github_comment(1001, "@vv-ai next"),
+            ]
+            exit_code = main(argv)
+
+        assert exit_code == 2
+        execute_provider.assert_not_called()
 
     def test_unauthorized_user_silent_skip(self, tmp_path: Path) -> None:
         """allowed_users 外のユーザーは silent skip で exit code 0。"""
