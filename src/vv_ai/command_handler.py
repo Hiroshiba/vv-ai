@@ -194,6 +194,19 @@ def run_command(
                 eyes_reaction_id,
                 finalize_status,
             )
+        if (
+            github_client is not None
+            and not command.dry_run
+            and command.trigger_label_name is not None
+        ):
+            assert target is not None
+            assert target.repository_full_name is not None
+            assert target.number is not None
+            github_client.remove_issue_label(
+                target.repository_full_name,
+                target.number,
+                command.trigger_label_name,
+            )
 
     assert execution_result is not None
     return execution_result, created_pr

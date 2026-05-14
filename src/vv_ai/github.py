@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -450,6 +451,23 @@ class GitHubClient:
                     comment_id,
                     reaction_id,
                 ),
+            ]
+        )
+
+    def remove_issue_label(
+        self,
+        repository_full_name: str,
+        number: int,
+        label_name: str,
+    ) -> None:
+        """Issue または PR から label を削除する。"""
+        self._text_runner(
+            [
+                "gh",
+                "api",
+                "--method",
+                "DELETE",
+                _build_issue_label_path(repository_full_name, number, label_name),
             ]
         )
 
@@ -900,6 +918,22 @@ def _build_issue_comment_reaction_path(
     return (
         f"{_build_issue_comment_reactions_path(repository_full_name, comment_id)}"
         f"/{_require_positive_id(reaction_id, 'reaction_id')}"
+    )
+
+
+def _build_issue_label_path(
+    repository_full_name: str,
+    number: int,
+    label_name: str,
+) -> str:
+    """Issue label endpoint を返す。"""
+    encoded_label_name = quote(
+        _require_non_empty_text(label_name, "label_name"),
+        safe="",
+    )
+    return (
+        f"{_build_issues_path(repository_full_name)}"
+        f"/{_require_positive_id(number, 'number')}/labels/{encoded_label_name}"
     )
 
 

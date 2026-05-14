@@ -62,7 +62,30 @@ def test_get_repository_blob_rejects_unknown_encoding() -> None:
         client.get_repository_blob("org/repo", "abc123")
 
 
-def test_build_github_client_with_token_uses_gh_token(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_remove_issue_label_uses_delete_method_with_encoded_label() -> None:
+    """remove_issue_label は encode 済み label path を DELETE する。"""
+    captured_args: list[Sequence[str]] = []
+    client = GitHubClient(
+        lambda args: captured_args.append(args) or "",
+        lambda args: b"",
+    )
+
+    client.remove_issue_label("org/repo", 1, "vv-ai:confirm")
+
+    assert captured_args == [
+        [
+            "gh",
+            "api",
+            "--method",
+            "DELETE",
+            "repos/org/repo/issues/1/labels/vv-ai%3Aconfirm",
+        ]
+    ]
+
+
+def test_build_github_client_with_token_uses_gh_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """build_github_client_with_token は GH_TOKEN を明示した env で gh を実行する。"""
     captured_env: dict[str, str] = {}
 
