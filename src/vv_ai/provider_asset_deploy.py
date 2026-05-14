@@ -27,7 +27,7 @@ _PROVIDER_ROOTS: dict[ProviderName, str] = {
 }
 _PROVIDER_DIRECTORIES: dict[ProviderName, tuple[str, ...]] = {
     "codex": ("skills", "agents"),
-    "claude": ("skills", "agents", "commands"),
+    "claude": ("skills", "agents"),
 }
 
 
