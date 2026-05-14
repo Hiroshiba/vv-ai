@@ -264,6 +264,47 @@ def test_deploy_claude_provider_assets_writes_claude_md(
     assert result.overwritten_files == 0
 
 
+def test_deploy_claude_provider_assets_ignores_commands(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Claude commands は provider asset として配置しない。"""
+    _patch_commit_id(monkeypatch)
+    tree = GitHubTree(
+        truncated=False,
+        tree=[
+            GitHubTreeEntry(
+                path=".claude/skills/detailed-design/SKILL.md",
+                type="blob",
+                sha="skill",
+            ),
+            GitHubTreeEntry(
+                path=".claude/commands/team-task.md",
+                type="blob",
+                sha="command",
+            ),
+        ],
+    )
+    _patch_client(
+        monkeypatch,
+        tree,
+        {
+            "skill": b"claude skill",
+            "command": b"claude command",
+        },
+    )
+
+    result = deploy_claude_provider_assets(
+        {"VV_GH_READONLY_TOKEN": "token"},
+        tmp_path,
+    )
+
+    assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").is_file()
+    assert not (tmp_path / "commands" / "team-task.md").exists()
+    assert result.copied_files == 1
+    assert result.overwritten_files == 0
+
+
 def test_deploy_overwrites_changed_file_with_warning(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
