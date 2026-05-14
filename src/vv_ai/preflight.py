@@ -28,7 +28,7 @@ class SilentSkip(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    reason: Literal["unauthorized_comment"]
+    reason: Literal["unauthorized_comment", "unauthorized_label"]
 
 
 class ReadyExecution(BaseModel):
@@ -88,6 +88,8 @@ def _authorize_actor(
     if actor not in config.allowed_users:
         if resolved_command.event_name == "issue_comment":
             return SilentSkip(reason="unauthorized_comment")
+        if resolved_command.event_name in {"issues", "pull_request"}:
+            return SilentSkip(reason="unauthorized_label")
         raise AuthorizationError("この workflow は許可されたユーザーのみ実行できます")
 
     return None
