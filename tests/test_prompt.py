@@ -72,7 +72,7 @@ class TestImplementPrompt:
         prompt = _build_prompt("pr")
 
         assert (
-            "GitHub 実行時は、あなたの最終出力が対象 PR にコメントとして投稿されます。"
+            "GitHub 実行時は、あなたの最終出力の本文が対象 PR にコメントとして投稿されます。"
             in prompt
         )
 
@@ -81,7 +81,7 @@ class TestImplementPrompt:
 
         assert (
             "fork PR で push できず patch コメントを投稿する場合、"
-            "あなたの最終出力は patch コメント内に含まれます。"
+            "あなたの最終出力の本文は patch コメント内に含まれます。"
             in prompt
         )
 
@@ -96,6 +96,16 @@ class TestImplementPrompt:
         prompt = _build_prompt("issue")
 
         assert "PR タイトルは Conventional Commits 形式にしてください。" in prompt
+
+    def test_issue_prompt_mentions_commit_message_format(self) -> None:
+        prompt = _build_prompt("issue")
+
+        assert "2行目: COMMIT_MESSAGE: <コミットメッセージ>" in prompt
+
+    def test_issue_prompt_mentions_conventional_commit_message(self) -> None:
+        prompt = _build_prompt("issue")
+
+        assert "コミットメッセージは Conventional Commits 形式にしてください。" in prompt
 
     def test_issue_prompt_mentions_source_issue_reference(self) -> None:
         prompt = _build_prompt("issue")
@@ -115,3 +125,14 @@ class TestImplementPrompt:
 
         assert "PR タイトルは Conventional Commits 形式にしてください。" not in prompt
         assert "PR 本文には元 Issue への参照を含めてください。" not in prompt
+
+    def test_pr_prompt_mentions_commit_message_format(self) -> None:
+        prompt = _build_prompt("pr")
+
+        assert "1行目: COMMIT_MESSAGE: <コミットメッセージ>" in prompt
+        assert "2行目: BODY:" in prompt
+
+    def test_pr_prompt_mentions_conventional_commit_message(self) -> None:
+        prompt = _build_prompt("pr")
+
+        assert "コミットメッセージは Conventional Commits 形式にしてください。" in prompt

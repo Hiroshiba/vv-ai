@@ -249,7 +249,12 @@ class TestImplementResponseComment:
         )
         result = _make_execution_result(
             "success",
-            response_text="TITLE: AI PR\nBODY:\nAI が考えた本文",
+            response_text=(
+                "TITLE: AI PR\n"
+                "COMMIT_MESSAGE: feat: ai commit\n"
+                "BODY:\n"
+                "AI が考えた本文"
+            ),
         )
         github_client = MagicMock()
         github_client.get_default_branch.return_value = "main"
@@ -259,7 +264,9 @@ class TestImplementResponseComment:
         )
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
+            patch(
+                "vv_ai.command_handler.commit_all_changes", return_value=True
+            ) as mock_commit,
             patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
             patch("vv_ai.command_handler.push_branch"),
         ):
@@ -273,6 +280,7 @@ class TestImplementResponseComment:
                 {},
             )
 
+        mock_commit.assert_called_once_with(Path("/dummy"), "feat: ai commit")
         github_client.create_pull_request.assert_called_once_with(
             "org/repo",
             "AI PR",
@@ -296,7 +304,10 @@ class TestImplementResponseComment:
             patch("vv_ai.command_handler.commit_all_changes", return_value=True),
             patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
             patch("vv_ai.command_handler.push_branch") as mock_push,
-            pytest.raises(RuntimeError, match="AI からの PR タイトルと本文がありません"),
+            pytest.raises(
+                RuntimeError,
+                match="AI からの PR タイトル、コミットメッセージ、本文がありません",
+            ),
         ):
             _handle_implement_issue_post_execution(
                 Path("/dummy"),
@@ -342,7 +353,10 @@ class TestImplementResponseComment:
         ready = _make_ready_execution(
             command=_make_command(command="implement", dry_run=False)
         )
-        result = _make_execution_result("success", response_text="TITLE: AI PR\n本文")
+        result = _make_execution_result(
+            "success",
+            response_text="TITLE: AI PR\nCOMMIT_MESSAGE: feat: ai commit\n本文",
+        )
         github_client = MagicMock()
         github_client.get_default_branch.return_value = "main"
 
@@ -350,7 +364,7 @@ class TestImplementResponseComment:
             patch("vv_ai.command_handler.commit_all_changes", return_value=True),
             patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
             patch("vv_ai.command_handler.push_branch") as mock_push,
-            pytest.raises(RuntimeError, match="2行目は `BODY:`"),
+            pytest.raises(RuntimeError, match="3行目は `BODY:`"),
         ):
             _handle_implement_issue_post_execution(
                 Path("/dummy"),
@@ -362,6 +376,71 @@ class TestImplementResponseComment:
                 {},
             )
 
+        mock_push.assert_not_called()
+        github_client.create_pull_request.assert_not_called()
+
+    def test_implement_issue_requires_commit_message_line(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="implement", dry_run=False)
+        )
+        result = _make_execution_result(
+            "success",
+            response_text="TITLE: AI PR\nBODY:\n本文",
+        )
+        github_client = MagicMock()
+        github_client.get_default_branch.return_value = "main"
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes") as mock_commit,
+            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
+            patch("vv_ai.command_handler.push_branch") as mock_push,
+            pytest.raises(
+                RuntimeError,
+                match="2行目は `COMMIT_MESSAGE: <コミットメッセージ>`",
+            ),
+        ):
+            _handle_implement_issue_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "vv-ai/issue-1-abc123",
+                None,
+                {},
+            )
+
+        mock_commit.assert_not_called()
+        mock_push.assert_not_called()
+        github_client.create_pull_request.assert_not_called()
+
+    def test_implement_issue_requires_non_empty_commit_message(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="implement", dry_run=False)
+        )
+        result = _make_execution_result(
+            "success",
+            response_text="TITLE: AI PR\nCOMMIT_MESSAGE:   \nBODY:\n本文",
+        )
+        github_client = MagicMock()
+        github_client.get_default_branch.return_value = "main"
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes") as mock_commit,
+            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
+            patch("vv_ai.command_handler.push_branch") as mock_push,
+            pytest.raises(RuntimeError, match="COMMIT_MESSAGE が空です"),
+        ):
+            _handle_implement_issue_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "vv-ai/issue-1-abc123",
+                None,
+                {},
+            )
+
+        mock_commit.assert_not_called()
         mock_push.assert_not_called()
         github_client.create_pull_request.assert_not_called()
 
@@ -379,11 +458,16 @@ class TestImplementResponseComment:
                 ),
             )
         )
-        result = _make_execution_result("success", response_text="追コミット完了")
+        result = _make_execution_result(
+            "success",
+            response_text="COMMIT_MESSAGE: fix: ai commit\nBODY:\n追コミット完了",
+        )
         github_client = MagicMock()
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
+            patch(
+                "vv_ai.command_handler.commit_all_changes", return_value=True
+            ) as mock_commit,
             patch("vv_ai.command_handler.push_branch"),
         ):
             _handle_implement_pr_post_execution(
@@ -397,6 +481,7 @@ class TestImplementResponseComment:
                 {},
             )
 
+        mock_commit.assert_called_once_with(Path("/dummy"), "fix: ai commit")
         github_client.create_issue_comment.assert_called_once_with(
             "org/repo", 2, "追コミット完了"
         )
@@ -415,7 +500,10 @@ class TestImplementResponseComment:
                 ),
             )
         )
-        result = _make_execution_result("success", response_text="追加実装完了")
+        result = _make_execution_result(
+            "success",
+            response_text="COMMIT_MESSAGE: fix: fork\nBODY:\n追加実装完了",
+        )
         github_client = MagicMock()
 
         with (
@@ -437,7 +525,127 @@ class TestImplementResponseComment:
         github_client.create_issue_comment.assert_called_once()
         _, _, body = github_client.create_issue_comment.call_args.args
         assert "追加実装完了" in body
+        assert "COMMIT_MESSAGE:" not in body
         assert "```diff\ndiff --git a/a b/a\n```" in body
+
+    def test_implement_pr_requires_commit_message_line(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(
+                command="implement",
+                dry_run=False,
+                target=ResolvedTarget(
+                    backend="github",
+                    kind="pr",
+                    canonical_id="org/repo#2",
+                    repository_full_name="org/repo",
+                    number=2,
+                ),
+            )
+        )
+        result = _make_execution_result("success", response_text="BODY:\n追コミット完了")
+        github_client = MagicMock()
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes") as mock_commit,
+            patch("vv_ai.command_handler.push_branch") as mock_push,
+            pytest.raises(
+                RuntimeError,
+                match="1行目は `COMMIT_MESSAGE: <コミットメッセージ>`",
+            ),
+        ):
+            _handle_implement_pr_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "feature-branch",
+                _make_github_pr(number=2, is_cross_repository=False),
+                None,
+                {},
+            )
+
+        mock_commit.assert_not_called()
+        mock_push.assert_not_called()
+        github_client.create_issue_comment.assert_not_called()
+
+    def test_implement_pr_requires_non_empty_commit_message(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(
+                command="implement",
+                dry_run=False,
+                target=ResolvedTarget(
+                    backend="github",
+                    kind="pr",
+                    canonical_id="org/repo#2",
+                    repository_full_name="org/repo",
+                    number=2,
+                ),
+            )
+        )
+        result = _make_execution_result(
+            "success",
+            response_text="COMMIT_MESSAGE:   \nBODY:\n追コミット完了",
+        )
+        github_client = MagicMock()
+
+        with (
+            patch("vv_ai.command_handler.commit_all_changes") as mock_commit,
+            patch("vv_ai.command_handler.push_branch") as mock_push,
+            pytest.raises(RuntimeError, match="COMMIT_MESSAGE が空です"),
+        ):
+            _handle_implement_pr_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "feature-branch",
+                _make_github_pr(number=2, is_cross_repository=False),
+                None,
+                {},
+            )
+
+        mock_commit.assert_not_called()
+        mock_push.assert_not_called()
+        github_client.create_issue_comment.assert_not_called()
+
+    def test_implement_pr_accepts_non_conventional_commit_message(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(
+                command="implement",
+                dry_run=False,
+                target=ResolvedTarget(
+                    backend="github",
+                    kind="pr",
+                    canonical_id="org/repo#2",
+                    repository_full_name="org/repo",
+                    number=2,
+                ),
+            )
+        )
+        result = _make_execution_result(
+            "success",
+            response_text="COMMIT_MESSAGE: example\nBODY:\n追コミット完了",
+        )
+        github_client = MagicMock()
+
+        with (
+            patch(
+                "vv_ai.command_handler.commit_all_changes", return_value=True
+            ) as mock_commit,
+            patch("vv_ai.command_handler.push_branch"),
+        ):
+            _handle_implement_pr_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "feature-branch",
+                _make_github_pr(number=2, is_cross_repository=False),
+                None,
+                {},
+            )
+
+        mock_commit.assert_called_once_with(Path("/dummy"), "example")
 
 
 class TestFinallySaveGuarantee:

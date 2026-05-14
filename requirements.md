@@ -455,13 +455,14 @@ provider_priority:
 
 - 毎回 **新規ブランチ + 新規 PR** を作成
 - ブランチ名: `vv-ai/issue-<番号>-<6〜8桁ランダム英数字>`
-- PR タイトル / description は AI の最終出力から決定
+- PR タイトル / commit message / description は AI の最終出力から決定
 - 複数回実行しても毎回新規（既存 PR への自動更新はしない。既存 PR で作業させたい場合はコメントで追加指示）
 
 ### PR 起点
 
 - 既存 PR のブランチで作業（追コミットで更新）
-- 対象 PR に AI の応答テキストをコメント投稿
+- commit message は AI の最終出力から決定
+- 対象 PR に AI の応答本文をコメント投稿
 
 ### Runner 側の前処理
 
@@ -470,8 +471,16 @@ provider_priority:
 
 ### プロンプト
 
-- Issue 起点の PR タイトル / description 出力形式は `issue` コマンドと同じ
-- Issue 起点の PR タイトルは Conventional Commits 形式
+- Issue 起点の出力形式
+  - 1 行目: `TITLE: <タイトル文字列>`
+  - 2 行目: `COMMIT_MESSAGE: <コミットメッセージ>`
+  - 3 行目: `BODY:`
+  - 4 行目以降: Markdown 本文
+- PR 起点の出力形式
+  - 1 行目: `COMMIT_MESSAGE: <コミットメッセージ>`
+  - 2 行目: `BODY:`
+  - 3 行目以降: Markdown の PR コメント本文
+- PR タイトルと commit message は Conventional Commits 形式を推奨
 - Issue 起点の PR description は元 Issue への参照を含める
 - Issue 起点の PR description は、Issue を解決する内容なら GitHub closing keyword を使ってもよい
 
