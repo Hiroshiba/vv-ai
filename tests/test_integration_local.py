@@ -179,22 +179,50 @@ class TestInputErrors:
 
         assert exit_code == 2
 
-    def test_missing_instruction_exits_2(self, tmp_path: Path) -> None:
+    def test_reply_without_instruction_exits_zero(self, tmp_path: Path) -> None:
         _write_config(tmp_path)
         argv = [
             "--command", "reply",
             "--target-url", "https://github.com/org/repo/issues/1",
             "--provider", "codex",
             "--session_mode", "new",
+            "--dry-run",
         ]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "テスト応答")
+        env_patch = {"VV_OPENAI_API_KEY": "dummy-key"}
+        github_client = MagicMock()
+        github_client.get_repo_info.return_value = RepoInfo(
+            is_fork=False, parent_full_name=None, parent_default_branch=None
+        )
+        github_client.get_issue.return_value = GitHubIssue(
+            id=1,
+            repository_full_name="org/repo",
+            number=1,
+            title="テスト Issue",
+            body="Issue 本文",
+            state="OPEN",
+            author=GitHubActor(login="Hiroshiba"),
+            url="https://github.com/org/repo/issues/1",
+        )
+        github_client.list_issue_comments.return_value = []
 
         with (
             patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
-            patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}),
+            patch("vv_ai.cli.resolve_session", return_value=session),
+            patch("vv_ai.command_handler.execute_provider", return_value=result) as mock_provider,
+            patch("vv_ai.cli.save_execution_artifacts", return_value=MagicMock(spec=SavedExecutionArtifacts)),
+            patch("vv_ai.command_handler.build_github_client", return_value=github_client),
+            patch.dict("os.environ", env_patch),
         ):
             exit_code = main(argv)
 
-        assert exit_code == 2
+        assert exit_code == 0
+        mock_provider.assert_called_once()
+
+        ready_execution = mock_provider.call_args[0][1]
+        assert ready_execution.command.command == "reply"
+        assert ready_execution.command.instruction is None
 
 
 class TestProviderFailure:
