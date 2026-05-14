@@ -480,9 +480,7 @@ provider_priority:
   - 1 行目: `COMMIT_MESSAGE: <コミットメッセージ>`
   - 2 行目: `BODY:`
   - 3 行目以降: Markdown の PR コメント本文
-- Issue 起点の PR タイトルと commit message は Conventional Commits 形式
-- PR 起点の commit message は Conventional Commits 形式
-- Conventional Commits 形式は実装側では厳密に検証しない
+- PR タイトルと commit message は Conventional Commits 形式を推奨
 - Issue 起点の PR description は元 Issue への参照を含める
 - Issue 起点の PR description は、Issue を解決する内容なら GitHub closing keyword を使ってもよい
 
