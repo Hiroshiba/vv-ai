@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from vv_ai.input import (
     CLIInput,
-    CommentInvocation,
     InputError,
     IssueCommentEvent,
+    IssueLabeledEvent,
+    PullRequestLabeledEvent,
     RawInput,
     WorkflowDispatchEvent,
     build_raw_input_from_cli,
     build_raw_input_from_issue_comment_event,
+    build_raw_input_from_issue_labeled_event,
+    build_raw_input_from_pull_request_labeled_event,
     build_raw_input_from_workflow_dispatch_event,
     parse_comment_invocation,
+    parse_label_invocation,
 )
 from vv_ai.resolve import ResolutionError, resolve_raw_input
 
@@ -146,6 +153,19 @@ class TestParseCommentInvocation:
             parse_comment_invocation("@vv-ai implement --provider invalid")
 
 
+class TestParseLabelInvocation:
+    def test_label_confirm(self) -> None:
+        assert parse_label_invocation("vv-ai:confirm") == "confirm"
+
+    @pytest.mark.parametrize(
+        "label_name",
+        ["bug", "vv-ai", "vv-ai:", "vv-ai:unknown"],
+    )
+    def test_error_invalid_label(self, label_name: str) -> None:
+        with pytest.raises(InputError):
+            parse_label_invocation(label_name)
+
+
 class TestBuildRawInputFromCli:
     def test_local_event(self) -> None:
         cli = CLIInput(
@@ -215,6 +235,122 @@ class TestBuildRawInputFromIssueCommentEvent:
         event = self._make_event("@vv-ai review", pr=True)
         raw = build_raw_input_from_issue_comment_event(event)
         assert raw.target_type == "pr"
+
+
+class TestBuildRawInputFromIssueLabeledEvent:
+    def _make_event(self, label_name: str) -> IssueLabeledEvent:
+        return IssueLabeledEvent.model_validate({
+            "action": "labeled",
+            "issue": {"number": 42},
+            "label": {"name": label_name},
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        })
+
+    def test_issue_labeled_confirm(self) -> None:
+        raw = build_raw_input_from_issue_labeled_event(
+            self._make_event("vv-ai:confirm")
+        )
+        assert raw.event_name == "issues"
+        assert raw.command == "confirm"
+        assert raw.instruction is None
+        assert raw.provider is None
+        assert raw.session_mode is None
+        assert raw.dry_run is False
+        assert raw.repo is None
+        assert raw.target_type == "issue"
+        assert raw.target_number == 42
+        assert raw.repository_full_name == "org/repo"
+        assert raw.actor == "Hiroshiba"
+        assert raw.trigger_label_name == "vv-ai:confirm"
+
+    def test_issue_labeled_reply_without_instruction(self) -> None:
+        raw = build_raw_input_from_issue_labeled_event(
+            self._make_event("vv-ai:reply")
+        )
+        assert raw.command == "reply"
+        assert raw.instruction is None
+
+    def test_issue_labeled_issue_without_instruction(self) -> None:
+        raw = build_raw_input_from_issue_labeled_event(
+            self._make_event("vv-ai:issue")
+        )
+        assert raw.command == "issue"
+        assert raw.instruction is None
+
+    def test_issue_labeled_rejects_review(self) -> None:
+        with pytest.raises(InputError):
+            build_raw_input_from_issue_labeled_event(
+                self._make_event("vv-ai:review")
+            )
+
+
+class TestBuildRawInputFromPullRequestLabeledEvent:
+    def _make_event(self, label_name: str) -> PullRequestLabeledEvent:
+        return PullRequestLabeledEvent.model_validate({
+            "action": "labeled",
+            "pull_request": {"number": 43},
+            "label": {"name": label_name},
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        })
+
+    def test_pull_request_labeled_review(self) -> None:
+        raw = build_raw_input_from_pull_request_labeled_event(
+            self._make_event("vv-ai:review")
+        )
+        assert raw.event_name == "pull_request"
+        assert raw.command == "review"
+        assert raw.instruction is None
+        assert raw.target_type == "pr"
+        assert raw.target_number == 43
+        assert raw.repository_full_name == "org/repo"
+        assert raw.actor == "Hiroshiba"
+        assert raw.trigger_label_name == "vv-ai:review"
+
+    def test_pull_request_labeled_rejects_breakdown(self) -> None:
+        with pytest.raises(InputError):
+            build_raw_input_from_pull_request_labeled_event(
+                self._make_event("vv-ai:breakdown")
+            )
+
+
+class TestBuildRawInputFromEventFile:
+    def test_auto_detect_issue_labeled_event(self, tmp_path: Path) -> None:
+        event_file = tmp_path / "event.json"
+        event_file.write_text(
+            json.dumps({
+                "action": "labeled",
+                "issue": {"number": 42},
+                "label": {"name": "vv-ai:confirm"},
+                "repository": {"full_name": "org/repo"},
+                "sender": {"login": "Hiroshiba"},
+            }),
+            encoding="utf-8",
+        )
+
+        raw = build_raw_input_from_cli(CLIInput(event_file=event_file))
+
+        assert raw.event_name == "issues"
+        assert raw.command == "confirm"
+
+    def test_auto_detect_pull_request_labeled_event(self, tmp_path: Path) -> None:
+        event_file = tmp_path / "event.json"
+        event_file.write_text(
+            json.dumps({
+                "action": "labeled",
+                "pull_request": {"number": 43},
+                "label": {"name": "vv-ai:review"},
+                "repository": {"full_name": "org/repo"},
+                "sender": {"login": "Hiroshiba"},
+            }),
+            encoding="utf-8",
+        )
+
+        raw = build_raw_input_from_cli(CLIInput(event_file=event_file))
+
+        assert raw.event_name == "pull_request"
+        assert raw.command == "review"
 
 
 class TestBuildRawInputFromWorkflowDispatchEvent:
@@ -347,6 +483,29 @@ class TestResolveRawInput:
         raw = RawInput(event_name="workflow_dispatch")
         with pytest.raises(ResolutionError, match="必須の項目が不足"):
             resolve_raw_input(raw)
+
+    def test_issue_labeled_requires_fields(self) -> None:
+        raw = RawInput(event_name="issues")
+        with pytest.raises(ResolutionError, match="必須の項目が不足"):
+            resolve_raw_input(raw)
+
+    def test_pull_request_labeled_requires_fields(self) -> None:
+        raw = RawInput(event_name="pull_request")
+        with pytest.raises(ResolutionError, match="必須の項目が不足"):
+            resolve_raw_input(raw)
+
+    def test_labeled_trigger_label_name_is_resolved(self) -> None:
+        raw = RawInput(
+            event_name="issues",
+            command="confirm",
+            target_type="issue",
+            target_number=42,
+            repository_full_name="org/repo",
+            actor="Hiroshiba",
+            trigger_label_name="vv-ai:confirm",
+        )
+        resolved = resolve_raw_input(raw)
+        assert resolved.trigger_label_name == "vv-ai:confirm"
 
     def test_empty_instruction_normalized_to_none(self) -> None:
         raw = RawInput(

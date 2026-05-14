@@ -12,12 +12,18 @@ from vv_ai.config import VVAIConfig
 from vv_ai.input import (
     InputError,
     IssueCommentEvent,
+    IssueLabeledEvent,
+    PullRequestLabeledEvent,
     WorkflowDispatchEvent,
+    build_raw_input_from_issue_labeled_event,
+    build_raw_input_from_pull_request_labeled_event,
     parse_comment_invocation,
 )
 
-VerifyEventName = Literal["issue_comment", "workflow_dispatch"]
-VerifyReason = Literal["not_vv_ai_prefix", "unauthorized"]
+VerifyEventName = Literal[
+    "issue_comment", "workflow_dispatch", "issues", "pull_request",
+]
+VerifyReason = Literal["not_vv_ai_prefix", "not_vv_ai_label", "unauthorized"]
 
 
 class VerifyResult(BaseModel):
@@ -52,6 +58,10 @@ def run_verify(
         return _verify_issue_comment(payload, config.allowed_users)
     if event == "workflow_dispatch":
         return _verify_workflow_dispatch(payload, config.allowed_users)
+    if event == "issues":
+        return _verify_issue_labeled(payload, config.allowed_users)
+    if event == "pull_request":
+        return _verify_pull_request_labeled(payload, config.allowed_users)
     raise AssertionError(f"未対応の event です: {event}")
 
 
@@ -102,3 +112,63 @@ def _verify_workflow_dispatch(
             reason="unauthorized",
         )
     return VerifyResult(should_run=True, actor=actor, event="workflow_dispatch")
+
+
+def _verify_issue_labeled(
+    payload: dict[str, object], allowed_users: list[str]
+) -> VerifyResult:
+    try:
+        parsed = IssueLabeledEvent.model_validate(payload)
+    except ValidationError as exc:
+        raise InputError("issues payload の値が不正です") from exc
+
+    actor = parsed.sender.login
+    try:
+        build_raw_input_from_issue_labeled_event(parsed)
+    except InputError:
+        return VerifyResult(
+            should_run=False,
+            actor=actor,
+            event="issues",
+            reason="not_vv_ai_label",
+        )
+
+    if actor not in allowed_users:
+        return VerifyResult(
+            should_run=False,
+            actor=actor,
+            event="issues",
+            reason="unauthorized",
+        )
+
+    return VerifyResult(should_run=True, actor=actor, event="issues")
+
+
+def _verify_pull_request_labeled(
+    payload: dict[str, object], allowed_users: list[str]
+) -> VerifyResult:
+    try:
+        parsed = PullRequestLabeledEvent.model_validate(payload)
+    except ValidationError as exc:
+        raise InputError("pull_request payload の値が不正です") from exc
+
+    actor = parsed.sender.login
+    try:
+        build_raw_input_from_pull_request_labeled_event(parsed)
+    except InputError:
+        return VerifyResult(
+            should_run=False,
+            actor=actor,
+            event="pull_request",
+            reason="not_vv_ai_label",
+        )
+
+    if actor not in allowed_users:
+        return VerifyResult(
+            should_run=False,
+            actor=actor,
+            event="pull_request",
+            reason="unauthorized",
+        )
+
+    return VerifyResult(should_run=True, actor=actor, event="pull_request")

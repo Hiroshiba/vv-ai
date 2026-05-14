@@ -53,6 +53,7 @@ class ResolvedCommand(BaseModel):
     comment_id: int | None = None
     comment_author: str | None = None
     comment_body: str | None = None
+    trigger_label_name: str | None = None
     target: ResolvedTarget | None = None
 
 
@@ -64,7 +65,11 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
     target_url, target_type, target_number, has_target = _resolve_target_fields(raw_input)
     repo = _resolve_repo(command, raw_input)
 
-    if command in {"confirm", "reply", "implement", "review", "requirements", "arch", "detail", "breakdown"} and not has_target:
+    target_required_commands: set[CommandName] = {
+        "confirm", "reply", "implement", "review",
+        "requirements", "arch", "detail", "breakdown",
+    }
+    if command in target_required_commands and not has_target:
         raise ResolutionError(f"`{command}` コマンドには target 指定が必要です")
 
     return ResolvedCommand(
@@ -85,6 +90,7 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
         comment_id=raw_input.comment_id,
         comment_author=raw_input.comment_author,
         comment_body=raw_input.comment_body,
+        trigger_label_name=raw_input.trigger_label_name,
     )
 
 
@@ -105,6 +111,17 @@ def _validate_event_requirements(raw_input: RawInput) -> None:
         required_fields = {
             "repository_full_name": raw_input.repository_full_name,
             "actor": raw_input.actor,
+        }
+        _raise_for_missing_fields(raw_input.event_name, required_fields)
+        return
+
+    if raw_input.event_name in {"issues", "pull_request"}:
+        required_fields = {
+            "repository_full_name": raw_input.repository_full_name,
+            "actor": raw_input.actor,
+            "target_type": raw_input.target_type,
+            "target_number": raw_input.target_number,
+            "trigger_label_name": raw_input.trigger_label_name,
         }
         _raise_for_missing_fields(raw_input.event_name, required_fields)
 
