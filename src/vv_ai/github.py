@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -231,6 +232,22 @@ class GitHubClient:
         if not isinstance(payload, dict):
             raise GitHubClientError("コメント作成結果の JSON 形式が不正です")
         return _build_comment(payload)
+
+    def remove_issue_label(
+        self,
+        repository_full_name: str,
+        number: int,
+        label_name: str,
+    ) -> None:
+        """Issue または PR から label を削除する。"""
+        self._run_json(
+            [
+                "api",
+                "--method",
+                "DELETE",
+                _build_issue_label_path(repository_full_name, number, label_name),
+            ]
+        )
 
     def create_issue(
         self,
@@ -873,6 +890,19 @@ def _build_issue_comments_path(repository_full_name: str, number: int) -> str:
     return (
         f"repos/{_require_repository_full_name(repository_full_name)}"
         f"/issues/{_require_positive_id(number, 'number')}/comments"
+    )
+
+
+def _build_issue_label_path(
+    repository_full_name: str,
+    number: int,
+    label_name: str,
+) -> str:
+    """Issue label endpoint を返す。"""
+    encoded_label_name = quote(_require_non_empty_text(label_name, "label_name"), safe="")
+    return (
+        f"repos/{_require_repository_full_name(repository_full_name)}"
+        f"/issues/{_require_positive_id(number, 'number')}/labels/{encoded_label_name}"
     )
 
 

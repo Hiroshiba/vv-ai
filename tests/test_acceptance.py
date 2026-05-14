@@ -388,3 +388,143 @@ class TestIssueCommentEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+
+
+class TestLabeledEvent:
+    """label 付与イベント経由の実行シナリオ。"""
+
+    def _write_issue_labeled_event(
+        self,
+        tmp_path: Path,
+        label_name: str,
+        sender: str,
+    ) -> Path:
+        """issues labeled event payload を JSON ファイルとして書き出す。"""
+        payload = {
+            "action": "labeled",
+            "issue": {"number": 42},
+            "label": {"name": label_name},
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": sender},
+        }
+        event_path = tmp_path / "event.json"
+        event_path.write_text(json.dumps(payload), encoding="utf-8")
+        return event_path
+
+    def _write_pull_request_labeled_event(
+        self,
+        tmp_path: Path,
+        label_name: str,
+        sender: str,
+    ) -> Path:
+        """pull_request labeled event payload を JSON ファイルとして書き出す。"""
+        payload = {
+            "action": "labeled",
+            "pull_request": {"number": 5},
+            "label": {"name": label_name},
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": sender},
+        }
+        event_path = tmp_path / "event.json"
+        event_path.write_text(json.dumps(payload), encoding="utf-8")
+        return event_path
+
+    def test_issue_confirm_exits_zero_and_removes_label(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(
+            tmp_path, "vv-ai:confirm", "Hiroshiba"
+        )
+        argv = [
+            "--event", "issues",
+            "--event-file", str(event_path),
+        ]
+        session = _make_resolved_session("github", "org/repo#42", "codex")
+        result = _make_execution_result("success", "確認しました")
+        mock_gh = MagicMock()
+        mock_gh.get_issue.return_value = _make_github_issue("org/repo", 42)
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        execute_provider.assert_called_once()
+        ready_execution = execute_provider.call_args.args[1]
+        assert ready_execution.command.command == "confirm"
+        assert ready_execution.command.instruction is None
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            42,
+            "vv-ai:confirm",
+        )
+
+    def test_pull_request_review_exits_zero(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_pull_request_labeled_event(
+            tmp_path, "vv-ai:review", "Hiroshiba"
+        )
+        argv = [
+            "--event", "pull_request",
+            "--event-file", str(event_path),
+        ]
+        session = _make_resolved_session("github", "org/repo#5", "codex")
+        result = _make_execution_result("success", "レビューしました")
+        mock_gh = MagicMock()
+        mock_gh.get_pull_request.return_value = _make_github_pr(
+            "org/repo", 5, "feature-branch"
+        )
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        execute_provider.assert_called_once()
+        ready_execution = execute_provider.call_args.args[1]
+        assert ready_execution.command.command == "review"
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            5,
+            "vv-ai:review",
+        )
+
+    def test_issue_reply_without_instruction_exits_zero(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(
+            tmp_path, "vv-ai:reply", "Hiroshiba"
+        )
+        argv = [
+            "--event", "issues",
+            "--event-file", str(event_path),
+        ]
+        session = _make_resolved_session("github", "org/repo#42", "codex")
+        result = _make_execution_result("success", "返信しました")
+        mock_gh = MagicMock()
+        mock_gh.get_issue.return_value = _make_github_issue("org/repo", 42)
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        ready_execution = execute_provider.call_args.args[1]
+        assert ready_execution.command.command == "reply"
+        assert ready_execution.command.instruction is None

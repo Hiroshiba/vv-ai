@@ -12,12 +12,20 @@ from vv_ai.config import VVAIConfig
 from vv_ai.input import (
     InputError,
     IssueCommentEvent,
+    IssueLabeledEvent,
+    PullRequestLabeledEvent,
     WorkflowDispatchEvent,
+    parse_label_invocation,
     parse_comment_invocation,
 )
 
-VerifyEventName = Literal["issue_comment", "workflow_dispatch"]
-VerifyReason = Literal["not_vv_ai_prefix", "unauthorized"]
+VerifyEventName = Literal["issue_comment", "workflow_dispatch", "issues", "pull_request"]
+VerifyReason = Literal[
+    "not_vv_ai_prefix",
+    "not_vv_ai_label",
+    "unknown_label_command",
+    "unauthorized",
+]
 
 
 class VerifyResult(BaseModel):
@@ -52,6 +60,10 @@ def run_verify(
         return _verify_issue_comment(payload, config.allowed_users)
     if event == "workflow_dispatch":
         return _verify_workflow_dispatch(payload, config.allowed_users)
+    if event == "issues":
+        return _verify_issue_labeled(payload, config.allowed_users)
+    if event == "pull_request":
+        return _verify_pull_request_labeled(payload, config.allowed_users)
     raise AssertionError(f"未対応の event です: {event}")
 
 
@@ -102,3 +114,74 @@ def _verify_workflow_dispatch(
             reason="unauthorized",
         )
     return VerifyResult(should_run=True, actor=actor, event="workflow_dispatch")
+
+
+def _verify_issue_labeled(
+    payload: dict[str, object], allowed_users: list[str]
+) -> VerifyResult:
+    """`issues` labeled event を検証する。"""
+    try:
+        parsed = IssueLabeledEvent.model_validate(payload)
+    except ValidationError as exc:
+        raise InputError("issues labeled payload の値が不正です") from exc
+    if parsed.action != "labeled":
+        raise InputError("issues event は labeled action のみ対応しています")
+
+    return _verify_labeled_event(
+        actor=parsed.sender.login,
+        event="issues",
+        label_name=parsed.label.name,
+        allowed_users=allowed_users,
+    )
+
+
+def _verify_pull_request_labeled(
+    payload: dict[str, object], allowed_users: list[str]
+) -> VerifyResult:
+    """`pull_request` labeled event を検証する。"""
+    try:
+        parsed = PullRequestLabeledEvent.model_validate(payload)
+    except ValidationError as exc:
+        raise InputError("pull_request labeled payload の値が不正です") from exc
+    if parsed.action != "labeled":
+        raise InputError("pull_request event は labeled action のみ対応しています")
+
+    return _verify_labeled_event(
+        actor=parsed.sender.login,
+        event="pull_request",
+        label_name=parsed.label.name,
+        allowed_users=allowed_users,
+    )
+
+
+def _verify_labeled_event(
+    actor: str,
+    event: Literal["issues", "pull_request"],
+    label_name: str,
+    allowed_users: list[str],
+) -> VerifyResult:
+    """label 起動 event を検証する。"""
+    try:
+        parse_label_invocation(label_name)
+    except InputError:
+        reason: VerifyReason = (
+            "unknown_label_command"
+            if label_name.startswith("vv-ai:")
+            else "not_vv_ai_label"
+        )
+        return VerifyResult(
+            should_run=False,
+            actor=actor,
+            event=event,
+            reason=reason,
+        )
+
+    if actor not in allowed_users:
+        return VerifyResult(
+            should_run=False,
+            actor=actor,
+            event=event,
+            reason="unauthorized",
+        )
+
+    return VerifyResult(should_run=True, actor=actor, event=event)

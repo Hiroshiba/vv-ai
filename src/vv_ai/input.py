@@ -15,7 +15,7 @@ CommandName = Literal[
     "confirm", "reply", "implement", "review", "issue",
     "requirements", "arch", "detail", "breakdown",
 ]
-EventName = Literal["issue_comment", "workflow_dispatch", "local"]
+EventName = Literal["issue_comment", "workflow_dispatch", "issues", "pull_request", "local"]
 SessionMode = Literal["inherit", "inherit_or_new", "compact", "new"]
 TargetType = Literal["issue", "pr"]
 
@@ -23,6 +23,7 @@ _COMMAND_NAMES: set[str] = {
     "confirm", "reply", "implement", "review", "issue",
     "requirements", "arch", "detail", "breakdown",
 }
+_LABEL_COMMAND_PREFIX = "vv-ai:"
 
 
 class InputError(Exception):
@@ -62,6 +63,14 @@ class GitHubUser(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     login: str
+
+
+class GitHubLabel(BaseModel):
+    """GitHub label の最小表現。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
 
 
 class IssueCommentTarget(BaseModel):
@@ -105,6 +114,46 @@ class WorkflowDispatchEvent(BaseModel):
     sender: GitHubUser
 
 
+class IssueLabeledTarget(BaseModel):
+    """Issue labeled event の対象。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    number: int
+
+
+class PullRequestLabeledTarget(BaseModel):
+    """Pull request labeled event の対象。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    number: int
+
+
+class IssueLabeledEvent(BaseModel):
+    """`issues` labeled payload の必要最小限。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    action: str
+    issue: IssueLabeledTarget
+    label: GitHubLabel
+    repository: GitHubRepository
+    sender: GitHubUser
+
+
+class PullRequestLabeledEvent(BaseModel):
+    """`pull_request` labeled payload の必要最小限。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    action: str
+    pull_request: PullRequestLabeledTarget
+    label: GitHubLabel
+    repository: GitHubRepository
+    sender: GitHubUser
+
+
 class RawInput(BaseModel):
     """後続の正規化処理に渡す共通の生入力。"""
 
@@ -126,6 +175,7 @@ class RawInput(BaseModel):
     comment_id: int | None = None
     comment_author: str | None = None
     comment_body: str | None = None
+    trigger_label_name: str | None = None
 
 
 class CommentInvocation(BaseModel):
@@ -180,6 +230,14 @@ def build_raw_input_from_event_file(event_name: EventName, event_file: Path) -> 
             return build_raw_input_from_workflow_dispatch_event(
                 WorkflowDispatchEvent.model_validate(payload)
             )
+        if event_name == "issues":
+            return build_raw_input_from_issue_labeled_event(
+                IssueLabeledEvent.model_validate(payload)
+            )
+        if event_name == "pull_request":
+            return build_raw_input_from_pull_request_labeled_event(
+                PullRequestLabeledEvent.model_validate(payload)
+            )
         if event_name == "local":
             raise InputError("`local` event は event-file では再現できません")
     except ValidationError as exc:
@@ -226,6 +284,38 @@ def build_raw_input_from_workflow_dispatch_event(
         repo=_coerce_optional_str(inputs.get("repo")),
         repository_full_name=event.repository.full_name,
         actor=event.sender.login,
+    )
+
+
+def build_raw_input_from_issue_labeled_event(event: IssueLabeledEvent) -> RawInput:
+    """`issues` labeled payload から `RawInput` を構築する。"""
+    _ensure_labeled_action(event.action)
+    command = parse_label_invocation(event.label.name)
+    return RawInput(
+        event_name="issues",
+        command=command,
+        target_type="issue",
+        target_number=event.issue.number,
+        repository_full_name=event.repository.full_name,
+        actor=event.sender.login,
+        trigger_label_name=event.label.name,
+    )
+
+
+def build_raw_input_from_pull_request_labeled_event(
+    event: PullRequestLabeledEvent,
+) -> RawInput:
+    """`pull_request` labeled payload から `RawInput` を構築する。"""
+    _ensure_labeled_action(event.action)
+    command = parse_label_invocation(event.label.name)
+    return RawInput(
+        event_name="pull_request",
+        command=command,
+        target_type="pr",
+        target_number=event.pull_request.number,
+        repository_full_name=event.repository.full_name,
+        actor=event.sender.login,
+        trigger_label_name=event.label.name,
     )
 
 
@@ -299,6 +389,25 @@ def parse_comment_invocation(comment_body: str) -> CommentInvocation:
         raise InputError("コメント本文のオプション値が不正です") from exc
 
 
+def parse_label_invocation(label_name: str) -> CommandName:
+    """vv-ai ラベル名から command を抽出する。"""
+    if not label_name.startswith(_LABEL_COMMAND_PREFIX):
+        raise InputError("ラベル名は `vv-ai:` で始まる必要があります")
+
+    command = label_name[len(_LABEL_COMMAND_PREFIX) :]
+    if command == "":
+        raise InputError("ラベル名に command がありません")
+    if command not in _COMMAND_NAMES:
+        raise InputError(f"未対応のラベル command です: {command}")
+    return command  # type: ignore[return-value]
+
+
+def _ensure_labeled_action(action: str) -> None:
+    """labeled action であることを検証する。"""
+    if action != "labeled":
+        raise InputError("label 起動は labeled action のみ対応しています")
+
+
 def _ensure_event_file_mode(cli_input: CLIInput) -> None:
     """event-file と直接指定引数の併用を防ぐ。"""
     direct_fields = {
@@ -336,9 +445,14 @@ def _resolve_event_name_for_event_file(
         return "issue_comment"
     if _looks_like_workflow_dispatch_event(payload):
         return "workflow_dispatch"
+    if _looks_like_issue_labeled_event(payload):
+        return "issues"
+    if _looks_like_pull_request_labeled_event(payload):
+        return "pull_request"
     raise InputError(
         "`--event-file` から event 種別を判定できませんでした。"
-        " `--event issue_comment` または `--event workflow_dispatch` を指定してください"
+        " `--event issue_comment`、`--event workflow_dispatch`、"
+        "`--event issues`、`--event pull_request` のいずれかを指定してください"
     )
 
 
@@ -372,6 +486,28 @@ def _looks_like_workflow_dispatch_event(payload: dict[str, Any]) -> bool:
     """`workflow_dispatch` らしい payload かを判定する。"""
     return (
         "inputs" in payload
+        and isinstance(payload.get("repository"), dict)
+        and isinstance(payload.get("sender"), dict)
+    )
+
+
+def _looks_like_issue_labeled_event(payload: dict[str, Any]) -> bool:
+    """`issues` labeled らしい payload かを判定する。"""
+    return (
+        payload.get("action") == "labeled"
+        and isinstance(payload.get("issue"), dict)
+        and isinstance(payload.get("label"), dict)
+        and isinstance(payload.get("repository"), dict)
+        and isinstance(payload.get("sender"), dict)
+    )
+
+
+def _looks_like_pull_request_labeled_event(payload: dict[str, Any]) -> bool:
+    """`pull_request` labeled らしい payload かを判定する。"""
+    return (
+        payload.get("action") == "labeled"
+        and isinstance(payload.get("pull_request"), dict)
+        and isinstance(payload.get("label"), dict)
         and isinstance(payload.get("repository"), dict)
         and isinstance(payload.get("sender"), dict)
     )

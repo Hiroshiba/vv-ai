@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--event",
-        choices=["issue_comment", "workflow_dispatch", "local"],
+        choices=["issue_comment", "workflow_dispatch", "issues", "pull_request", "local"],
         default="local",
         help="入力の起動元を指定します。",
     )
@@ -184,7 +184,7 @@ def _run_verify_subcommand(verify_argv: Sequence[str]) -> int:
     )
     parser.add_argument(
         "--event",
-        choices=["issue_comment", "workflow_dispatch"],
+        choices=["issue_comment", "workflow_dispatch", "issues", "pull_request"],
         required=True,
         help="event 種別を指定する。",
     )
@@ -228,7 +228,7 @@ def _format_verify_result(result: VerifyResult) -> str:
 
 def _handle_silent_skip(result: SilentSkip) -> int:
     """silent skip を処理する。"""
-    if result.reason != "unauthorized_comment":
+    if result.reason not in {"unauthorized_comment", "unauthorized_label"}:
         raise AssertionError(f"未対応の silent skip 理由です: {result.reason}")
     return 0
 

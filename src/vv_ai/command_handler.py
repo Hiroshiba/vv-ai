@@ -180,6 +180,8 @@ def run_command(
         assert execution_result is not None
         finalize_status = execution_result.status
     finally:
+        if github_client is not None and not command.dry_run:
+            _remove_trigger_label(github_client, target, command.trigger_label_name)
         if (
             github_client is not None
             and not command.dry_run
@@ -197,6 +199,26 @@ def run_command(
 
     assert execution_result is not None
     return execution_result, created_pr
+
+
+def _remove_trigger_label(
+    github_client: GitHubClient,
+    target: ResolvedTarget | None,
+    trigger_label_name: str | None,
+) -> None:
+    """起動元 label を削除する。"""
+    if trigger_label_name is None:
+        return
+    if not _is_github_target(target):
+        raise RuntimeError("label 起動には GitHub target が必要です")
+    assert target is not None
+    assert target.repository_full_name is not None
+    assert target.number is not None
+    github_client.remove_issue_label(
+        target.repository_full_name,
+        target.number,
+        trigger_label_name,
+    )
 
 
 def _is_github_target(target: ResolvedTarget | None) -> bool:

@@ -96,3 +96,24 @@ def test_build_github_client_with_token_uses_gh_token(monkeypatch: pytest.Monkey
     assert client.get_default_branch("org/repo") == "main"
     assert captured_env["GH_TOKEN"] == "read-token"
     assert "GITHUB_TOKEN" not in captured_env
+
+
+def test_remove_issue_label_uses_encoded_label_path() -> None:
+    """remove_issue_label は label 名を path encode して削除 API を呼ぶ。"""
+    captured_args: list[str] = []
+
+    def fake_text_runner(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return "[]"
+
+    client = GitHubClient(fake_text_runner, lambda args: b"")
+
+    client.remove_issue_label("org/repo", 42, "vv-ai:confirm")
+
+    assert captured_args == [
+        "gh",
+        "api",
+        "--method",
+        "DELETE",
+        "repos/org/repo/issues/42/labels/vv-ai%3Aconfirm",
+    ]

@@ -98,13 +98,32 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 - 入力方法:
   - 直接指定: `--command`, `--instruction`, `--target-url`, `--target-type`, `--target-number`, `--provider`, `--session_mode`, `--dry-run`, `--repo`
   - イベントファイル: `--event-file <json>` で GitHub event payload を読み込み再現実行
-  - `--event issue_comment|workflow_dispatch|local`
+  - `--event issue_comment|workflow_dispatch|issues|pull_request|local`
 - ローカルデバッグは主に **dry-run** で実施
 - 扱うコマンドは `@vv-ai` と同じ（専用デバッグコマンドは設けない）
 
-### ラベル起動
+### 4. GitHub ラベル起動
 
-- **廃止**。プロンプト指定やオプション指定がしづらく、コメント起動と二重化するため
+- Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動
+- 許可ユーザーのラベル付与のみ反応。未許可は完全サイレント
+- ラベル起動では instruction、provider、session_mode、dry_run、repo は指定しない
+- 通常コメントを instruction として抽出しない
+- 対象の Issue または PR のタイトル、description、コメントを AI に渡す
+- 実行対象になった起動元ラベルは処理後に自動で外す
+
+| ラベル | command | Issue 上 | PR 上 |
+| --- | --- | --- | --- |
+| `vv-ai:reply` | `reply` | ✅ | ✅ |
+| `vv-ai:confirm` | `confirm` | ✅ | ✅ |
+| `vv-ai:requirements` | `requirements` | ✅ | ✅ |
+| `vv-ai:arch` | `arch` | ✅ | ✅ |
+| `vv-ai:detail` | `detail` | ✅ | ✅ |
+| `vv-ai:breakdown` | `breakdown` | ✅ | — |
+| `vv-ai:implement` | `implement` | ✅ | ✅ |
+| `vv-ai:review` | `review` | — | ✅ |
+| `vv-ai:issue` | `issue` | ✅ | ✅ |
+
+`@vv-ai` コメント起動には command 省略で `reply` になる仕様があるが、ラベル起動では省略形を設けない。reply 起動は `vv-ai:reply` ラベルを使う。
 
 ---
 
@@ -116,13 +135,13 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 | -------------------- | --------- |
 | `issue_comment`      | ✅ 有効    |
 | `workflow_dispatch`   | ✅ 有効    |
-| `issues.labeled`     | ❌ 無効    |
-| `pull_request.labeled` | ❌ 無効  |
+| `issues.labeled`     | ✅ 有効    |
+| `pull_request.labeled` | ✅ 有効  |
 | `issues.opened`      | ❌ 無効    |
 
 ### ワークフロー構成
 
-- **1 本の workflow** に `issue_comment` と `workflow_dispatch` を同居
+- **1 本の workflow** に `issue_comment`、`issues.labeled`、`pull_request.labeled`、`workflow_dispatch` を同居
 - 同一 Issue/PR 番号の実行は **直列化（キュー）**
   - GitHub Actions の `concurrency` を使用
   - `cancel-in-progress: false`（前の実行が終わるまで待つ）
@@ -482,7 +501,7 @@ provider_priority:
 ### コマンド
 
 ```
-@vv-ai issue [--repo org/repo] <自然言語指示>
+@vv-ai issue [--repo org/repo] [自然言語指示]
 ```
 
 ### AI 出力フォーマット
@@ -721,7 +740,6 @@ provider_priority:
 
 ## OUT OF SCOPE（MVP 外）
 
-- ラベル起動
 - Issue 作成時の自動反応（`issues.opened`）
 - GitHub Enterprise Server 対応
 - 横断集計 DB / ダッシュボード
