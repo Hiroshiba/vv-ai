@@ -29,6 +29,10 @@ _PROVIDER_DIRECTORIES: dict[ProviderName, tuple[str, ...]] = {
     "codex": ("skills", "agents"),
     "claude": ("skills", "agents", "commands"),
 }
+_PROVIDER_ROOT_FILES: dict[ProviderName, tuple[str, ...]] = {
+    "codex": ("AGENTS.md",),
+    "claude": ("CLAUDE.md",),
+}
 
 
 class ProviderAssetDeployError(Exception):
@@ -112,12 +116,16 @@ def _fetch_provider_asset_files(
             )
         root = _PROVIDER_ROOTS[provider]
         directory_names = _PROVIDER_DIRECTORIES[provider]
+        root_file_names = _PROVIDER_ROOT_FILES[provider]
         files: list[ProviderAssetFile] = []
         for entry in tree.tree:
             if entry.type != "blob":
                 continue
             relative_path = _build_destination_relative_path(
-                entry.path, root, directory_names
+                entry.path,
+                root,
+                directory_names,
+                root_file_names,
             )
             if relative_path is None:
                 continue
@@ -215,12 +223,15 @@ def _build_destination_relative_path(
     source_path: str,
     root: str,
     directory_names: tuple[str, ...],
+    root_file_names: tuple[str, ...],
 ) -> Path | None:
     """配置対象なら provider home からの相対パスを返す。"""
     prefix = f"{root}/"
     if not source_path.startswith(prefix):
         return None
     rest = source_path.removeprefix(prefix)
+    if rest in root_file_names:
+        return Path(rest)
     for directory_name in directory_names:
         if rest == directory_name or rest.startswith(f"{directory_name}/"):
             return Path(rest)

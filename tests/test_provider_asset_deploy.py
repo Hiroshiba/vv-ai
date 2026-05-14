@@ -180,6 +180,34 @@ def test_deploy_codex_provider_assets_writes_skill(
     assert result.overwritten_files == 0
 
 
+def test_deploy_codex_provider_assets_writes_agents_md(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex の AGENTS.md を CODEX_HOME へ配置する。"""
+    _patch_commit_id(monkeypatch)
+    tree = GitHubTree(
+        truncated=False,
+        tree=[
+            GitHubTreeEntry(
+                path=".codex/AGENTS.md",
+                type="blob",
+                sha="agents",
+            )
+        ],
+    )
+    _patch_client(monkeypatch, tree, {"agents": b"codex agents"})
+
+    result = deploy_codex_provider_assets(
+        {"VV_GH_READONLY_TOKEN": "token"},
+        tmp_path,
+    )
+
+    assert (tmp_path / "AGENTS.md").read_bytes() == b"codex agents"
+    assert result.copied_files == 1
+    assert result.overwritten_files == 0
+
+
 def test_deploy_claude_provider_assets_writes_skill(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -204,6 +232,34 @@ def test_deploy_claude_provider_assets_writes_skill(
     )
 
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").read_bytes() == b"claude skill"
+    assert result.copied_files == 1
+    assert result.overwritten_files == 0
+
+
+def test_deploy_claude_provider_assets_writes_claude_md(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Claude の CLAUDE.md を ~/.claude へ配置する。"""
+    _patch_commit_id(monkeypatch)
+    tree = GitHubTree(
+        truncated=False,
+        tree=[
+            GitHubTreeEntry(
+                path=".claude/CLAUDE.md",
+                type="blob",
+                sha="claude",
+            )
+        ],
+    )
+    _patch_client(monkeypatch, tree, {"claude": b"claude instructions"})
+
+    result = deploy_claude_provider_assets(
+        {"VV_GH_READONLY_TOKEN": "token"},
+        tmp_path,
+    )
+
+    assert (tmp_path / "CLAUDE.md").read_bytes() == b"claude instructions"
     assert result.copied_files == 1
     assert result.overwritten_files == 0
 
@@ -264,6 +320,28 @@ def test_truncated_tree_raises(
     _patch_client(monkeypatch, GitHubTree(truncated=True, tree=[]), {})
 
     with pytest.raises(ProviderAssetDeployError, match="不完全"):
+        deploy_codex_provider_assets({"VV_GH_READONLY_TOKEN": "token"}, tmp_path)
+
+
+def test_missing_provider_assets_raises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """provider asset が無い場合は拒否する。"""
+    _patch_commit_id(monkeypatch)
+    tree = GitHubTree(
+        truncated=False,
+        tree=[
+            GitHubTreeEntry(
+                path="README.md",
+                type="blob",
+                sha="readme",
+            )
+        ],
+    )
+    _patch_client(monkeypatch, tree, {"readme": b"readme"})
+
+    with pytest.raises(ProviderAssetDeployError, match="asset"):
         deploy_codex_provider_assets({"VV_GH_READONLY_TOKEN": "token"}, tmp_path)
 
 
