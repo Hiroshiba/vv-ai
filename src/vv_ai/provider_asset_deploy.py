@@ -33,10 +33,6 @@ _PROVIDER_ROOT_FILES: dict[ProviderName, tuple[str, ...]] = {
     "codex": ("AGENTS.md",),
     "claude": ("CLAUDE.md",),
 }
-_PROVIDER_BUILT_IN_ROOT_FILES: dict[ProviderName, dict[str, bytes]] = {
-    "codex": {"AGENTS.md": "自然文は日本語で書く\n".encode()},
-    "claude": {},
-}
 
 
 class ProviderAssetDeployError(Exception):
@@ -141,20 +137,6 @@ def _fetch_provider_asset_files(
                     content=content,
                 )
             )
-        if len(files) != 0:
-            existing_paths = {file.destination_relative_path for file in files}
-            built_in_root_files = _PROVIDER_BUILT_IN_ROOT_FILES[provider]
-            for destination_name, content in built_in_root_files.items():
-                destination_relative_path = Path(destination_name)
-                if destination_relative_path in existing_paths:
-                    continue
-                files.append(
-                    ProviderAssetFile(
-                        source_path=f"{root}/{destination_name}",
-                        destination_relative_path=destination_relative_path,
-                        content=content,
-                    )
-                )
     except GitHubClientError as exc:
         raise ProviderAssetDeployError("vv-ai provider asset の取得に失敗しました") from exc
     if len(files) == 0:

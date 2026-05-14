@@ -116,9 +116,8 @@ def test_missing_token_uses_default_github_client(
 
     result = deploy_codex_provider_assets({}, tmp_path)
 
-    assert result.copied_files == 2
+    assert result.copied_files == 1
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").is_file()
-    assert (tmp_path / "AGENTS.md").read_text() == "自然文は日本語で書く\n"
 
 
 def test_fallback_gh_token_is_used(
@@ -177,8 +176,7 @@ def test_deploy_codex_provider_assets_writes_skill(
     )
 
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").read_bytes() == b"codex skill"
-    assert (tmp_path / "AGENTS.md").read_text() == "自然文は日本語で書く\n"
-    assert result.copied_files == 2
+    assert result.copied_files == 1
     assert result.overwritten_files == 0
 
 
