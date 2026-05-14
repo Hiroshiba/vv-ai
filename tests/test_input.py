@@ -85,6 +85,21 @@ class TestParseCommentInvocation:
         assert result.command == "issue"
         assert result.instruction is None
 
+    def test_command_next_without_instruction(self) -> None:
+        result = parse_comment_invocation("@vv-ai next")
+        assert result.command == "next"
+        assert result.instruction is None
+
+    def test_command_next_with_options(self) -> None:
+        result = parse_comment_invocation(
+            "@vv-ai next --provider codex --session_mode new --dry-run"
+        )
+        assert result.command == "next"
+        assert result.provider == "codex"
+        assert result.session_mode == "new"
+        assert result.dry_run is True
+        assert result.instruction is None
+
     def test_option_dry_run(self) -> None:
         result = parse_comment_invocation("@vv-ai implement --dry-run 修正して")
         assert result.command == "implement"
@@ -187,6 +202,14 @@ class TestBuildRawInputFromCli:
         )
         raw = build_raw_input_from_cli(cli)
         assert raw.dry_run is True
+
+    def test_next_command(self) -> None:
+        cli = CLIInput(
+            command="next",
+            target_url="https://github.com/org/repo/issues/1",
+        )
+        raw = build_raw_input_from_cli(cli)
+        assert raw.command == "next"
 
     def test_event_file_rejects_direct_args(self) -> None:
         cli = CLIInput(
@@ -387,6 +410,28 @@ class TestBuildRawInputFromWorkflowDispatchEvent:
         assert raw.instruction is None
         assert raw.target_url is None
 
+    def test_next_command(self) -> None:
+        event = WorkflowDispatchEvent.model_validate({
+            "inputs": {
+                "command": "next",
+                "target_type": "issue",
+                "target_number": "10",
+                "provider": "codex",
+                "session_mode": "new",
+                "dry_run": "true",
+            },
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        })
+        raw = build_raw_input_from_workflow_dispatch_event(event)
+        assert raw.command == "next"
+        assert raw.target_type == "issue"
+        assert raw.target_number == 10
+        assert raw.instruction is None
+        assert raw.provider == "codex"
+        assert raw.session_mode == "new"
+        assert raw.dry_run is True
+
 
 class TestResolveRawInput:
     def test_reply_requires_target(self) -> None:
@@ -551,4 +596,21 @@ class TestResolveRawInput:
             repository_full_name="fallback/repo",
         )
         resolved = resolve_raw_input(raw)
+        assert resolved.repo is None
+
+    def test_next_requires_target(self) -> None:
+        raw = RawInput(event_name="local", command="next")
+        with pytest.raises(ResolutionError, match="target"):
+            resolve_raw_input(raw)
+
+    def test_next_allows_missing_instruction_and_ignores_repo_fallback(self) -> None:
+        raw = RawInput(
+            event_name="local",
+            command="next",
+            target_url="https://github.com/org/repo/issues/1",
+            repository_full_name="fallback/repo",
+        )
+        resolved = resolve_raw_input(raw)
+        assert resolved.command == "next"
+        assert resolved.instruction is None
         assert resolved.repo is None
