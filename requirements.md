@@ -304,7 +304,7 @@ provider_priority:
 
 | 内容                         | 説明                                         |
 | ---------------------------- | -------------------------------------------- |
-| provider セッションファイル群 | Codex は `CODEX_HOME/sessions/` のみ。Claude Code は継続対象の `<session_id>.jsonl` と必要な session subdir |
+| CLI セッションディレクトリ   | Codex/Claude Code の継続に必要な状態を丸ごと |
 | git diff                     | ワークツリーの変更（追跡ファイルのみ）       |
 | git diff --staged            | ステージ済みの変更                           |
 | git status --porcelain       | ファイル状態                                 |
