@@ -676,6 +676,26 @@ class TestLabelEvent:
             "vv-ai:confirm",
         )
 
+    def test_issue_next_label_removes_trigger_label(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:next")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "確認しました")
+        mock_gh = MagicMock()
+        mock_gh.get_issue_parent_number.return_value = None
+
+        with contextlib.ExitStack() as stack:
+            _enter_next_patches(stack, tmp_path, session, result, mock_gh)
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:next",
+        )
+
     def test_pull_request_label_removes_trigger_label(self, tmp_path: Path) -> None:
         _write_config(tmp_path)
         event_path = self._write_pull_request_labeled_event(tmp_path, "vv-ai:review")
@@ -698,6 +718,32 @@ class TestLabelEvent:
             "org/repo",
             1,
             "vv-ai:review",
+        )
+
+    def test_pull_request_next_label_removes_trigger_label(
+        self, tmp_path: Path
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_pull_request_labeled_event(tmp_path, "vv-ai:next")
+        argv = ["--event", "pull_request", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "レビューしました")
+        mock_gh = MagicMock()
+        mock_gh.get_pull_request.return_value = _make_github_pr(
+            "org/repo",
+            1,
+            "feature-branch",
+        )
+
+        with contextlib.ExitStack() as stack:
+            _enter_next_patches(stack, tmp_path, session, result, mock_gh)
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:next",
         )
 
     def test_provider_failure_still_removes_trigger_label(self, tmp_path: Path) -> None:

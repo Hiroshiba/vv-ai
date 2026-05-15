@@ -77,8 +77,30 @@ def test_issue_labeled_confirm_should_run(tmp_path: Path) -> None:
     assert result.event == "issues"
 
 
+def test_issue_labeled_next_should_run(tmp_path: Path) -> None:
+    payload = _make_issue_labeled_payload("vv-ai:next", "Hiroshiba")
+
+    result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+    assert result.event == "issues"
+
+
 def test_pull_request_labeled_review_should_run(tmp_path: Path) -> None:
     payload = _make_pull_request_labeled_payload("vv-ai:review", "Hiroshiba")
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+    assert result.event == "pull_request"
+
+
+def test_pull_request_labeled_next_should_run(tmp_path: Path) -> None:
+    payload = _make_pull_request_labeled_payload("vv-ai:next", "Hiroshiba")
 
     result = run_verify(
         "pull_request", _write_payload(tmp_path, payload), _make_config()
