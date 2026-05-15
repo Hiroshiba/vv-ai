@@ -198,6 +198,44 @@ def _enter_common_patches(
     return execute_provider
 
 
+def _enter_next_patches(
+    stack: contextlib.ExitStack,
+    tmp_path: Path,
+    session: ResolvedSession,
+    result: ExecutionResult,
+    github_client: MagicMock,
+) -> tuple[MagicMock, MagicMock]:
+    """next CLI テスト用のパッチ群を ExitStack に登録する。"""
+    stack.enter_context(patch("vv_ai.cli.find_repo_root", return_value=tmp_path))
+    resolve_session = stack.enter_context(
+        patch("vv_ai.cli.resolve_session", return_value=session)
+    )
+    execute_provider = stack.enter_context(
+        patch("vv_ai.command_handler.execute_provider", return_value=result)
+    )
+    stack.enter_context(
+        patch(
+            "vv_ai.cli.save_execution_artifacts",
+            return_value=MagicMock(spec=SavedExecutionArtifacts),
+        )
+    )
+    stack.enter_context(
+        patch("vv_ai.command_handler.build_github_client", return_value=github_client)
+    )
+    stack.enter_context(
+        patch("vv_ai.next_command.build_github_client", return_value=github_client)
+    )
+    stack.enter_context(patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}))
+    github_client.get_repo_info.return_value = RepoInfo(
+        is_fork=False,
+        parent_full_name=None,
+        parent_default_branch=None,
+    )
+    github_client.get_issue.return_value = _make_github_issue("org/repo", 1)
+    github_client.list_issue_comments.return_value = []
+    return resolve_session, execute_provider
+
+
 class TestImplementIssueDryRun:
     """implement コマンド Issue 起点 dry-run のシナリオ。"""
 
@@ -327,6 +365,163 @@ class TestIssueDryRun:
             exit_code = main(argv)
 
         assert exit_code == 0
+
+
+class TestNextDryRun:
+    """next コマンド dry-run のシナリオ。"""
+
+    def test_issue_history_empty_runs_as_confirm_with_cli_options(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "next",
+            "--target-url", "https://github.com/org/repo/issues/1",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "確認しました")
+        mock_gh = MagicMock()
+        mock_gh.get_issue_parent_number.return_value = None
+
+        with contextlib.ExitStack() as stack:
+            resolve_session, execute_provider = _enter_next_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            exit_code = main(argv)
+
+        session_command = resolve_session.call_args.args[2]
+        ready_execution = execute_provider.call_args.args[1]
+        assert exit_code == 0
+        assert session_command.command == "confirm"
+        assert ready_execution.command.command == "confirm"
+        assert ready_execution.command.provider == "codex"
+        assert ready_execution.command.session_mode == "new"
+        assert ready_execution.command.dry_run is True
+
+    def test_pr_history_empty_runs_as_review_before_session_resolution(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "next",
+            "--target-url", "https://github.com/org/repo/pull/5",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#5", "codex")
+        result = _make_execution_result("success", "レビューしました")
+        mock_gh = MagicMock()
+        mock_gh.get_pull_request.return_value = _make_github_pr(
+            "org/repo",
+            5,
+            "feature-branch",
+        )
+
+        with contextlib.ExitStack() as stack:
+            resolve_session, execute_provider = _enter_next_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            exit_code = main(argv)
+
+        session_command = resolve_session.call_args.args[2]
+        ready_execution = execute_provider.call_args.args[1]
+        assert exit_code == 0
+        assert session_command.command == "review"
+        assert ready_execution.command.command == "review"
+
+    def test_pr_after_review_runs_as_implement(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "next",
+            "--target-url", "https://github.com/org/repo/pull/5",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#5", "codex")
+        result = _make_execution_result("success", "実装しました")
+        mock_gh = MagicMock()
+        mock_gh.get_pull_request.return_value = _make_github_pr(
+            "org/repo",
+            5,
+            "feature-branch",
+        )
+
+        with contextlib.ExitStack() as stack:
+            _, execute_provider = _enter_next_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            mock_gh.list_issue_comments.return_value = [
+                _make_github_comment(1000, "@vv-ai review"),
+            ]
+            mock_checkout = stack.enter_context(
+                patch("vv_ai.command_handler.fetch_and_checkout_branch")
+            )
+            exit_code = main(argv)
+
+        ready_execution = execute_provider.call_args.args[1]
+        assert exit_code == 0
+        assert ready_execution.command.command == "implement"
+        mock_checkout.assert_called_once()
+
+    def test_issue_after_breakdown_exits_two_without_provider(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "next",
+            "--target-url", "https://github.com/org/repo/issues/1",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "未使用")
+        mock_gh = MagicMock()
+        mock_gh.get_issue_parent_number.return_value = None
+
+        with contextlib.ExitStack() as stack:
+            resolve_session, execute_provider = _enter_next_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            mock_gh.list_issue_comments.return_value = [
+                _make_github_comment(1000, "@vv-ai confirm"),
+                _make_github_comment(1001, "@vv-ai requirements"),
+                _make_github_comment(1002, "@vv-ai arch"),
+                _make_github_comment(1003, "@vv-ai detail"),
+                _make_github_comment(1004, "@vv-ai breakdown"),
+            ]
+            exit_code = main(argv)
+
+        assert exit_code == 2
+        resolve_session.assert_not_called()
+        execute_provider.assert_not_called()
 
 
 class TestIssueCommentEvent:
