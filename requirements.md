@@ -31,24 +31,6 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
 
-### ラベル起動対象
-
-| ラベル | command | Issue 上 | PR 上 |
-| --- | --- | --- | --- |
-| `vv-ai:reply` | `reply` | 可 | 可 |
-| `vv-ai:confirm` | `confirm` | 可 | 可 |
-| `vv-ai:requirements` | `requirements` | 可 | 可 |
-| `vv-ai:arch` | `arch` | 可 | 可 |
-| `vv-ai:detail` | `detail` | 可 | 可 |
-| `vv-ai:breakdown` | `breakdown` | 可 | 不可 |
-| `vv-ai:implement` | `implement` | 可 | 可 |
-| `vv-ai:review` | `review` | 不可 | 可 |
-| `vv-ai:issue` | `issue` | 可 | 可 |
-
-- command 省略はコメント起動だけの仕様。ラベル起動で `reply` を使う場合は `vv-ai:reply` が必須
-- `vv-ai`、`vv-ai:`、`vv-ai:unknown` は対象外 label として扱う
-- `next` はラベル起動対象に含めない
-
 ### オプション
 
 | オプション                          | 説明                                                   | デフォルト              |
@@ -86,15 +68,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 
 - Issue または PR に `vv-ai:<command>` label を付けると起動
 - 許可ユーザーの label 付与のみ反応。未許可は**完全サイレント**（何も返さない）
-- `issues.labeled` は Issue 起点、`pull_request.labeled` は PR 起点として扱う
 - label 名から command を決め、`instruction` はなしとして扱う
-- `provider`、`session_mode`、`dry_run`、`repo` は指定しない
-- 通常コメントを `instruction` として選択、抽出する処理は追加しない
-- 対象 Issue / PR のタイトル、description、コメントは target context として provider に渡す
-- 実行後は dry-run でなければ起動元の `vv-ai:<command>` label を対象 Issue / PR から外す
-- provider 実行や後処理が失敗した場合も label 削除を試みる
-- label 削除失敗は成功扱いにしない
-- provider 失敗がすでに主原因としてある場合、label 削除失敗は主原因を上書きしない
 
 ### 3. GitHub workflow_dispatch
 
@@ -563,8 +537,8 @@ provider_priority:
 
 - fork PR 由来の `pull_request` イベントでは Secrets が渡らない
 - `pull_request_target` は未信頼コードの checkout/実行リスクがあるため避ける
-- PR ラベル起動は `pull_request.labeled` を使うため、外部 fork PR では Secrets と権限の制約を受ける
-- 外部 fork PR に対する `issue_comment`、`pull_request.labeled`、`pull_request_target`、GitHub App、`workflow_run` の採否は別途設計する
+- コメント起動は base repo 側のトリガーとして処理する
+- PR ラベル起動は外部 fork PR では Secrets と権限の制約を受ける
 
 ---
 
@@ -588,9 +562,6 @@ provider_priority:
   - target context として Issue/PR のタイトル・description・コメント
     - 同じ provider セッション中に同じ target context は 1 回だけ渡す
     - 継続セッションでは前回以降に追加または編集された target context だけ渡す
-- **渡さないもの:**
-  - 通常コメントから抽出した `instruction`
-  - `provider`、`session_mode`、`dry_run`、`repo`
 
 ### 起動定型プロンプト（AI に伝える情報）
 

@@ -153,27 +153,6 @@ PR でのみ使えるコマンド:
 ### ラベル起動
 
 Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動します。
-
-`vv-ai.yml` の `allowed_users` に含まれるユーザーのラベル付与のみ反応します。未許可ユーザーには何も返しません。
-
-ラベル起動では `instruction`、`provider`、`session_mode`、`dry_run`、`repo` を指定できません。対象の Issue または PR のタイトル、description、コメントは AI に渡しますが、通常コメントを `instruction` として抽出する特別な処理は行いません。
-
-command 省略はコメント起動だけの仕様です。ラベル起動で `reply` を使う場合は `vv-ai:reply` を付けます。`vv-ai` や `vv-ai:` は対象外です。
-
-対象ラベル:
-
-| ラベル | command | Issue 上 | PR 上 |
-| --- | --- | --- | --- |
-| `vv-ai:reply` | `reply` | 可 | 可 |
-| `vv-ai:confirm` | `confirm` | 可 | 可 |
-| `vv-ai:requirements` | `requirements` | 可 | 可 |
-| `vv-ai:arch` | `arch` | 可 | 可 |
-| `vv-ai:detail` | `detail` | 可 | 可 |
-| `vv-ai:breakdown` | `breakdown` | 可 | 不可 |
-| `vv-ai:implement` | `implement` | 可 | 可 |
-| `vv-ai:review` | `review` | 不可 | 可 |
-| `vv-ai:issue` | `issue` | 可 | 可 |
-
 実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
 
 ### workflow_dispatch
