@@ -57,6 +57,17 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 @vv-ai implement --dry-run この修正を試してみて
 ```
 
+### next の解決
+
+- `next` は専用の AI タスクではなく、履歴から次の既存コマンドへ解決するショートカット
+- 通常 Issue の履歴なし `next` は `confirm`
+- サブ Issue の履歴なし `next` は `implement`
+- Issue では `confirm` → `requirements` → `arch` → `detail` → `breakdown` の順に進む
+- 親 Issue の `breakdown` 後の `next` はエラー終了
+- Issue の `implement` 後の `next` はエラー終了
+- PR の履歴なし `next` は `review`
+- PR では `review` と `implement` を交互に実行
+
 ---
 
 ## 起動経路
@@ -71,6 +82,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 - Issue または PR に `vv-ai:<command>` label を付けると起動
 - 許可ユーザーの label 付与のみ反応。未許可は**完全サイレント**（何も返さない）
 - label 名から command を決め、`instruction` はなしとして扱う
+- `next` のラベル起動は使わない
 
 ### 3. GitHub workflow_dispatch
 

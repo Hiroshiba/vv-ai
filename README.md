@@ -155,6 +155,7 @@ PR でのみ使えるコマンド:
 
 Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動します。
 実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
+`next` のラベル起動はありません。
 
 ### workflow_dispatch
 
