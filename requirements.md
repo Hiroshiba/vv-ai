@@ -6,7 +6,7 @@ GitHub Actions ワークフロー + Python CLI ツール（Codex CLI / Claude Co
 
 ## PROJECT OVERVIEW
 
-GitHub の Issue / PR に対してコメントやワークフローディスパッチで AI（Codex CLI / Claude Code CLI）を起動し、計画・実装・レビュー・Issue 作成などのタスクを自動実行する仕組み。ローカル実行は GitHub Actions の再現実行やローカル Issue / PR を使ったデバッグ補助として扱う。各リポジトリにソースをコピーして導入するプロトタイプとして開始し、将来的に Reusable Workflow への切り出しを見据える。
+GitHub の Issue / PR に対してコメント、ラベル、ワークフローディスパッチで AI（Codex CLI / Claude Code CLI）を起動し、計画・実装・レビュー・Issue 作成などのタスクを自動実行する仕組み。ローカル実行は GitHub Actions の再現実行やローカル Issue / PR を使ったデバッグ補助として扱う。各リポジトリにソースをコピーして導入するプロトタイプとして開始し、将来的に Reusable Workflow への切り出しを見据える。
 
 ---
 
@@ -15,6 +15,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 ### プレフィックス
 
 - コメント起動: `@vv-ai`（`@` 付き、本文先頭に記述）
+- ラベル起動: `vv-ai:<command>`（対象 Issue / PR に label として付与）
 
 ### サブコマンド一覧
 
@@ -63,7 +64,13 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 - Issue コメントまたは PR コメントで `@vv-ai ...` と書くと起動
 - 許可ユーザーのコメントのみ反応。未許可は**完全サイレント**（何も返さない）
 
-### 2. GitHub workflow_dispatch
+### 2. GitHub ラベル起動（`issues.labeled` / `pull_request.labeled`）
+
+- Issue または PR に `vv-ai:<command>` label を付けると起動
+- 許可ユーザーの label 付与のみ反応。未許可は**完全サイレント**（何も返さない）
+- label 名から command を決め、`instruction` はなしとして扱う
+
+### 3. GitHub workflow_dispatch
 
 - 手元 PC から `gh workflow run ...` で起動
 - 入力項目:
@@ -89,7 +96,7 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
   - 通常コマンド: workflow が置かれた repo のみ
   - `issue` コマンドのみ: `--repo` で別 repo も可（任意 OK）
 
-### 3. ローカル CLI によるデバッグ
+### 4. ローカル CLI によるデバッグ
 
 - CLI 名: `vv-ai`
 - サブコマンドなし（`vv-ai [options]` で直接実行）
@@ -98,13 +105,9 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 - 入力方法:
   - 直接指定: `--command`, `--instruction`, `--target-url`, `--target-type`, `--target-number`, `--provider`, `--session_mode`, `--dry-run`, `--repo`
   - イベントファイル: `--event-file <json>` で GitHub event payload を読み込み再現実行
-  - `--event issue_comment|workflow_dispatch|local`
+  - `--event issue_comment|workflow_dispatch|issues|pull_request|local`
 - ローカルデバッグは主に **dry-run** で実施
 - 扱うコマンドは `@vv-ai` と同じ（専用デバッグコマンドは設けない）
-
-### ラベル起動
-
-- **廃止**。プロンプト指定やオプション指定がしづらく、コメント起動と二重化するため
 
 ---
 
@@ -116,13 +119,13 @@ GitHub の Issue / PR に対してコメントやワークフローディスパ�
 | -------------------- | --------- |
 | `issue_comment`      | ✅ 有効    |
 | `workflow_dispatch`   | ✅ 有効    |
-| `issues.labeled`     | ❌ 無効    |
-| `pull_request.labeled` | ❌ 無効  |
+| `issues.labeled`     | ✅ 有効    |
+| `pull_request.labeled` | ✅ 有効  |
 | `issues.opened`      | ❌ 無効    |
 
 ### ワークフロー構成
 
-- **1 本の workflow** に `issue_comment` と `workflow_dispatch` を同居
+- **1 本の workflow** に `issue_comment`、`issues.labeled`、`pull_request.labeled`、`workflow_dispatch` を同居
 - 同一 Issue/PR 番号の実行は **直列化（キュー）**
   - GitHub Actions の `concurrency` を使用
   - `cancel-in-progress: false`（前の実行が終わるまで待つ）
@@ -534,7 +537,8 @@ provider_priority:
 
 - fork PR 由来の `pull_request` イベントでは Secrets が渡らない
 - `pull_request_target` は未信頼コードの checkout/実行リスクがあるため避ける
-- コメント起動（`issue_comment`）で base repo 側のトリガーとして処理するのが基本
+- コメント起動は base repo 側のトリガーとして処理する
+- PR ラベル起動は外部 fork PR では Secrets と権限の制約を受ける
 
 ---
 
@@ -546,6 +550,15 @@ provider_priority:
   - org / repo / Issue(or PR) 番号
   - 実行タスクの定型文（「plan を実行してください」等）
   - `@vv-ai ...` コメント本文（そのまま）
+  - target context として Issue/PR のタイトル・description・コメント
+    - 同じ provider セッション中に同じ target context は 1 回だけ渡す
+    - 継続セッションでは前回以降に追加または編集された target context だけ渡す
+
+### ラベル起動時
+
+- **渡すもの:**
+  - org / repo / Issue(or PR) 番号
+  - label 名から決まる実行タスクの定型文
   - target context として Issue/PR のタイトル・description・コメント
     - 同じ provider セッション中に同じ target context は 1 回だけ渡す
     - 継続セッションでは前回以降に追加または編集された target context だけ渡す
@@ -730,7 +743,6 @@ provider_priority:
 
 ## OUT OF SCOPE（MVP 外）
 
-- ラベル起動
 - Issue 作成時の自動反応（`issues.opened`）
 - GitHub Enterprise Server 対応
 - 横断集計 DB / ダッシュボード
