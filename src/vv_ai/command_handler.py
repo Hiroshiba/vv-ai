@@ -48,6 +48,18 @@ _ISSUE_CONTEXT_COMMANDS = frozenset(
 )
 
 
+class CommandCleanupError(RuntimeError):
+    """コマンド終了処理に失敗したことを表す例外。"""
+
+    def __init__(
+        self,
+        message: str,
+        created_pr: GitHubPullRequest | None,
+    ) -> None:
+        super().__init__(message)
+        self.created_pr = created_pr
+
+
 def run_command(
     repo_root: Path,
     ready_execution: ReadyExecution,
@@ -95,90 +107,109 @@ def run_command(
     execution_result: ExecutionResult | None = None
     created_pr: GitHubPullRequest | None = None
     finalize_status: ExecutionStatus = "failure"
+    primary_error: BaseException | None = None
     try:
-        if command.command == "implement" and target is not None and target.kind == "issue":
-            issue_identifier = str(target.number) if target.number is not None else target.local_id
-            assert issue_identifier is not None
-            implement_branch_name = generate_implement_branch_name(issue_identifier)
-            start_point: str | None = None
-            if _is_github_target(target):
+        try:
+            if (
+                command.command == "implement"
+                and target is not None
+                and target.kind == "issue"
+            ):
+                issue_identifier = (
+                    str(target.number) if target.number is not None else target.local_id
+                )
+                assert issue_identifier is not None
+                implement_branch_name = generate_implement_branch_name(issue_identifier)
+                start_point: str | None = None
+                if _is_github_target(target):
+                    assert github_client is not None
+                    fork_base_ref = _resolve_fork_base_ref(
+                        repo_root, target, github_client
+                    )
+                    start_point = fork_base_ref
+                create_and_checkout_branch(
+                    repo_root, implement_branch_name, start_point
+                )
+            elif (
+                command.command in _ISSUE_CONTEXT_COMMANDS
+                and target is not None
+                and target.kind == "issue"
+                and _is_github_target(target)
+            ):
                 assert github_client is not None
-                fork_base_ref = _resolve_fork_base_ref(repo_root, target, github_client)
-                start_point = fork_base_ref
-            create_and_checkout_branch(repo_root, implement_branch_name, start_point)
-        elif (
-            command.command in _ISSUE_CONTEXT_COMMANDS
-            and target is not None
-            and target.kind == "issue"
-            and _is_github_target(target)
-        ):
-            assert github_client is not None
-            worktree_ref = _resolve_fork_base_ref(repo_root, target, github_client)
-            if worktree_ref is not None:
-                checkout_ref(repo_root, worktree_ref)
-        elif command.command == "implement" and target is not None and target.kind == "pr":
-            assert target.repository_full_name is not None
-            assert target.number is not None
-            if not _is_github_target(target):
-                raise RuntimeError("ローカル PR への implement は未対応です")
-            assert github_client is not None
-            pr_info = github_client.get_pull_request(
-                target.repository_full_name, target.number
+                worktree_ref = _resolve_fork_base_ref(repo_root, target, github_client)
+                if worktree_ref is not None:
+                    checkout_ref(repo_root, worktree_ref)
+            elif (
+                command.command == "implement"
+                and target is not None
+                and target.kind == "pr"
+            ):
+                assert target.repository_full_name is not None
+                assert target.number is not None
+                if not _is_github_target(target):
+                    raise RuntimeError("ローカル PR への implement は未対応です")
+                assert github_client is not None
+                pr_info = github_client.get_pull_request(
+                    target.repository_full_name, target.number
+                )
+                implement_branch_name = pr_info.head_ref_name
+                if pr_info.is_cross_repository:
+                    checkout_fork_pr(
+                        repo_root, target.repository_full_name, target.number
+                    )
+                else:
+                    fetch_and_checkout_branch(repo_root, implement_branch_name)
+
+            if pr_info is not None and pr_info.is_cross_repository:
+                head_sha_before = get_head_sha(repo_root)
+
+            target_context = build_target_context(
+                github_client,
+                target,
+                command.comment_id,
+                _get_target_context_state(ready_execution),
+                pr_info,
             )
-            implement_branch_name = pr_info.head_ref_name
-            if pr_info.is_cross_repository:
-                checkout_fork_pr(
-                    repo_root, target.repository_full_name, target.number
-                )
-            else:
-                fetch_and_checkout_branch(repo_root, implement_branch_name)
+            _remember_target_context_state(ready_execution, target_context.state)
+            provider_prompt = build_provider_prompt(
+                ready_execution,
+                target_context.prompt_block,
+                implement_branch_name,
+                worktree_ref,
+            )
+            execution_result = execute_provider(
+                repo_root,
+                ready_execution,
+                env,
+                preflight_duration_seconds,
+                provider_prompt,
+            )
+            execution_result = execution_result.model_copy(
+                update={
+                    "state_ref": merge_target_context_state(
+                        execution_result.state_ref,
+                        target_context.state,
+                    )
+                }
+            )
 
-        if pr_info is not None and pr_info.is_cross_repository:
-            head_sha_before = get_head_sha(repo_root)
-
-        target_context = build_target_context(
-            github_client,
-            target,
-            command.comment_id,
-            _get_target_context_state(ready_execution),
-            pr_info,
-        )
-        _remember_target_context_state(ready_execution, target_context.state)
-        provider_prompt = build_provider_prompt(
-            ready_execution,
-            target_context.prompt_block,
-            implement_branch_name,
-            worktree_ref,
-        )
-        execution_result = execute_provider(
-            repo_root,
-            ready_execution,
-            env,
-            preflight_duration_seconds,
-            provider_prompt,
-        )
-        execution_result = execution_result.model_copy(
-            update={
-                "state_ref": merge_target_context_state(
-                    execution_result.state_ref,
-                    target_context.state,
-                )
-            }
-        )
-
-        created_pr = _handle_post_execution(
-            repo_root,
-            ready_execution,
-            execution_result,
-            github_client,
-            implement_branch_name,
-            pr_info,
-            head_sha_before,
-            fork_base_ref,
-            env,
-        )
-        assert execution_result is not None
-        finalize_status = execution_result.status
+            created_pr = _handle_post_execution(
+                repo_root,
+                ready_execution,
+                execution_result,
+                github_client,
+                implement_branch_name,
+                pr_info,
+                head_sha_before,
+                fork_base_ref,
+                env,
+            )
+            assert execution_result is not None
+            finalize_status = execution_result.status
+        except BaseException as exc:
+            primary_error = exc
+            raise
     finally:
         if (
             github_client is not None
@@ -199,14 +230,24 @@ def run_command(
             and not command.dry_run
             and command.trigger_label_name is not None
         ):
-            assert target is not None
-            assert target.repository_full_name is not None
-            assert target.number is not None
-            github_client.remove_issue_label(
-                target.repository_full_name,
-                target.number,
-                command.trigger_label_name,
-            )
+            try:
+                assert target is not None
+                assert target.repository_full_name is not None
+                assert target.number is not None
+                github_client.remove_issue_label(
+                    target.repository_full_name,
+                    target.number,
+                    command.trigger_label_name,
+                )
+            except Exception as exc:
+                if primary_error is not None:
+                    print(
+                        f"ラベル削除に失敗しました: {_format_exception(exc)}",
+                        file=sys.stderr,
+                    )
+                else:
+                    message = f"ラベル削除に失敗しました: {_format_exception(exc)}"
+                    raise CommandCleanupError(message, created_pr) from exc
 
     assert execution_result is not None
     return execution_result, created_pr
@@ -215,6 +256,14 @@ def run_command(
 def _is_github_target(target: ResolvedTarget | None) -> bool:
     """GitHub backend の target かどうかを返す。"""
     return target is not None and target.backend == "github"
+
+
+def _format_exception(error: BaseException) -> str:
+    """例外を短い文字列に整形する。"""
+    message = str(error).strip()
+    if message == "":
+        return error.__class__.__name__
+    return f"{error.__class__.__name__}: {message}"
 
 
 def _resolve_fork_base_ref(
