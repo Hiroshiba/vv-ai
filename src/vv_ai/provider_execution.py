@@ -169,7 +169,7 @@ def _execute_codex(
 
         session = ready_execution.resolved_session
         if session is not None and session.restored_provider_session_path is not None:
-            _deploy_provider_session_dir(
+            _deploy_codex_session_dir(
                 session.restored_provider_session_path, codex_home
             )
         _deploy_codex_assets_before_execution(env, codex_home)
@@ -670,26 +670,56 @@ def _resolve_claude_session_dir(repo_root: Path, session_id: str) -> Path | None
     return tmp_dir
 
 
-def _resolve_codex_session_dir(codex_env: dict[str, str]) -> Path | None:
+def _resolve_codex_session_dir(codex_env: dict[str, str]) -> Path:
     """Codex のセッションファイルを一時ディレクトリに集めて返す。"""
     codex_home = Path(codex_env.get("CODEX_HOME", str(Path.home() / ".codex")))
     if not codex_home.is_dir():
-        return None
+        raise ProviderExecutionError(
+            f"`{codex_home}` は Codex home directory ではありません"
+        )
+
+    sessions_dir = codex_home / "sessions"
+    if not sessions_dir.is_dir():
+        raise ProviderExecutionError(
+            f"`{sessions_dir}` は Codex session directory ではありません"
+        )
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="vv-ai-codex-session-"))
     try:
-        ignore = shutil.ignore_patterns("auth.json", "config.toml")
-        for item in codex_home.iterdir():
-            dest = tmp_dir / item.name
-            if item.is_dir():
-                shutil.copytree(item, dest, ignore=ignore)
-            elif item.name not in ("auth.json", "config.toml"):
-                shutil.copy2(item, dest)
-    except Exception:
+        shutil.copytree(sessions_dir, tmp_dir / "sessions")
+    except Exception as exc:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        raise
+        raise ProviderExecutionError(
+            f"`{sessions_dir}` の収集に失敗しました"
+        ) from exc
 
     return tmp_dir
+
+
+def _deploy_codex_session_dir(source: str, codex_home: Path) -> None:
+    """復元された Codex session directory を CODEX_HOME へコピーする。"""
+    source_sessions_dir = Path(source) / "sessions"
+    if not source_sessions_dir.is_dir():
+        raise ProviderExecutionError(
+            f"`{source_sessions_dir}` は Codex session directory ではありません"
+        )
+
+    codex_home.mkdir(parents=True, exist_ok=True)
+    destination_sessions_dir = codex_home / "sessions"
+    try:
+        if destination_sessions_dir.exists():
+            if not destination_sessions_dir.is_dir():
+                raise ProviderExecutionError(
+                    f"`{destination_sessions_dir}` は directory ではありません"
+                )
+            shutil.rmtree(destination_sessions_dir)
+        shutil.copytree(source_sessions_dir, destination_sessions_dir)
+    except ProviderExecutionError:
+        raise
+    except Exception as exc:
+        raise ProviderExecutionError(
+            f"`{destination_sessions_dir}` への Codex session 復元に失敗しました"
+        ) from exc
 
 
 def _deploy_provider_session_dir(source: str, destination: Path) -> None:
