@@ -131,6 +131,7 @@ Issue / PR で使えるコマンド:
 @vv-ai arch [instruction]
 @vv-ai detail [instruction]
 @vv-ai implement [instruction]
+@vv-ai next
 @vv-ai issue [--repo org/repo] instruction
 ```
 
@@ -154,6 +155,7 @@ PR でのみ使えるコマンド:
 
 Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動します。
 実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
+`next` のラベル起動はありません。
 
 ### workflow_dispatch
 
@@ -190,7 +192,7 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 
 | 引数 | 説明 |
 | --- | --- |
-| `--command` | `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue` / `reply` |
+| `--command` | `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue` / `next` / `reply` |
 | `--instruction` | 自然言語の指示本文 |
 | `--target-url` | 対象の Issue / PR URL またはローカルパス |
 | `--target-type` | `issue` または `pr` |

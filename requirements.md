@@ -30,6 +30,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `implement`    | 実装して PR 作成、または既存 PR に追コミット                 | ✅        | ✅     |
 | `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
+| `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
 
 ### オプション
 
@@ -52,8 +53,20 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 @vv-ai implement --provider codex このIssueを実装して
 @vv-ai review --session_mode inherit このPRをレビューして
 @vv-ai issue --repo org/repo この不具合をIssue化して
+@vv-ai next
 @vv-ai implement --dry-run この修正を試してみて
 ```
+
+### next の解決
+
+- `next` は専用の AI タスクではなく、履歴から次の既存コマンドへ解決するショートカット
+- 通常 Issue の履歴なし `next` は `confirm`
+- サブ Issue の履歴なし `next` は `implement`
+- Issue では `confirm` → `requirements` → `arch` → `detail` → `breakdown` の順に進む
+- 親 Issue の `breakdown` 後の `next` はエラー終了
+- Issue の `implement` 後の `next` はエラー終了
+- PR の履歴なし `next` は `review`
+- PR では `review` と `implement` を交互に実行
 
 ---
 
@@ -69,12 +82,13 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 - Issue または PR に `vv-ai:<command>` label を付けると起動
 - 許可ユーザーの label 付与のみ反応。未許可は**完全サイレント**（何も返さない）
 - label 名から command を決め、`instruction` はなしとして扱う
+- `next` のラベル起動は使わない
 
 ### 3. GitHub workflow_dispatch
 
 - 手元 PC から `gh workflow run ...` で起動
 - 入力項目:
-  - `command`: confirm | requirements | arch | detail | breakdown | implement | review | issue | reply
+  - `command`: confirm | requirements | arch | detail | breakdown | implement | review | issue | next | reply
   - `target_type`: issue | pr（任意）
   - `target_number`: 番号（任意）
   - `target_url`: Issue/PR URL（任意）
@@ -87,9 +101,9 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
   - `target_url` が優先
 - 対象省略時の扱い:
   - `issue` コマンド: 対象不要（repo 未指定なら workflow のある repo に作成）
-  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review`: 対象必須（不足ならエラー終了）
+  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `next`: 対象必須（不足ならエラー終了）
 - `instruction` 省略:
-  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue`: 省略可
+  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue` / `next`: 省略可
 - GitHub 上への可視化: **何もしない**。Actions Run と artifact だけを見る運用
 - 認可: `github.actor == "Hiroshiba"` を必須チェック（workflow 実行権限があっても Hiroshiba 以外は即終了）
 - 対象 repo:
@@ -276,6 +290,7 @@ provider_priority:
 
 - **同一 Issue/PR 内** で `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` は **同じセッション**（main lane）を共有
 - `review` は **別セッション**（review lane）
+- `next` は既存コマンドへ解決した後、そのコマンドの lane を使う
 - セッションキー: `<backend> / <target> / <provider> / <lane>`
   - 例: `github / org/repo#123 / codex / main`
   - 例: `local / issue:login-403-7k2p9a / codex / main`
