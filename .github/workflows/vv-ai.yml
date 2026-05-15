@@ -19,6 +19,7 @@ on:
             implement,
             review,
             issue,
+            next,
             reply,
           ]
       target_type:
