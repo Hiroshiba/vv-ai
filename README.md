@@ -135,8 +135,6 @@ Issue / PR で使えるコマンド:
 @vv-ai issue [--repo org/repo] instruction
 ```
 
-`next` は過去のコマンド履歴から次の既存工程を選ぶショートカットです。専用の AI タスクではありません。Issue では設計工程を順に進め、サブ Issue では `implement`、PR では `review` と `implement` を交互に実行します。
-
 Issue でのみ使えるコマンド:
 
 ```
@@ -157,7 +155,6 @@ PR でのみ使えるコマンド:
 
 Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動します。
 実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
-`next` のラベル起動はありません。コメント起動、workflow_dispatch、CLI で実行します。
 
 ### workflow_dispatch
 
@@ -171,8 +168,6 @@ gh workflow run vv-ai.yml \
 ```
 
 入力項目: `command`, `target_type`, `target_number`, `target_url`, `instruction`, `provider`, `session_mode`, `dry_run`, `repo`
-
-`command` には `confirm`, `requirements`, `arch`, `detail`, `breakdown`, `implement`, `review`, `issue`, `next`, `reply` を指定できます。
 
 ### 導入手順
 
@@ -189,7 +184,6 @@ gh workflow run vv-ai.yml \
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command requirements --target-url https://github.com/org/repo/issues/123 --instruction "要件を整理して"
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command implement --target-url https://github.com/org/repo/issues/123 --dry-run
-uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command next --target-url https://github.com/org/repo/issues/123 --dry-run
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --target-type issue --target-number 123 --instruction "このIssueの要点を教えて"
 ```
 
