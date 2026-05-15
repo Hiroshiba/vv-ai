@@ -639,6 +639,39 @@ class TestLabelEvent:
             "vv-ai:confirm",
         )
 
+    def test_provider_failure_result_is_primary_when_label_removal_also_fails(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("failure", "provider が失敗しました")
+        mock_gh = MagicMock()
+        mock_gh.remove_issue_label.side_effect = RuntimeError("label 削除失敗")
+
+        with contextlib.ExitStack() as stack:
+            _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            exit_code = main(argv)
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "実行エラー" not in captured.err
+        assert "ラベル削除に失敗しました: RuntimeError: label 削除失敗" in captured.err
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:confirm",
+        )
+
     def test_dry_run_does_not_remove_trigger_label(self, tmp_path: Path) -> None:
         ready_execution = _make_ready_execution_for_label(dry_run=True)
         result = _make_execution_result("success", "確認しました")

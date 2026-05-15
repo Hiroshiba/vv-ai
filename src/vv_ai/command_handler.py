@@ -240,7 +240,7 @@ def run_command(
                     command.trigger_label_name,
                 )
             except Exception as exc:
-                if primary_error is not None:
+                if _has_primary_failure(primary_error, execution_result):
                     print(
                         f"ラベル削除に失敗しました: {_format_exception(exc)}",
                         file=sys.stderr,
@@ -256,6 +256,16 @@ def run_command(
 def _is_github_target(target: ResolvedTarget | None) -> bool:
     """GitHub backend の target かどうかを返す。"""
     return target is not None and target.backend == "github"
+
+
+def _has_primary_failure(
+    primary_error: BaseException | None,
+    execution_result: ExecutionResult | None,
+) -> bool:
+    """ラベル削除前に主たる失敗が確定しているかを返す。"""
+    if primary_error is not None:
+        return True
+    return execution_result is not None and execution_result.status != "success"
 
 
 def _format_exception(error: BaseException) -> str:
