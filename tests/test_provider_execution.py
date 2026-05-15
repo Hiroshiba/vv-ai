@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
+
+import pytest
 
 from vv_ai.config import VVAIConfig
 from vv_ai.preflight import ReadyExecution
 from vv_ai.provider import ResolvedProvider, get_provider_spec
 from vv_ai.provider_execution import (
+    ProviderExecutionError,
     _build_codex_env,
+    _deploy_codex_session_dir,
     _execute_claude,
     _execute_codex,
+    _resolve_codex_session_dir,
 )
 from vv_ai.resolve import ResolvedCommand
 from vv_ai.session import ResolvedSession, SessionKey
@@ -117,25 +123,117 @@ def test_execute_codex_deploys_after_restore_before_subprocess(
         check: bool,
     ) -> subprocess.CompletedProcess[str]:
         events.append("run")
+        session_path = Path(env["CODEX_HOME"]) / "sessions" / "2026" / "05" / "15"
+        session_path.mkdir(parents=True)
+        (session_path / "rollout.jsonl").write_text("{}", encoding="utf-8")
         output_path = Path(command[command.index("-o") + 1])
         output_path.write_text("Codex 応答", encoding="utf-8")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("vv_ai.provider_execution._deploy_provider_session_dir", fake_deploy)
-    monkeypatch.setattr("vv_ai.provider_execution._deploy_codex_assets_before_execution", fake_deploy_assets)
+    monkeypatch.setattr("vv_ai.provider_execution._deploy_codex_session_dir", fake_deploy)
+    monkeypatch.setattr(
+        "vv_ai.provider_execution._deploy_codex_assets_before_execution",
+        fake_deploy_assets,
+    )
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    result = _execute_codex(
-        tmp_path,
-        ready_execution,
-        {"VV_OPENAI_API_KEY": "key", "VV_CODEX_HOME": str(tmp_path / "codex_home")},
-        0.1,
-        "prompt",
-        skip_api_key_check=False,
+    result = None
+    try:
+        result = _execute_codex(
+            tmp_path,
+            ready_execution,
+            {
+                "VV_OPENAI_API_KEY": "key",
+                "VV_CODEX_HOME": str(tmp_path / "codex_home"),
+            },
+            0.1,
+            "prompt",
+            skip_api_key_check=False,
+        )
+
+        assert events == ["restore", "deploy", "run"]
+        assert result.response_text == "Codex 応答"
+    finally:
+        if result is not None and result.provider_session_path is not None:
+            shutil.rmtree(result.provider_session_path, ignore_errors=True)
+
+
+def test_resolve_codex_session_dir_copies_only_sessions(tmp_path: Path) -> None:
+    """Codex session 収集は CODEX_HOME/sessions だけを保存する。"""
+    codex_home = tmp_path / "codex_home"
+    session_file = codex_home / "sessions" / "2026" / "05" / "15" / "rollout.jsonl"
+    session_file.parent.mkdir(parents=True)
+    session_file.write_text("{}", encoding="utf-8")
+    (codex_home / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (codex_home / "skills" / "skill").mkdir(parents=True)
+    (codex_home / "agents").mkdir()
+    (codex_home / "plugins").mkdir()
+    (codex_home / "cache").mkdir()
+    (codex_home / ".tmp").mkdir()
+    (codex_home / "tmp").mkdir()
+    (codex_home / "shell_snapshots").mkdir()
+    for filename in [
+        "auth.json",
+        "config.toml",
+        "logs_2.sqlite",
+        "state_5.sqlite",
+        "models_cache.json",
+    ]:
+        (codex_home / filename).write_text(filename, encoding="utf-8")
+
+    result = _resolve_codex_session_dir({"CODEX_HOME": str(codex_home)})
+    try:
+        assert sorted(path.name for path in result.iterdir()) == ["sessions"]
+        assert (
+            result / "sessions" / "2026" / "05" / "15" / "rollout.jsonl"
+        ).read_text(encoding="utf-8") == "{}"
+    finally:
+        shutil.rmtree(result, ignore_errors=True)
+
+
+def test_resolve_codex_session_dir_raises_when_sessions_missing(tmp_path: Path) -> None:
+    """Codex sessions が無い場合は保存不能として失敗する。"""
+    codex_home = tmp_path / "codex_home"
+    codex_home.mkdir()
+
+    with pytest.raises(ProviderExecutionError, match="Codex session directory"):
+        _resolve_codex_session_dir({"CODEX_HOME": str(codex_home)})
+
+
+def test_deploy_codex_session_dir_replaces_only_sessions(tmp_path: Path) -> None:
+    """Codex session 復元は sessions だけを置き換える。"""
+    source = tmp_path / "source"
+    (source / "sessions").mkdir(parents=True)
+    (source / "sessions" / "new.jsonl").write_text("new", encoding="utf-8")
+    (source / "AGENTS.md").write_text("old agents", encoding="utf-8")
+    codex_home = tmp_path / "codex_home"
+    (codex_home / "sessions").mkdir(parents=True)
+    (codex_home / "sessions" / "old.jsonl").write_text("old", encoding="utf-8")
+    (codex_home / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (codex_home / "skills" / "skill").mkdir(parents=True)
+    (codex_home / "skills" / "skill" / "SKILL.md").write_text(
+        "skill", encoding="utf-8"
     )
 
-    assert events == ["restore", "deploy", "run"]
-    assert result.response_text == "Codex 応答"
+    _deploy_codex_session_dir(str(source), codex_home)
+
+    assert not (codex_home / "sessions" / "old.jsonl").exists()
+    assert (
+        codex_home / "sessions" / "new.jsonl"
+    ).read_text(encoding="utf-8") == "new"
+    assert (codex_home / "AGENTS.md").read_text(encoding="utf-8") == "agents"
+    assert (
+        codex_home / "skills" / "skill" / "SKILL.md"
+    ).read_text(encoding="utf-8") == "skill"
+
+
+def test_deploy_codex_session_dir_raises_when_source_sessions_missing(tmp_path: Path) -> None:
+    """復元元に Codex sessions が無い場合は失敗する。"""
+    source = tmp_path / "source"
+    source.mkdir()
+
+    with pytest.raises(ProviderExecutionError, match="Codex session directory"):
+        _deploy_codex_session_dir(str(source), tmp_path / "codex_home")
 
 
 def test_execute_claude_deploys_after_restore_before_subprocess(
@@ -181,7 +279,10 @@ def test_execute_claude_deploys_after_restore_before_subprocess(
         )
 
     monkeypatch.setattr("vv_ai.provider_execution._deploy_provider_session_dir", fake_deploy)
-    monkeypatch.setattr("vv_ai.provider_execution._deploy_claude_assets_before_execution", fake_deploy_assets)
+    monkeypatch.setattr(
+        "vv_ai.provider_execution._deploy_claude_assets_before_execution",
+        fake_deploy_assets,
+    )
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     result = _execute_claude(
