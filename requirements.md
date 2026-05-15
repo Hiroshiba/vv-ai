@@ -310,8 +310,6 @@ provider_priority:
 | git status --porcelain       | ファイル状態                                 |
 | メタ情報 JSON                | org/repo, Issue/PR 番号, provider, lane, ブランチ名, HEAD SHA, 保存時刻, Allow edits 案内済みフラグ |
 
-Codex session artifact では `AGENTS.md`、`skills/`、`agents/`、`plugins/`、cache、一時ファイル、sqlite、log、`auth.json`、`config.toml` は保存・復元しない。
-
 ---
 
 ## ARTIFACT 保存
