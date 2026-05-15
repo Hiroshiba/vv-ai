@@ -161,8 +161,6 @@ Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main create-vv-ai-labels --repo org/repo
 ```
 
-`--repo` を省略すると現在のリポジトリを対象にします。`--dry-run` を付けると GitHub ラベルを変更せずに作成または更新予定を確認できます。
-
 ### workflow_dispatch
 
 `gh workflow run` で手動起動します。
