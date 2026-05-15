@@ -39,6 +39,7 @@ _CODEX_HOME_ENV = "VV_CODEX_HOME"
 _ANTHROPIC_API_KEY_ENV = "VV_ANTHROPIC_API_KEY"
 _ANTHROPIC_API_KEY_FILE_ENV = "VV_ANTHROPIC_API_KEY_FILE"
 _CLAUDE_EXTRA_SETTINGS_ENV = "VV_CLAUDE_SETTINGS"
+_CODEX_SESSION_IGNORED_FILES = ("AGENTS.md",)
 
 _ALLOWED_ENV_KEYS = frozenset(
     [
@@ -170,7 +171,9 @@ def _execute_codex(
         session = ready_execution.resolved_session
         if session is not None and session.restored_provider_session_path is not None:
             _deploy_provider_session_dir(
-                session.restored_provider_session_path, codex_home
+                session.restored_provider_session_path,
+                codex_home,
+                _CODEX_SESSION_IGNORED_FILES,
             )
         _deploy_codex_assets_before_execution(env, codex_home)
 
@@ -456,7 +459,9 @@ def _execute_claude(
             sanitized = str(repo_root).replace("/", "-")
             project_dir = Path.home() / ".claude" / "projects" / sanitized
             _deploy_provider_session_dir(
-                session.restored_provider_session_path, project_dir
+                session.restored_provider_session_path,
+                project_dir,
+                (),
             )
         _deploy_claude_assets_before_execution(env, Path.home() / ".claude")
 
@@ -678,12 +683,20 @@ def _resolve_codex_session_dir(codex_env: dict[str, str]) -> Path | None:
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="vv-ai-codex-session-"))
     try:
-        ignore = shutil.ignore_patterns("auth.json", "config.toml")
+        ignore = shutil.ignore_patterns(
+            "auth.json",
+            "config.toml",
+            *_CODEX_SESSION_IGNORED_FILES,
+        )
         for item in codex_home.iterdir():
             dest = tmp_dir / item.name
             if item.is_dir():
                 shutil.copytree(item, dest, ignore=ignore)
-            elif item.name not in ("auth.json", "config.toml"):
+            elif item.name not in (
+                "auth.json",
+                "config.toml",
+                *_CODEX_SESSION_IGNORED_FILES,
+            ):
                 shutil.copy2(item, dest)
     except Exception:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -692,11 +705,17 @@ def _resolve_codex_session_dir(codex_env: dict[str, str]) -> Path | None:
     return tmp_dir
 
 
-def _deploy_provider_session_dir(source: str, destination: Path) -> None:
+def _deploy_provider_session_dir(
+    source: str,
+    destination: Path,
+    ignored_file_names: tuple[str, ...],
+) -> None:
     """復元されたセッションファイルを provider が期待する場所にコピーする。"""
     source_path = Path(source)
     destination.mkdir(parents=True, exist_ok=True)
     for item in source_path.iterdir():
+        if item.name in ignored_file_names:
+            continue
         dest_item = destination / item.name
         if item.is_dir():
             if dest_item.exists():

@@ -177,6 +177,7 @@ def test_deploy_codex_provider_assets_writes_skill(
 
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").read_bytes() == b"codex skill"
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
 
 
@@ -205,6 +206,7 @@ def test_deploy_codex_provider_assets_writes_agents_md(
 
     assert (tmp_path / "AGENTS.md").read_bytes() == b"codex agents"
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
 
 
@@ -233,6 +235,7 @@ def test_deploy_claude_provider_assets_writes_skill(
 
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").read_bytes() == b"claude skill"
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
 
 
@@ -261,7 +264,80 @@ def test_deploy_claude_provider_assets_writes_claude_md(
 
     assert (tmp_path / "CLAUDE.md").read_bytes() == b"claude instructions"
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
+
+
+def test_deploy_appends_changed_codex_agents_md_without_overwrite_warning(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """内容が違う Codex root 指示ファイルは追記する。"""
+    path = tmp_path / "AGENTS.md"
+    path.write_bytes(b"hiho")
+    file = ProviderAssetFile(
+        source_path=".codex/AGENTS.md",
+        destination_relative_path=Path("AGENTS.md"),
+        content=b"codex agents",
+    )
+
+    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+
+    result = _deploy_provider_asset_files("codex", [file], tmp_path)
+    captured = capsys.readouterr()
+
+    assert path.read_bytes() == b"hiho\ncodex agents"
+    assert result.copied_files == 0
+    assert result.appended_files == 1
+    assert result.overwritten_files == 0
+    assert "追記しました" in captured.err
+    assert "上書きしました" not in captured.err
+
+
+def test_deploy_appends_changed_claude_md_without_overwrite_warning(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """内容が違う Claude root 指示ファイルは追記する。"""
+    path = tmp_path / "CLAUDE.md"
+    path.write_bytes(b"hiho")
+    file = ProviderAssetFile(
+        source_path=".claude/CLAUDE.md",
+        destination_relative_path=Path("CLAUDE.md"),
+        content=b"claude instructions",
+    )
+
+    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+
+    result = _deploy_provider_asset_files("claude", [file], tmp_path)
+    captured = capsys.readouterr()
+
+    assert path.read_bytes() == b"hiho\nclaude instructions"
+    assert result.copied_files == 0
+    assert result.appended_files == 1
+    assert result.overwritten_files == 0
+    assert "追記しました" in captured.err
+    assert "上書きしました" not in captured.err
+
+
+def test_deploy_appends_root_instruction_after_existing_newline(
+    tmp_path: Path,
+) -> None:
+    """既存 root 指示ファイルの末尾改行があれば余計な空行を増やさない。"""
+    path = tmp_path / "AGENTS.md"
+    path.write_bytes(b"hiho\n")
+    file = ProviderAssetFile(
+        source_path=".codex/AGENTS.md",
+        destination_relative_path=Path("AGENTS.md"),
+        content=b"codex agents",
+    )
+
+    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+
+    result = _deploy_provider_asset_files("codex", [file], tmp_path)
+
+    assert path.read_bytes() == b"hiho\ncodex agents"
+    assert result.appended_files == 1
 
 
 def test_deploy_claude_provider_assets_ignores_commands(
@@ -302,6 +378,7 @@ def test_deploy_claude_provider_assets_ignores_commands(
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").is_file()
     assert not (tmp_path / "commands" / "team-task.md").exists()
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
 
 
@@ -325,6 +402,7 @@ def test_deploy_overwrites_changed_file_with_warning(
 
     assert path.read_bytes() == b"new"
     assert result.copied_files == 0
+    assert result.appended_files == 0
     assert result.overwritten_files == 1
     assert "上書きしました" in capsys.readouterr().err
 
@@ -348,6 +426,7 @@ def test_deploy_same_file_without_warning(
     result = _deploy_provider_asset_files("codex", [file], tmp_path)
 
     assert result.copied_files == 0
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
     assert capsys.readouterr().err == ""
 
