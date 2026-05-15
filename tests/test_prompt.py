@@ -95,7 +95,10 @@ class TestImplementPrompt:
     def test_issue_prompt_mentions_conventional_commit_title(self) -> None:
         prompt = _build_prompt("issue")
 
-        assert "PR タイトルは Conventional Commits 形式にしてください。" in prompt
+        assert (
+            "PR タイトルは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。"
+            in prompt
+        )
 
     def test_issue_prompt_mentions_commit_message_format(self) -> None:
         prompt = _build_prompt("issue")
@@ -105,7 +108,10 @@ class TestImplementPrompt:
     def test_issue_prompt_mentions_conventional_commit_message(self) -> None:
         prompt = _build_prompt("issue")
 
-        assert "コミットメッセージは Conventional Commits 形式にしてください。" in prompt
+        assert (
+            "コミットメッセージは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。"
+            in prompt
+        )
 
     def test_issue_prompt_mentions_source_issue_reference(self) -> None:
         prompt = _build_prompt("issue")
@@ -123,7 +129,7 @@ class TestImplementPrompt:
     def test_pr_prompt_does_not_mention_created_pr_title_rule(self) -> None:
         prompt = _build_prompt("pr")
 
-        assert "PR タイトルは Conventional Commits 形式にしてください。" not in prompt
+        assert "PR タイトルは Conventional Commits 形式にしてください" not in prompt
         assert "PR 本文には元 Issue への参照を含めてください。" not in prompt
 
     def test_pr_prompt_mentions_commit_message_format(self) -> None:
@@ -135,4 +141,7 @@ class TestImplementPrompt:
     def test_pr_prompt_mentions_conventional_commit_message(self) -> None:
         prompt = _build_prompt("pr")
 
-        assert "コミットメッセージは Conventional Commits 形式にしてください。" in prompt
+        assert (
+            "コミットメッセージは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。"
+            in prompt
+        )
