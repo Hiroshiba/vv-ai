@@ -11,6 +11,7 @@ dependencies = [
 
 [project.scripts]
 vv-ai = "vv_ai.cli:main"
+create-vv-ai-labels = "tools.create_vv_ai_labels:main"
 set-codex-auth-secret = "tools.set_codex_auth_secret:main"
 set-claude-settings-secret = "tools.set_claude_settings_secret:main"
 

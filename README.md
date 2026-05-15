@@ -157,6 +157,12 @@ Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動
 実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
 `next` のラベル起動はありません。
 
+ラベル起動に使う GitHub ラベルはツールで作成できます。既存のラベルは色と説明を更新します。
+
+```sh
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main create-vv-ai-labels --repo org/repo
+```
+
 ### workflow_dispatch
 
 `gh workflow run` で手動起動します。
