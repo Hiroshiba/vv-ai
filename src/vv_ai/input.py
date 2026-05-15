@@ -35,14 +35,15 @@ _LABEL_COMMANDS: dict[str, CommandName] = {
     "vv-ai:implement": "implement",
     "vv-ai:review": "review",
     "vv-ai:issue": "issue",
+    "vv-ai:next": "next",
 }
 _ISSUE_LABEL_COMMANDS: set[CommandName] = {
     "reply", "confirm", "requirements", "arch", "detail",
-    "breakdown", "implement", "issue",
+    "breakdown", "implement", "issue", "next",
 }
 _PULL_REQUEST_LABEL_COMMANDS: set[CommandName] = {
     "reply", "confirm", "requirements", "arch", "detail",
-    "implement", "review", "issue",
+    "implement", "review", "issue", "next",
 }
 
 

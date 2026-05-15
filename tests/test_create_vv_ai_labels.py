@@ -21,6 +21,11 @@ def test_label_names_match_label_invocation() -> None:
     assert {label.name for label in VV_AI_LABELS} == set(_LABEL_COMMANDS)
 
 
+def test_label_names_include_next() -> None:
+    """作成対象ラベル名に next ラベルを含む。"""
+    assert "vv-ai:next" in {label.name for label in VV_AI_LABELS}
+
+
 def test_sync_labels_creates_missing_and_edits_existing(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

@@ -38,6 +38,7 @@ VV_AI_LABELS: tuple[LabelDefinition, ...] = (
     LabelDefinition("vv-ai:implement", "5319e7", "vv-ai で実装する"),
     LabelDefinition("vv-ai:review", "5319e7", "vv-ai でレビューする"),
     LabelDefinition("vv-ai:issue", "5319e7", "vv-ai で Issue 作成する"),
+    LabelDefinition("vv-ai:next", "5319e7", "vv-ai で次の工程を実行する"),
 )
 
 

@@ -172,6 +172,9 @@ class TestParseLabelInvocation:
     def test_label_confirm(self) -> None:
         assert parse_label_invocation("vv-ai:confirm") == "confirm"
 
+    def test_label_next(self) -> None:
+        assert parse_label_invocation("vv-ai:next") == "next"
+
     @pytest.mark.parametrize(
         "label_name",
         ["bug", "vv-ai", "vv-ai:", "vv-ai:unknown"],
@@ -301,6 +304,15 @@ class TestBuildRawInputFromIssueLabeledEvent:
         assert raw.command == "issue"
         assert raw.instruction is None
 
+    def test_issue_labeled_next_without_instruction(self) -> None:
+        raw = build_raw_input_from_issue_labeled_event(
+            self._make_event("vv-ai:next")
+        )
+        assert raw.command == "next"
+        assert raw.instruction is None
+        assert raw.target_type == "issue"
+        assert raw.trigger_label_name == "vv-ai:next"
+
     def test_issue_labeled_rejects_review(self) -> None:
         with pytest.raises(InputError):
             build_raw_input_from_issue_labeled_event(
@@ -330,6 +342,15 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
         assert raw.repository_full_name == "org/repo"
         assert raw.actor == "Hiroshiba"
         assert raw.trigger_label_name == "vv-ai:review"
+
+    def test_pull_request_labeled_next_without_instruction(self) -> None:
+        raw = build_raw_input_from_pull_request_labeled_event(
+            self._make_event("vv-ai:next")
+        )
+        assert raw.command == "next"
+        assert raw.instruction is None
+        assert raw.target_type == "pr"
+        assert raw.trigger_label_name == "vv-ai:next"
 
     def test_pull_request_labeled_rejects_breakdown(self) -> None:
         with pytest.raises(InputError):
