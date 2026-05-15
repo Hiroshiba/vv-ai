@@ -177,6 +177,7 @@ def test_deploy_codex_provider_assets_writes_skill(
 
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").read_bytes() == b"codex skill"
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
 
 
@@ -205,7 +206,90 @@ def test_deploy_codex_provider_assets_writes_agents_md(
 
     assert (tmp_path / "AGENTS.md").read_bytes() == b"codex agents"
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
+
+
+def test_deploy_codex_provider_assets_appends_agents_md(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """既存の Codex AGENTS.md へ provider asset を追記する。"""
+    (tmp_path / "AGENTS.md").write_bytes(b"hiho")
+    _patch_commit_id(monkeypatch)
+    tree = GitHubTree(
+        truncated=False,
+        tree=[
+            GitHubTreeEntry(
+                path=".codex/AGENTS.md",
+                type="blob",
+                sha="agents",
+            )
+        ],
+    )
+    _patch_client(monkeypatch, tree, {"agents": b"codex agents"})
+
+    result = deploy_codex_provider_assets(
+        {"VV_GH_READONLY_TOKEN": "token"},
+        tmp_path,
+    )
+
+    err = capsys.readouterr().err
+    assert (tmp_path / "AGENTS.md").read_bytes() == b"hiho\ncodex agents"
+    assert result.copied_files == 0
+    assert result.appended_files == 1
+    assert result.overwritten_files == 0
+    assert "追記しました" in err
+    assert "上書きしました" not in err
+
+
+def test_deploy_root_instruction_appends_after_existing_newline(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """既存末尾に改行があれば追加の改行を挟まず追記する。"""
+    path = tmp_path / "AGENTS.md"
+    path.write_bytes(b"hiho\n")
+    file = ProviderAssetFile(
+        source_path=".codex/AGENTS.md",
+        destination_relative_path=Path("AGENTS.md"),
+        content=b"codex agents",
+    )
+
+    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+
+    result = _deploy_provider_asset_files("codex", [file], tmp_path)
+
+    assert path.read_bytes() == b"hiho\ncodex agents"
+    assert result.copied_files == 0
+    assert result.appended_files == 1
+    assert result.overwritten_files == 0
+    assert "追記しました" in capsys.readouterr().err
+
+
+def test_deploy_root_instruction_appends_same_content(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """root 指示ファイルは同一内容でも追記する。"""
+    path = tmp_path / "AGENTS.md"
+    path.write_bytes(b"same")
+    file = ProviderAssetFile(
+        source_path=".codex/AGENTS.md",
+        destination_relative_path=Path("AGENTS.md"),
+        content=b"same",
+    )
+
+    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+
+    result = _deploy_provider_asset_files("codex", [file], tmp_path)
+
+    assert path.read_bytes() == b"same\nsame"
+    assert result.copied_files == 0
+    assert result.appended_files == 1
+    assert result.overwritten_files == 0
+    assert "追記しました" in capsys.readouterr().err
 
 
 def test_deploy_claude_provider_assets_writes_skill(
@@ -233,6 +317,7 @@ def test_deploy_claude_provider_assets_writes_skill(
 
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").read_bytes() == b"claude skill"
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
 
 
@@ -261,7 +346,42 @@ def test_deploy_claude_provider_assets_writes_claude_md(
 
     assert (tmp_path / "CLAUDE.md").read_bytes() == b"claude instructions"
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
+
+
+def test_deploy_claude_provider_assets_appends_claude_md(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """既存の Claude CLAUDE.md へ provider asset を追記する。"""
+    (tmp_path / "CLAUDE.md").write_bytes(b"hiho")
+    _patch_commit_id(monkeypatch)
+    tree = GitHubTree(
+        truncated=False,
+        tree=[
+            GitHubTreeEntry(
+                path=".claude/CLAUDE.md",
+                type="blob",
+                sha="claude",
+            )
+        ],
+    )
+    _patch_client(monkeypatch, tree, {"claude": b"claude instructions"})
+
+    result = deploy_claude_provider_assets(
+        {"VV_GH_READONLY_TOKEN": "token"},
+        tmp_path,
+    )
+
+    err = capsys.readouterr().err
+    assert (tmp_path / "CLAUDE.md").read_bytes() == b"hiho\nclaude instructions"
+    assert result.copied_files == 0
+    assert result.appended_files == 1
+    assert result.overwritten_files == 0
+    assert "追記しました" in err
+    assert "上書きしました" not in err
 
 
 def test_deploy_claude_provider_assets_ignores_commands(
@@ -302,6 +422,7 @@ def test_deploy_claude_provider_assets_ignores_commands(
     assert (tmp_path / "skills" / "detailed-design" / "SKILL.md").is_file()
     assert not (tmp_path / "commands" / "team-task.md").exists()
     assert result.copied_files == 1
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
 
 
@@ -325,6 +446,7 @@ def test_deploy_overwrites_changed_file_with_warning(
 
     assert path.read_bytes() == b"new"
     assert result.copied_files == 0
+    assert result.appended_files == 0
     assert result.overwritten_files == 1
     assert "上書きしました" in capsys.readouterr().err
 
@@ -348,6 +470,7 @@ def test_deploy_same_file_without_warning(
     result = _deploy_provider_asset_files("codex", [file], tmp_path)
 
     assert result.copied_files == 0
+    assert result.appended_files == 0
     assert result.overwritten_files == 0
     assert capsys.readouterr().err == ""
 

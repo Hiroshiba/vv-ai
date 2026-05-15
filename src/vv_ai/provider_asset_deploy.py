@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib import metadata
 from pathlib import Path
+from typing import Literal
 
 from vv_ai.config import ProviderName
 from vv_ai.github import (
@@ -33,6 +34,12 @@ _PROVIDER_ROOT_FILES: dict[ProviderName, tuple[str, ...]] = {
     "codex": ("AGENTS.md",),
     "claude": ("CLAUDE.md",),
 }
+type ProviderAssetWriteAction = Literal[
+    "copied",
+    "appended",
+    "overwritten",
+    "unchanged",
+]
 
 
 class ProviderAssetDeployError(Exception):
@@ -55,6 +62,7 @@ class ProviderAssetDeployResult:
     provider: ProviderName
     destination_root: Path
     copied_files: int
+    appended_files: int
     overwritten_files: int
 
 
@@ -151,19 +159,25 @@ def _deploy_provider_asset_files(
 ) -> ProviderAssetDeployResult:
     """provider asset ファイル群を provider home へ配置する。"""
     copied_files = 0
+    appended_files = 0
     overwritten_files = 0
     for file in files:
-        copied, overwritten = _write_provider_asset_file(
-            provider, file, destination_root
-        )
-        if copied:
+        action = _write_provider_asset_file(provider, file, destination_root)
+        if action == "copied":
             copied_files += 1
-        if overwritten:
+        elif action == "appended":
+            appended_files += 1
+        elif action == "overwritten":
             overwritten_files += 1
+        elif action == "unchanged":
+            pass
+        else:
+            raise AssertionError(f"未対応の provider asset 配置結果です: {action}")
     return ProviderAssetDeployResult(
         provider=provider,
         destination_root=destination_root,
         copied_files=copied_files,
+        appended_files=appended_files,
         overwritten_files=overwritten_files,
     )
 
@@ -172,8 +186,8 @@ def _write_provider_asset_file(
     provider: ProviderName,
     file: ProviderAssetFile,
     destination_root: Path,
-) -> tuple[bool, bool]:
-    """provider asset ファイルを配置し、コピーと上書きの有無を返す。"""
+) -> ProviderAssetWriteAction:
+    """provider asset ファイルを配置して処理結果を返す。"""
     destination = destination_root / file.destination_relative_path
     try:
         if destination.exists() and destination.is_dir():
@@ -185,10 +199,18 @@ def _write_provider_asset_file(
         destination.parent.mkdir(parents=True, exist_ok=True)
         if not destination.exists():
             destination.write_bytes(file.content)
-            return True, False
+            return "copied"
         current = destination.read_bytes()
+        if _is_provider_root_instruction_file(provider, file):
+            appended_content = _append_provider_asset_content(current, file.content)
+            destination.write_bytes(appended_content)
+            print(
+                f"vv-ai provider asset を追記しました: provider={provider}, path={destination}",
+                file=sys.stderr,
+            )
+            return "appended"
         if current == file.content:
-            return False, False
+            return "unchanged"
         destination.write_bytes(file.content)
     except OSError as exc:
         raise ProviderAssetDeployError(f"`{destination}` の配置に失敗しました") from exc
@@ -196,7 +218,24 @@ def _write_provider_asset_file(
         f"vv-ai provider asset を上書きしました: provider={provider}, path={destination}",
         file=sys.stderr,
     )
-    return False, True
+    return "overwritten"
+
+
+def _is_provider_root_instruction_file(
+    provider: ProviderName,
+    file: ProviderAssetFile,
+) -> bool:
+    """provider root の指示ファイルなら true を返す。"""
+    return file.destination_relative_path in {
+        Path(root_file_name) for root_file_name in _PROVIDER_ROOT_FILES[provider]
+    }
+
+
+def _append_provider_asset_content(current: bytes, content: bytes) -> bytes:
+    """既存内容の末尾へ provider asset 内容を追加する。"""
+    if len(current) == 0 or current.endswith(b"\n"):
+        return current + content
+    return current + b"\n" + content
 
 
 def _build_provider_asset_github_client(env: Mapping[str, str]) -> GitHubClient:
