@@ -1,8 +1,8 @@
 # vv-ai
 
-Codex CLI と Claude Code CLI を活用し、GitHub Issue / PR 上のコメントや workflow_dispatch から AI を起動する GitHub Actions 向けの自動化ツールキットです。
+Codex CLI と Claude Code CLI を活用し、GitHub Issue / PR 上のコメント、ラベル、workflow_dispatch から AI を起動する GitHub Actions 向けの自動化ツールキットです。
 
-Issue / PR へのコメントを主な入口として、計画・実装・レビュー・Issue 作成などのタスクを自動実行します。
+Issue / PR へのコメントやラベルを主な入口として、計画・実装・レビュー・Issue 作成などのタスクを自動実行します。
 
 ## 作業フロー
 
@@ -149,6 +149,32 @@ PR でのみ使えるコマンド:
 `vv-ai.yml` の `allowed_users` に含まれるユーザーのコメントのみ反応します。未許可ユーザーには何も返しません。
 
 対象の Issue または PR のタイトル、description、コメントも AI に渡します。
+
+### ラベル起動
+
+Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動します。
+
+`vv-ai.yml` の `allowed_users` に含まれるユーザーのラベル付与のみ反応します。未許可ユーザーには何も返しません。
+
+ラベル起動では `instruction`、`provider`、`session_mode`、`dry_run`、`repo` を指定できません。対象の Issue または PR のタイトル、description、コメントは AI に渡しますが、通常コメントを `instruction` として抽出する特別な処理は行いません。
+
+command 省略はコメント起動だけの仕様です。ラベル起動で `reply` を使う場合は `vv-ai:reply` を付けます。`vv-ai` や `vv-ai:` は対象外です。
+
+対象ラベル:
+
+| ラベル | command | Issue 上 | PR 上 |
+| --- | --- | --- | --- |
+| `vv-ai:reply` | `reply` | 可 | 可 |
+| `vv-ai:confirm` | `confirm` | 可 | 可 |
+| `vv-ai:requirements` | `requirements` | 可 | 可 |
+| `vv-ai:arch` | `arch` | 可 | 可 |
+| `vv-ai:detail` | `detail` | 可 | 可 |
+| `vv-ai:breakdown` | `breakdown` | 可 | 不可 |
+| `vv-ai:implement` | `implement` | 可 | 可 |
+| `vv-ai:review` | `review` | 不可 | 可 |
+| `vv-ai:issue` | `issue` | 可 | 可 |
+
+実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
 
 ### workflow_dispatch
 
