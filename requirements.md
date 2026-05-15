@@ -82,6 +82,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 - Issue または PR に `vv-ai:<command>` label を付けると起動
 - 許可ユーザーの label 付与のみ反応。未許可は**完全サイレント**（何も返さない）
 - label 名から command を決め、`instruction` はなしとして扱う
+- `next` も label 名から起動できる
 
 ### 3. GitHub workflow_dispatch
 
