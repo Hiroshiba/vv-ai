@@ -15,6 +15,90 @@ from vv_ai.github import (
 )
 
 
+def test_get_issue_parent_number_returns_parent_number() -> None:
+    """get_issue_parent_number は親 Issue 番号を返す。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            {
+                "data": {
+                    "repository": {
+                        "issue": {
+                            "parent": {
+                                "number": 12,
+                            },
+                        },
+                    },
+                },
+            }
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    assert client.get_issue_parent_number("org/repo", 34) == 12
+    assert captured_args[0:3] == ["gh", "api", "graphql"]
+    assert "owner=org" in captured_args
+    assert "repo=repo" in captured_args
+    assert "number=34" in captured_args
+
+
+def test_get_issue_parent_number_returns_none_without_parent() -> None:
+    """get_issue_parent_number は親 Issue がない場合 None を返す。"""
+    client = GitHubClient(
+        lambda args: json.dumps(
+            {
+                "data": {
+                    "repository": {
+                        "issue": {
+                            "parent": None,
+                        },
+                    },
+                },
+            }
+        ),
+        lambda args: b"",
+    )
+
+    assert client.get_issue_parent_number("org/repo", 34) is None
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"data": {"repository": None}}, "repository"),
+        ({"data": {"repository": {"issue": None}}}, "issue"),
+        (
+            {
+                "data": {
+                    "repository": {
+                        "issue": {
+                            "parent": {
+                                "number": "12",
+                            },
+                        },
+                    },
+                },
+            },
+            "number",
+        ),
+    ],
+)
+def test_get_issue_parent_number_rejects_invalid_payload(
+    payload: object,
+    message: str,
+) -> None:
+    """get_issue_parent_number は不正な payload を拒否する。"""
+    client = GitHubClient(
+        lambda args: json.dumps(payload),
+        lambda args: b"",
+    )
+
+    with pytest.raises(GitHubClientError, match=message):
+        client.get_issue_parent_number("org/repo", 34)
+
+
 def test_get_repository_tree_builds_model() -> None:
     """get_repository_tree は git tree response を model に変換する。"""
     client = GitHubClient(

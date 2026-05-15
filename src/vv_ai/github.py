@@ -162,6 +162,42 @@ class GitHubClient:
             raise GitHubClientError("Issue 取得結果の JSON 形式が不正です")
         return _build_issue_from_rest(repository_full_name, raw_issue)
 
+    def get_issue_parent_number(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> int | None:
+        """Issue の親 Issue 番号を返す。"""
+        owner, repo = _require_repository_full_name(repository_full_name).split("/")
+        query = """
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      parent {
+        number
+      }
+    }
+  }
+}
+""".strip()
+        payload = self._run_json(
+            [
+                "api",
+                "graphql",
+                "-f",
+                f"query={query}",
+                "-f",
+                f"owner={owner}",
+                "-f",
+                f"repo={repo}",
+                "-F",
+                f"number={_require_positive_id(number, 'number')}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("Issue 親番号取得結果の JSON 形式が不正です")
+        return _build_issue_parent_number(payload)
+
     def get_pull_request(
         self,
         repository_full_name: str,
@@ -599,6 +635,23 @@ def _require_github_target(target: ResolvedTarget) -> tuple[str, int]:
     if target.number is None:
         raise GitHubClientError("GitHub target に番号がありません")
     return target.repository_full_name, target.number
+
+
+def _build_issue_parent_number(payload: dict[str, object]) -> int | None:
+    """GraphQL Issue parent JSON から親 Issue 番号を返す。"""
+    data = _require_mapping(payload.get("data"), "data")
+    repository = _require_mapping(data.get("repository"), "repository")
+    issue = _require_mapping(repository.get("issue"), "issue")
+    if "parent" not in issue:
+        raise GitHubClientError("issue.parent の取得に失敗しました")
+    parent = issue["parent"]
+    if parent is None:
+        return None
+    parent_payload = _require_mapping(parent, "issue.parent")
+    parent_number = parent_payload.get("number")
+    if type(parent_number) is not int:
+        raise GitHubClientError("issue.parent.number が不正です")
+    return parent_number
 
 
 def _build_artifact_page(raw_page: dict[str, object]) -> list[GitHubArtifact]:
