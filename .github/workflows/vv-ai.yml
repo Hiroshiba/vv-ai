@@ -1,8 +1,12 @@
 name: vv-ai
 
 on:
+  issues:
+    types: [ labeled ]
   issue_comment:
     types: [ created ]
+  pull_request:
+    types: [ labeled ]
   workflow_dispatch:
     inputs:
       command:
@@ -65,6 +69,7 @@ on:
 concurrency:
   group: >-
     ${{ github.workflow }}-${{
+      github.event.pull_request.number ||
       github.event.issue.number ||
       inputs.target_number ||
       inputs.target_url ||
