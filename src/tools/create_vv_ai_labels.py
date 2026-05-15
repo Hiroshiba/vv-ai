@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -30,15 +29,15 @@ class LabelDefinition:
 
 
 VV_AI_LABELS: tuple[LabelDefinition, ...] = (
-    LabelDefinition("vv-ai:reply", "5319e7", "vv-ai に返信を実行させる"),
-    LabelDefinition("vv-ai:confirm", "5319e7", "vv-ai に意図確認を実行させる"),
-    LabelDefinition("vv-ai:requirements", "5319e7", "vv-ai に要件定義を実行させる"),
-    LabelDefinition("vv-ai:arch", "5319e7", "vv-ai に基本設計を実行させる"),
-    LabelDefinition("vv-ai:detail", "5319e7", "vv-ai に詳細設計を実行させる"),
-    LabelDefinition("vv-ai:breakdown", "5319e7", "vv-ai にタスク分割を実行させる"),
-    LabelDefinition("vv-ai:implement", "5319e7", "vv-ai に実装を実行させる"),
-    LabelDefinition("vv-ai:review", "5319e7", "vv-ai にレビューを実行させる"),
-    LabelDefinition("vv-ai:issue", "5319e7", "vv-ai に Issue 作成を実行させる"),
+    LabelDefinition("vv-ai:reply", "5319e7", "vv-ai で返信する"),
+    LabelDefinition("vv-ai:confirm", "5319e7", "vv-ai で意図確認する"),
+    LabelDefinition("vv-ai:requirements", "5319e7", "vv-ai で要件定義する"),
+    LabelDefinition("vv-ai:arch", "5319e7", "vv-ai で基本設計する"),
+    LabelDefinition("vv-ai:detail", "5319e7", "vv-ai で詳細設計する"),
+    LabelDefinition("vv-ai:breakdown", "5319e7", "vv-ai でタスク分割する"),
+    LabelDefinition("vv-ai:implement", "5319e7", "vv-ai で実装する"),
+    LabelDefinition("vv-ai:review", "5319e7", "vv-ai でレビューする"),
+    LabelDefinition("vv-ai:issue", "5319e7", "vv-ai で Issue 作成する"),
 )
 
 
@@ -83,33 +82,29 @@ def _sync_labels(repo: str | None, dry_run: bool) -> None:
 
 def _list_existing_label_names(repo: str | None) -> set[str]:
     """GitHub リポジトリの既存ラベル名を取得する。"""
+    repository_full_name = _resolve_repository_full_name(repo)
     output = _run_gh(
         [
-            "label",
-            "list",
-            "--limit",
-            "1000",
-            "--json",
-            "name",
-            *_build_repo_args(repo),
+            "api",
+            f"repos/{repository_full_name}/labels?per_page=100",
+            "--paginate",
+            "--jq",
+            ".[].name",
         ]
     )
-    try:
-        payload = json.loads(output)
-    except json.JSONDecodeError as e:
-        raise RuntimeError("gh label list の JSON 解析に失敗しました") from e
-    if not isinstance(payload, list):
-        raise RuntimeError("gh label list の結果が配列ではありません")
+    return set(output.splitlines())
 
-    label_names: set[str] = set()
-    for raw_label in payload:
-        if not isinstance(raw_label, dict):
-            raise RuntimeError("gh label list のラベル形式が不正です")
-        raw_name = raw_label.get("name")
-        if not isinstance(raw_name, str):
-            raise RuntimeError("gh label list のラベル名が不正です")
-        label_names.add(raw_name)
-    return label_names
+
+def _resolve_repository_full_name(repo: str | None) -> str:
+    """gh api に渡す GitHub リポジトリ名を解決する。"""
+    if repo is not None:
+        return repo
+    repository_full_name = _run_gh(
+        ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]
+    ).strip()
+    if repository_full_name == "":
+        raise RuntimeError("現在のリポジトリ名を解決できませんでした")
+    return repository_full_name
 
 
 def _create_label(repo: str | None, label: LabelDefinition) -> None:

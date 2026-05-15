@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 from collections.abc import Sequence
 
@@ -11,6 +10,7 @@ import pytest
 from tools.create_vv_ai_labels import (
     VV_AI_LABELS,
     _list_existing_label_names,
+    _resolve_repository_full_name,
     _sync_labels,
 )
 from vv_ai.input import _LABEL_COMMANDS
@@ -34,13 +34,8 @@ def test_sync_labels_creates_missing_and_edits_existing(
         capture_output: bool,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
-        if cmd[1:3] == ["label", "list"]:
-            return subprocess.CompletedProcess(
-                cmd,
-                0,
-                stdout=json.dumps([{"name": "vv-ai:reply"}]),
-                stderr="",
-            )
+        if cmd[1] == "api":
+            return subprocess.CompletedProcess(cmd, 0, stdout="vv-ai:reply\n", stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -50,14 +45,11 @@ def test_sync_labels_creates_missing_and_edits_existing(
     output = capsys.readouterr().out
     assert calls[0] == [
         "gh",
-        "label",
-        "list",
-        "--limit",
-        "1000",
-        "--json",
-        "name",
-        "--repo",
-        "org/repo",
+        "api",
+        "repos/org/repo/labels?per_page=100",
+        "--paginate",
+        "--jq",
+        ".[].name",
     ]
     assert calls[1][0:4] == ["gh", "label", "edit", "vv-ai:reply"]
     assert calls[1][-2:] == ["--repo", "org/repo"]
@@ -82,12 +74,9 @@ def test_sync_labels_dry_run_skips_create_and_edit(
         capture_output: bool,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
-        return subprocess.CompletedProcess(
-            cmd,
-            0,
-            stdout=json.dumps([{"name": "vv-ai:reply"}]),
-            stderr="",
-        )
+        if cmd[1:3] == ["repo", "view"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="org/repo\n", stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout="vv-ai:reply\n", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
@@ -97,50 +86,74 @@ def test_sync_labels_dry_run_skips_create_and_edit(
     assert calls == [
         [
             "gh",
-            "label",
-            "list",
-            "--limit",
-            "1000",
+            "repo",
+            "view",
             "--json",
-            "name",
-        ]
+            "nameWithOwner",
+            "--jq",
+            ".nameWithOwner",
+        ],
+        [
+            "gh",
+            "api",
+            "repos/org/repo/labels?per_page=100",
+            "--paginate",
+            "--jq",
+            ".[].name",
+        ],
     ]
     assert "更新予定: vv-ai:reply" in output
     assert "作成予定: vv-ai:confirm" in output
     assert "--dry-run: GitHub ラベルは変更していません。対象: 現在のリポジトリ" in output
 
 
-def test_list_existing_label_names_rejects_invalid_json(
+def test_list_existing_label_names_uses_paginated_api(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_list_existing_label_names は不正な JSON を拒否する。"""
+    """_list_existing_label_names は paginated API からラベル名を取得する。"""
+    calls: list[Sequence[str]] = []
 
     def fake_run(
         cmd: Sequence[str],
         text: bool,
         capture_output: bool,
     ) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(cmd, 0, stdout="invalid", stderr="")
+        calls.append(cmd)
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout="vv-ai:reply\nvv-ai:confirm\n", stderr=""
+        )
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    with pytest.raises(RuntimeError, match="JSON 解析"):
-        _list_existing_label_names("org/repo")
+    assert _list_existing_label_names("org/repo") == {
+        "vv-ai:reply",
+        "vv-ai:confirm",
+    }
+    assert calls == [
+        [
+            "gh",
+            "api",
+            "repos/org/repo/labels?per_page=100",
+            "--paginate",
+            "--jq",
+            ".[].name",
+        ]
+    ]
 
 
-def test_list_existing_label_names_rejects_invalid_payload(
+def test_resolve_repository_full_name_rejects_empty_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_list_existing_label_names は不正なラベル一覧を拒否する。"""
+    """_resolve_repository_full_name は空のリポジトリ名を拒否する。"""
 
     def fake_run(
         cmd: Sequence[str],
         text: bool,
         capture_output: bool,
     ) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps([{}]), stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    with pytest.raises(RuntimeError, match="ラベル名"):
-        _list_existing_label_names("org/repo")
+    with pytest.raises(RuntimeError, match="リポジトリ名"):
+        _resolve_repository_full_name(None)
