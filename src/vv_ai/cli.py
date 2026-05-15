@@ -40,7 +40,7 @@ from vv_ai.preflight import (
     run_preflight,
 )
 from vv_ai.provider import ProviderResolutionError
-from vv_ai.command_handler import run_command
+from vv_ai.command_handler import CommandCleanupError, run_command
 from vv_ai.session import SessionKey
 from vv_ai.session_artifact import SessionArtifactError, fork_session_artifact
 from vv_ai.report_artifact import ReportSections
@@ -304,6 +304,16 @@ def _run_ready_execution(
             ready_execution,
             env,
             preflight_duration_seconds,
+        )
+    except CommandCleanupError as exc:
+        runtime_error = exc
+        created_pr = exc.created_pr
+        exit_code = 1
+        execution_result = _build_failure_result(
+            ready_execution,
+            exc,
+            preflight_duration_seconds,
+            execution_duration_seconds=time.perf_counter() - execution_started_at,
         )
     except KeyboardInterrupt as exc:
         runtime_error = exc

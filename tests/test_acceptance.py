@@ -7,7 +7,11 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from vv_ai.command_handler import run_command
 from vv_ai.cli import main
+from vv_ai.config import VVAIConfig
 from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
 from vv_ai.github import (
     GitHubActor,
@@ -17,8 +21,10 @@ from vv_ai.github import (
     RepoInfo,
 )
 from vv_ai.metrics_artifact import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
+from vv_ai.preflight import ReadyExecution
+from vv_ai.provider import ResolvedProvider, get_provider_spec
 from vv_ai.report_artifact import ReportSections
-from vv_ai.resolve import BackendName
+from vv_ai.resolve import BackendName, ResolvedCommand, ResolvedTarget
 from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
 
 
@@ -124,6 +130,39 @@ def _make_github_comment(comment_id: int, body: str) -> GitHubComment:
         created_at="2026-05-08T00:00:00Z",
         updated_at="2026-05-08T00:00:00Z",
         url=f"https://github.com/org/repo/issues/1#issuecomment-{comment_id}",
+    )
+
+
+def _make_ready_execution_for_label(dry_run: bool) -> ReadyExecution:
+    """ラベル起動済みの ReadyExecution を生成する。"""
+    target = ResolvedTarget(
+        backend="github",
+        kind="issue",
+        canonical_id="github:org/repo#1",
+        repository_full_name="org/repo",
+        number=1,
+        url="https://github.com/org/repo/issues/1",
+    )
+    command = ResolvedCommand(
+        event_name="issues",
+        command="confirm",
+        target_type="issue",
+        target_number=1,
+        has_target=True,
+        dry_run=dry_run,
+        repository_full_name="org/repo",
+        actor="Hiroshiba",
+        trigger_label_name="vv-ai:confirm",
+        target=target,
+    )
+    return ReadyExecution(
+        command=command,
+        config=VVAIConfig(allowed_users=["Hiroshiba"]),
+        resolved_provider=ResolvedProvider(
+            spec=get_provider_spec("codex"),
+            source="explicit",
+        ),
+        workflow_id="test-workflow",
     )
 
 
@@ -388,3 +427,267 @@ class TestIssueCommentEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+
+
+class TestLabelEvent:
+    """ラベル起動イベント経由の実行シナリオ。"""
+
+    def _write_issue_labeled_event(self, tmp_path: Path, label_name: str) -> Path:
+        """issues labeled event payload を JSON ファイルとして書き出す。"""
+        payload = {
+            "action": "labeled",
+            "issue": {"number": 1},
+            "label": {"name": label_name},
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        }
+        event_path = tmp_path / "event.json"
+        event_path.write_text(json.dumps(payload), encoding="utf-8")
+        return event_path
+
+    def _write_pull_request_labeled_event(
+        self,
+        tmp_path: Path,
+        label_name: str,
+    ) -> Path:
+        """pull_request labeled event payload を JSON ファイルとして書き出す。"""
+        payload = {
+            "action": "labeled",
+            "pull_request": {"number": 1},
+            "label": {"name": label_name},
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        }
+        event_path = tmp_path / "event.json"
+        event_path.write_text(json.dumps(payload), encoding="utf-8")
+        return event_path
+
+    def test_issue_label_removes_trigger_label(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "確認しました")
+        mock_gh = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            _enter_common_patches(stack, tmp_path, session, result, mock_gh)
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:confirm",
+        )
+
+    def test_pull_request_label_removes_trigger_label(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_pull_request_labeled_event(tmp_path, "vv-ai:review")
+        argv = ["--event", "pull_request", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "レビューしました")
+        mock_gh = MagicMock()
+        mock_gh.get_pull_request.return_value = _make_github_pr(
+            "org/repo",
+            1,
+            "feature-branch",
+        )
+
+        with contextlib.ExitStack() as stack:
+            _enter_common_patches(stack, tmp_path, session, result, mock_gh)
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:review",
+        )
+
+    def test_provider_failure_still_removes_trigger_label(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "未使用")
+        mock_gh = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            execute_provider.side_effect = RuntimeError("provider 失敗")
+            exit_code = main(argv)
+
+        assert exit_code == 1
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:confirm",
+        )
+
+    def test_label_removal_failure_exits_one(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "確認しました")
+        mock_gh = MagicMock()
+        mock_gh.remove_issue_label.side_effect = RuntimeError("label 削除失敗")
+
+        with contextlib.ExitStack() as stack:
+            _enter_common_patches(stack, tmp_path, session, result, mock_gh)
+            exit_code = main(argv)
+
+        assert exit_code == 1
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:confirm",
+        )
+
+    def test_label_removal_failure_keeps_created_pr_session_fork(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:implement")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session(
+            "github",
+            "org/repo#1",
+            "codex",
+        ).model_copy(update={"requested_mode": "inherit"})
+        result = _make_execution_result(
+            "success",
+            (
+                "TITLE: AI PR\n"
+                "COMMIT_MESSAGE: feat: ai commit\n"
+                "BODY:\n"
+                "AI が考えた本文"
+            ),
+        )
+        mock_gh = MagicMock()
+        mock_gh.get_default_branch.return_value = "main"
+        mock_gh.create_pull_request.return_value = _make_github_pr(
+            "org/repo",
+            12,
+            "vv-ai/issue-1",
+        )
+        mock_gh.remove_issue_label.side_effect = RuntimeError("label 削除失敗")
+
+        with contextlib.ExitStack() as stack:
+            _enter_common_patches(stack, tmp_path, session, result, mock_gh)
+            stack.enter_context(
+                patch("vv_ai.command_handler.create_and_checkout_branch")
+            )
+            stack.enter_context(
+                patch("vv_ai.command_handler.commit_all_changes", return_value=True)
+            )
+            stack.enter_context(
+                patch("vv_ai.command_handler.has_commits_ahead", return_value=True)
+            )
+            stack.enter_context(patch("vv_ai.command_handler.push_branch"))
+            fork_session = stack.enter_context(patch("vv_ai.cli._fork_session_for_pr"))
+            exit_code = main(argv)
+
+        assert exit_code == 1
+        fork_session.assert_called_once()
+        assert fork_session.call_args.args[3] == 12
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:implement",
+        )
+
+    def test_provider_failure_is_primary_when_label_removal_also_fails(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "未使用")
+        mock_gh = MagicMock()
+        mock_gh.remove_issue_label.side_effect = RuntimeError("label 削除失敗")
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            execute_provider.side_effect = RuntimeError("provider 失敗")
+            exit_code = main(argv)
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "実行エラー: RuntimeError: provider 失敗" in captured.err
+        assert "ラベル削除に失敗しました: RuntimeError: label 削除失敗" in captured.err
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:confirm",
+        )
+
+    def test_provider_failure_result_is_primary_when_label_removal_also_fails(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("failure", "provider が失敗しました")
+        mock_gh = MagicMock()
+        mock_gh.remove_issue_label.side_effect = RuntimeError("label 削除失敗")
+
+        with contextlib.ExitStack() as stack:
+            _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            exit_code = main(argv)
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "実行エラー" not in captured.err
+        assert "ラベル削除に失敗しました: RuntimeError: label 削除失敗" in captured.err
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:confirm",
+        )
+
+    def test_dry_run_does_not_remove_trigger_label(self, tmp_path: Path) -> None:
+        ready_execution = _make_ready_execution_for_label(dry_run=True)
+        result = _make_execution_result("success", "確認しました")
+        mock_gh = MagicMock()
+        mock_gh.get_repo_info.return_value = RepoInfo(
+            is_fork=False,
+            parent_full_name=None,
+            parent_default_branch=None,
+        )
+        mock_gh.get_issue.return_value = _make_github_issue("org/repo", 1)
+        mock_gh.list_issue_comments.return_value = []
+
+        with (
+            patch("vv_ai.command_handler.build_github_client", return_value=mock_gh),
+            patch("vv_ai.command_handler.execute_provider", return_value=result),
+        ):
+            run_command(tmp_path, ready_execution, {}, 0.0)
+
+        mock_gh.remove_issue_label.assert_not_called()
