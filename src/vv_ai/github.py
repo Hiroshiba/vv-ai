@@ -437,21 +437,19 @@ query($owner: String!, $repo: String!, $number: Int!) {
             artifacts.extend(_build_artifact_page(page))
         return artifacts
 
-    def find_latest_repository_artifact_by_prefix(
+    def list_repository_artifacts_by_prefix(
         self,
         repository_full_name: str,
         prefix: str,
-    ) -> GitHubArtifact | None:
-        """prefix に一致する最新 artifact を返す。"""
+    ) -> list[GitHubArtifact]:
+        """prefix に一致する artifact 一覧を新しい順で返す。"""
         matches = [
             artifact
             for artifact in self.list_repository_artifacts(repository_full_name)
             if artifact.name.startswith(prefix)
         ]
-        if not matches:
-            return None
         matches.sort(key=_artifact_sort_key, reverse=True)
-        return matches[0]
+        return matches
 
     def download_repository_artifact(
         self,

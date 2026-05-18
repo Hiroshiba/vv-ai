@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -16,6 +16,7 @@ from vv_ai.provider import ResolvedProvider
 from vv_ai.resolve import BackendName, ResolvedCommand
 
 if TYPE_CHECKING:
+    from vv_ai.github import GitHubClient
     from vv_ai.session_artifact import RestoredSessionArtifact
 
 SessionLane = Literal["main", "review"]
@@ -109,6 +110,8 @@ def resolve_session(
     from vv_ai.session_artifact import (
         SessionArtifactError,
         build_session_artifact_prefix,
+        cleanup_restored_session_artifact,
+        is_restored_session_artifact_resumable,
         restore_downloaded_session_artifact,
     )
 
@@ -136,6 +139,11 @@ def resolve_session(
             load_latest_session_manifest=load_latest_session_manifest,
             build_session_artifact_prefix=build_session_artifact_prefix,
             restore_downloaded_session_artifact=restore_downloaded_session_artifact,
+            build_github_client_func=build_github_client,
+            is_restored_session_artifact_resumable=(
+                is_restored_session_artifact_resumable
+            ),
+            cleanup_restored_session_artifact=cleanup_restored_session_artifact,
         )
         save_manifest_path = build_session_manifest_path(
             repo_root,
@@ -206,9 +214,24 @@ def _resolve_restore_state(
     requested_mode: SessionMode,
     resolved_provider: ResolvedProvider,
     env: Mapping[str, str],
-    load_latest_session_manifest,
-    build_session_artifact_prefix,
-    restore_downloaded_session_artifact,
+    load_latest_session_manifest: Callable[
+        [Path, SessionKey],
+        SavedSessionManifest | None,
+    ],
+    build_session_artifact_prefix: Callable[[SessionKey], str],
+    restore_downloaded_session_artifact: Callable[
+        [Path, str, str, Path, str],
+        "RestoredSessionArtifact",
+    ],
+    build_github_client_func: Callable[[], "GitHubClient"],
+    is_restored_session_artifact_resumable: Callable[
+        ["RestoredSessionArtifact"],
+        bool,
+    ],
+    cleanup_restored_session_artifact: Callable[
+        ["RestoredSessionArtifact"],
+        None,
+    ],
 ) -> tuple[
     SavedSessionManifest | None,
     RestoredSessionArtifact | None,
@@ -247,12 +270,12 @@ def _resolve_restore_state(
 
     repository_full_name = _resolve_restore_repository_full_name(resolved_command)
     artifact_prefix = build_session_artifact_prefix(key)
-    github_client = build_github_client()
-    latest_artifact = github_client.find_latest_repository_artifact_by_prefix(
+    github_client = build_github_client_func()
+    artifacts = github_client.list_repository_artifacts_by_prefix(
         repository_full_name,
         artifact_prefix,
     )
-    if latest_artifact is None:
+    if len(artifacts) == 0:
         if strict_missing:
             raise SessionResolutionError(
                 f"`{requested_mode}` 用の保存済み session artifact が見つかりません: "
@@ -261,23 +284,33 @@ def _resolve_restore_state(
         return None, None, "new"
 
     age_secret_key = resolve_age_secret_key(env)
-    with tempfile.TemporaryDirectory(prefix="vv-ai-session-restore-") as temp_root:
-        download_path = Path(temp_root) / f"{latest_artifact.name}.zip"
-        github_client.download_repository_artifact(
-            repository_full_name,
-            latest_artifact.id,
-            download_path,
+    for artifact in artifacts:
+        with tempfile.TemporaryDirectory(prefix="vv-ai-session-restore-") as temp_root:
+            download_path = Path(temp_root) / f"{artifact.name}.zip"
+            github_client.download_repository_artifact(
+                repository_full_name,
+                artifact.id,
+                download_path,
+            )
+            restored_artifact = restore_downloaded_session_artifact(
+                repo_root,
+                workflow_id,
+                artifact.name,
+                download_path,
+                age_secret_key,
+            )
+        if is_restored_session_artifact_resumable(restored_artifact):
+            manifest = _build_manifest_from_restored_artifact(restored_artifact)
+            _validate_restore_manifest(requested_mode, manifest)
+            return manifest, restored_artifact, restore_strategy
+        cleanup_restored_session_artifact(restored_artifact)
+
+    if strict_missing:
+        raise SessionResolutionError(
+            f"`{requested_mode}` 用の保存済み session artifact が見つかりません: "
+            f"{key.canonical_key}"
         )
-        restored_artifact = restore_downloaded_session_artifact(
-            repo_root,
-            workflow_id,
-            latest_artifact.name,
-            download_path,
-            age_secret_key,
-        )
-    manifest = _build_manifest_from_restored_artifact(restored_artifact)
-    _validate_restore_manifest(requested_mode, manifest)
-    return manifest, restored_artifact, restore_strategy
+    return None, None, "new"
 
 
 def _validate_restore_manifest(

@@ -368,6 +368,23 @@ def restore_downloaded_session_artifact(
     )
 
 
+def is_restored_session_artifact_resumable(
+    restored_artifact: RestoredSessionArtifact,
+) -> bool:
+    """復元済み session artifact が継続可能かを返す。"""
+    return (
+        restored_artifact.meta.provider_session_id is not None
+        and restored_artifact.provider_session_path is not None
+    )
+
+
+def cleanup_restored_session_artifact(
+    restored_artifact: RestoredSessionArtifact,
+) -> None:
+    """採用しない復元済み session artifact を削除する。"""
+    _cleanup_directory(Path(restored_artifact.restored_dir).parent)
+
+
 def _build_session_artifact_meta(
     *,
     workflow_id: str,
