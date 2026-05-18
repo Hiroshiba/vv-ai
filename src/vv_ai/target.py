@@ -18,6 +18,8 @@ def resolve_target(repo_root: Path, command: ResolvedCommand) -> ResolvedCommand
     target = _build_target(repo_root, command)
     if target is None:
         return command
+    if command.command == "sync" and target.kind == "issue":
+        raise TargetResolutionError("`sync` コマンドは PR 専用です")
     return command.model_copy(update={"target": target})
 
 

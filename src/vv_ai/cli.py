@@ -88,6 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
             "issue",
             "reply",
             "next",
+            "sync",
         ],
         help="実行コマンドを指定します。",
     )

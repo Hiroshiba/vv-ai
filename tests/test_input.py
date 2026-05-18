@@ -90,6 +90,11 @@ class TestParseCommentInvocation:
         assert result.command == "next"
         assert result.instruction is None
 
+    def test_command_sync_without_instruction(self) -> None:
+        result = parse_comment_invocation("@vv-ai sync")
+        assert result.command == "sync"
+        assert result.instruction is None
+
     def test_command_next_with_options(self) -> None:
         result = parse_comment_invocation(
             "@vv-ai next --provider codex --session_mode new --dry-run"
@@ -175,6 +180,9 @@ class TestParseLabelInvocation:
     def test_label_next(self) -> None:
         assert parse_label_invocation("vv-ai:next") == "next"
 
+    def test_label_sync(self) -> None:
+        assert parse_label_invocation("vv-ai:sync") == "sync"
+
     @pytest.mark.parametrize(
         "label_name",
         ["bug", "vv-ai", "vv-ai:", "vv-ai:unknown"],
@@ -213,6 +221,14 @@ class TestBuildRawInputFromCli:
         )
         raw = build_raw_input_from_cli(cli)
         assert raw.command == "next"
+
+    def test_sync_command(self) -> None:
+        cli = CLIInput(
+            command="sync",
+            target_url="https://github.com/org/repo/pull/1",
+        )
+        raw = build_raw_input_from_cli(cli)
+        assert raw.command == "sync"
 
     def test_event_file_rejects_direct_args(self) -> None:
         cli = CLIInput(
@@ -319,6 +335,12 @@ class TestBuildRawInputFromIssueLabeledEvent:
                 self._make_event("vv-ai:review")
             )
 
+    def test_issue_labeled_rejects_sync(self) -> None:
+        with pytest.raises(InputError):
+            build_raw_input_from_issue_labeled_event(
+                self._make_event("vv-ai:sync")
+            )
+
 
 class TestBuildRawInputFromPullRequestLabeledEvent:
     def _make_event(self, label_name: str) -> PullRequestLabeledEvent:
@@ -351,6 +373,15 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
         assert raw.instruction is None
         assert raw.target_type == "pr"
         assert raw.trigger_label_name == "vv-ai:next"
+
+    def test_pull_request_labeled_sync_without_instruction(self) -> None:
+        raw = build_raw_input_from_pull_request_labeled_event(
+            self._make_event("vv-ai:sync")
+        )
+        assert raw.command == "sync"
+        assert raw.instruction is None
+        assert raw.target_type == "pr"
+        assert raw.trigger_label_name == "vv-ai:sync"
 
     def test_pull_request_labeled_rejects_breakdown(self) -> None:
         with pytest.raises(InputError):
@@ -452,6 +483,21 @@ class TestBuildRawInputFromWorkflowDispatchEvent:
         assert raw.provider == "codex"
         assert raw.session_mode == "new"
         assert raw.dry_run is True
+
+    def test_sync_command(self) -> None:
+        event = WorkflowDispatchEvent.model_validate({
+            "inputs": {
+                "command": "sync",
+                "target_type": "pr",
+                "target_number": "10",
+            },
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        })
+        raw = build_raw_input_from_workflow_dispatch_event(event)
+        assert raw.command == "sync"
+        assert raw.target_type == "pr"
+        assert raw.target_number == 10
 
 
 class TestResolveRawInput:
@@ -608,6 +654,32 @@ class TestResolveRawInput:
         raw = RawInput(event_name="local", command="breakdown")
         with pytest.raises(ResolutionError, match="target"):
             resolve_raw_input(raw)
+
+    def test_sync_requires_target(self) -> None:
+        raw = RawInput(event_name="local", command="sync")
+        with pytest.raises(ResolutionError, match="target"):
+            resolve_raw_input(raw)
+
+    def test_sync_rejects_issue_target(self) -> None:
+        raw = RawInput(
+            event_name="local",
+            command="sync",
+            target_type="issue",
+            target_number=1,
+        )
+        with pytest.raises(ResolutionError, match="PR 専用"):
+            resolve_raw_input(raw)
+
+    def test_sync_allows_pr_target(self) -> None:
+        raw = RawInput(
+            event_name="local",
+            command="sync",
+            target_type="pr",
+            target_number=1,
+        )
+        resolved = resolve_raw_input(raw)
+        assert resolved.command == "sync"
+        assert resolved.has_target is True
 
     def test_breakdown_ignores_repo_fallback(self) -> None:
         raw = RawInput(
