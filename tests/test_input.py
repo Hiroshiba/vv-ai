@@ -70,6 +70,11 @@ class TestParseCommentInvocation:
         assert result.command == "implement"
         assert result.instruction == "このIssueを実装して"
 
+    def test_command_address(self) -> None:
+        result = parse_comment_invocation("@vv-ai address")
+        assert result.command == "address"
+        assert result.instruction is None
+
     def test_command_review(self) -> None:
         result = parse_comment_invocation("@vv-ai review")
         assert result.command == "review"
@@ -179,6 +184,9 @@ class TestParseLabelInvocation:
 
     def test_label_next(self) -> None:
         assert parse_label_invocation("vv-ai:next") == "next"
+
+    def test_label_address(self) -> None:
+        assert parse_label_invocation("vv-ai:address") == "address"
 
     def test_label_sync(self) -> None:
         assert parse_label_invocation("vv-ai:sync") == "sync"
@@ -336,6 +344,12 @@ class TestBuildRawInputFromIssueLabeledEvent:
                 self._make_event("vv-ai:review")
             )
 
+    def test_issue_labeled_rejects_address(self) -> None:
+        with pytest.raises(InputError):
+            build_raw_input_from_issue_labeled_event(
+                self._make_event("vv-ai:address")
+            )
+
     def test_issue_labeled_rejects_sync(self) -> None:
         with pytest.raises(InputError):
             build_raw_input_from_issue_labeled_event(
@@ -366,6 +380,15 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
         assert raw.actor == "Hiroshiba"
         assert raw.trigger_label_name == "vv-ai:review"
         assert raw.trigger_event_created_at == "2026-05-18T04:00:00Z"
+
+    def test_pull_request_labeled_address(self) -> None:
+        raw = build_raw_input_from_pull_request_labeled_event(
+            self._make_event("vv-ai:address")
+        )
+        assert raw.command == "address"
+        assert raw.instruction is None
+        assert raw.target_type == "pr"
+        assert raw.trigger_label_name == "vv-ai:address"
 
     def test_pull_request_labeled_next_without_instruction(self) -> None:
         raw = build_raw_input_from_pull_request_labeled_event(
@@ -448,6 +471,21 @@ class TestBuildRawInputFromWorkflowDispatchEvent:
         assert raw.target_type == "issue"
         assert raw.target_number == 10
         assert raw.instruction == "実装して"
+
+    def test_address(self) -> None:
+        event = WorkflowDispatchEvent.model_validate({
+            "inputs": {
+                "command": "address",
+                "target_type": "pr",
+                "target_number": "10",
+            },
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        })
+        raw = build_raw_input_from_workflow_dispatch_event(event)
+        assert raw.command == "address"
+        assert raw.target_type == "pr"
+        assert raw.target_number == 10
 
     def test_empty_string_becomes_none(self) -> None:
         event = WorkflowDispatchEvent.model_validate({
@@ -663,6 +701,22 @@ class TestResolveRawInput:
         raw = RawInput(event_name="local", command="sync")
         with pytest.raises(ResolutionError, match="target"):
             resolve_raw_input(raw)
+
+    def test_address_requires_target(self) -> None:
+        raw = RawInput(event_name="local", command="address")
+        with pytest.raises(ResolutionError, match="target"):
+            resolve_raw_input(raw)
+
+    def test_address_allows_pr_target(self) -> None:
+        raw = RawInput(
+            event_name="local",
+            command="address",
+            target_type="pr",
+            target_number=1,
+        )
+        resolved = resolve_raw_input(raw)
+        assert resolved.command == "address"
+        assert resolved.has_target is True
 
     def test_sync_rejects_issue_target(self) -> None:
         raw = RawInput(

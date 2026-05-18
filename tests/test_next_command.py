@@ -262,6 +262,30 @@ def test_prの履歴なしnextはreviewに解決される() -> None:
     assert result.command == "review"
 
 
+def test_prのreview後のnextはaddressに解決される() -> None:
+    result = _resolve_github(
+        _make_target("pr", "github"),
+        _make_comments(["review"]),
+        [],
+        None,
+        None,
+    )
+
+    assert result.command == "address"
+
+
+def test_prのaddress後のnextはreviewに解決される() -> None:
+    result = _resolve_github(
+        _make_target("pr", "github"),
+        _make_comments(["address"]),
+        [],
+        None,
+        None,
+    )
+
+    assert result.command == "review"
+
+
 def test_prのreviewとimplementを履歴から再生する() -> None:
     result = _resolve_github(
         _make_target("pr", "github"),
@@ -502,7 +526,7 @@ def test_過去のnextラベルはその時点の履歴状態から実コマン�
     assert result.command == "detail"
 
 
-def test_prのreviewラベル後のnextラベルはimplementに解決される() -> None:
+def test_prのreviewラベル後のnextラベルはaddressに解決される() -> None:
     result = _resolve_github_label(
         _make_target("pr", "github"),
         [],
@@ -510,7 +534,18 @@ def test_prのreviewラベル後のnextラベルはimplementに解決される()
         None,
     )
 
-    assert result.command == "implement"
+    assert result.command == "address"
+
+
+def test_prのaddressラベル後のnextラベルはreviewに解決される() -> None:
+    result = _resolve_github_label(
+        _make_target("pr", "github"),
+        [],
+        _make_label_events(["address", "next"]),
+        None,
+    )
+
+    assert result.command == "review"
 
 
 def test_prのimplementラベル後のnextラベルはreviewに解決される() -> None:

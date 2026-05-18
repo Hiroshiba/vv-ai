@@ -99,6 +99,18 @@ def test_pull_request_labeled_review_should_run(tmp_path: Path) -> None:
     assert result.event == "pull_request"
 
 
+def test_pull_request_labeled_address_should_run(tmp_path: Path) -> None:
+    payload = _make_pull_request_labeled_payload("vv-ai:address", "Hiroshiba")
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+    assert result.event == "pull_request"
+
+
 def test_pull_request_labeled_next_should_run(tmp_path: Path) -> None:
     payload = _make_pull_request_labeled_payload("vv-ai:next", "Hiroshiba")
 
@@ -139,6 +151,14 @@ def test_issue_labeled_invalid_label_should_not_run(
 
 def test_issue_labeled_review_should_not_run(tmp_path: Path) -> None:
     payload = _make_issue_labeled_payload("vv-ai:review", "Hiroshiba")
+
+    result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
+
+    assert result.should_run is False
+
+
+def test_issue_labeled_address_should_not_run(tmp_path: Path) -> None:
+    payload = _make_issue_labeled_payload("vv-ai:address", "Hiroshiba")
 
     result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
 
