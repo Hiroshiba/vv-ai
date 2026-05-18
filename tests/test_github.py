@@ -295,6 +295,114 @@ def test_remove_issue_label_uses_delete_method_with_encoded_label() -> None:
     ]
 
 
+def test_get_pull_request_sync_state_builds_model() -> None:
+    """get_pull_request_sync_state は PR 状態を model に変換する。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            {
+                "mergeable": "MERGEABLE",
+                "mergeStateStatus": "UNSTABLE",
+                "statusCheckRollup": [
+                    {"state": "SUCCESS"},
+                    {"state": "FAILURE"},
+                    {"state": "PENDING"},
+                    {"status": "COMPLETED", "conclusion": "SUCCESS"},
+                    {"status": "IN_PROGRESS", "conclusion": None},
+                    {"status": "COMPLETED", "conclusion": "TIMED_OUT"},
+                    {"status": "COMPLETED", "conclusion": "UNKNOWN_VALUE"},
+                ],
+            }
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    state = client.get_pull_request_sync_state("org/repo", 34)
+
+    assert captured_args == [
+        "gh",
+        "pr",
+        "view",
+        "34",
+        "--repo",
+        "org/repo",
+        "--json",
+        "mergeable,mergeStateStatus,statusCheckRollup",
+    ]
+    assert state.mergeable == "MERGEABLE"
+    assert state.merge_state_status == "UNSTABLE"
+    assert state.status_check_summary.success_count == 2
+    assert state.status_check_summary.failure_count == 2
+    assert state.status_check_summary.pending_count == 2
+    assert state.status_check_summary.unknown_count == 1
+
+
+def test_get_pull_request_sync_state_allows_empty_status_checks() -> None:
+    """get_pull_request_sync_state は status checks が空でも成功する。"""
+    client = GitHubClient(
+        lambda args: json.dumps(
+            {
+                "mergeable": "UNKNOWN",
+                "mergeStateStatus": "UNKNOWN",
+                "statusCheckRollup": [],
+            }
+        ),
+        lambda args: b"",
+    )
+
+    state = client.get_pull_request_sync_state("org/repo", 34)
+
+    assert state.mergeable == "UNKNOWN"
+    assert state.merge_state_status == "UNKNOWN"
+    assert state.status_check_summary.success_count == 0
+    assert state.status_check_summary.failure_count == 0
+    assert state.status_check_summary.pending_count == 0
+    assert state.status_check_summary.unknown_count == 0
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ([], "JSON 形式"),
+        (
+            {
+                "mergeable": None,
+                "mergeStateStatus": "CLEAN",
+                "statusCheckRollup": [],
+            },
+            "mergeable",
+        ),
+        (
+            {
+                "mergeable": "MERGEABLE",
+                "mergeStateStatus": "CLEAN",
+                "statusCheckRollup": {},
+            },
+            "statusCheckRollup",
+        ),
+        (
+            {
+                "mergeable": "MERGEABLE",
+                "mergeStateStatus": "CLEAN",
+                "statusCheckRollup": ["bad"],
+            },
+            "statusCheckRollup",
+        ),
+    ],
+)
+def test_get_pull_request_sync_state_rejects_invalid_payload(
+    payload: object,
+    message: str,
+) -> None:
+    """get_pull_request_sync_state は不正な payload を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps(payload), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match=message):
+        client.get_pull_request_sync_state("org/repo", 34)
+
+
 def test_build_github_client_with_token_uses_gh_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

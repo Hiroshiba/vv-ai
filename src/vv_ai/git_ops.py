@@ -6,11 +6,22 @@ import base64
 import os
 import secrets
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 
 class GitOpsError(Exception):
     """Git 操作に失敗したことを表す例外。"""
+
+
+@dataclass(frozen=True)
+class MergeAttempt:
+    """merge の試行結果を表す。"""
+
+    succeeded: bool
+    unmerged_files: list[str]
+    stdout: str
+    stderr: str
 
 
 def run_git_command(repo_root: Path, *args: str) -> str:
@@ -28,6 +39,20 @@ def run_git_command(repo_root: Path, *args: str) -> str:
         detail = f": {stderr}" if stderr else ""
         raise GitOpsError(f"`{' '.join(command)}` の実行に失敗しました{detail}")
     return result.stdout
+
+
+def _run_git_command_result(
+    repo_root: Path,
+    *args: str,
+) -> subprocess.CompletedProcess[str]:
+    """Git コマンドを実行して結果を返す。"""
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
 
 
 def _run_git_command_env(repo_root: Path, env: dict[str, str], *args: str) -> str:
@@ -59,6 +84,118 @@ def _build_push_env(token: str) -> dict[str, str]:
         "GIT_CONFIG_KEY_1": "http.https://github.com/.extraheader",
         "GIT_CONFIG_VALUE_1": f"AUTHORIZATION: basic {auth}",
     }
+
+
+def ensure_worktree_clean(repo_root: Path) -> None:
+    """ワーキングツリーに変更がないことを検証する。"""
+    status = run_git_command(repo_root, "status", "--porcelain").strip()
+    if status != "":
+        raise GitOpsError("ワーキングツリーに未コミットの変更があります")
+
+
+def is_ancestor(repo_root: Path, ancestor_ref: str, descendant_ref: str) -> bool:
+    """ancestor_ref が descendant_ref の祖先か返す。"""
+    result = _run_git_command_result(
+        repo_root,
+        "merge-base",
+        "--is-ancestor",
+        ancestor_ref,
+        descendant_ref,
+    )
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    stderr = result.stderr.strip()
+    detail = f": {stderr}" if stderr else ""
+    raise GitOpsError("祖先関係の判定に失敗しました" + detail)
+
+
+def merge_no_ff_no_commit(repo_root: Path, base_ref: str) -> MergeAttempt:
+    """base_ref を no-ff かつ no-commit で merge する。"""
+    result = _run_git_command_result(
+        repo_root,
+        "merge",
+        "--no-ff",
+        "--no-commit",
+        base_ref,
+    )
+    if result.returncode == 0:
+        return MergeAttempt(
+            succeeded=True,
+            unmerged_files=[],
+            stdout=result.stdout,
+            stderr=result.stderr,
+        )
+    unmerged_files = list_unmerged_files(repo_root)
+    if len(unmerged_files) > 0:
+        return MergeAttempt(
+            succeeded=False,
+            unmerged_files=unmerged_files,
+            stdout=result.stdout,
+            stderr=result.stderr,
+        )
+    stderr = result.stderr.strip()
+    detail = f": {stderr}" if stderr else ""
+    raise GitOpsError(
+        f"`git merge --no-ff --no-commit {base_ref}` の実行に失敗しました{detail}"
+    )
+
+
+def list_unmerged_files(repo_root: Path) -> list[str]:
+    """未解消 conflict のファイル一覧を返す。"""
+    return _split_git_path_nul(
+        run_git_command(repo_root, "diff", "--name-only", "--diff-filter=U", "-z")
+    )
+
+
+def list_changed_files(repo_root: Path) -> list[str]:
+    """ワーキングツリーで変更されたファイル一覧を返す。"""
+    status = run_git_command(
+        repo_root,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+    )
+    return sorted(_parse_porcelain_z_paths(status))
+
+
+def list_staged_files(repo_root: Path) -> list[str]:
+    """staged diff を持つファイル一覧を返す。"""
+    return _split_git_path_nul(
+        run_git_command(repo_root, "diff", "--cached", "--name-only", "-z")
+    )
+
+
+def list_conflict_marker_files(repo_root: Path, paths: list[str]) -> list[str]:
+    """conflict marker を含むファイル一覧を返す。"""
+    marker_files: list[str] = []
+    for path in paths:
+        file_path = repo_root / path
+        if (
+            file_path.exists()
+            and file_path.is_file()
+            and _has_conflict_markers(file_path)
+        ):
+            marker_files.append(path)
+    return marker_files
+
+
+def commit_merge_no_edit(repo_root: Path) -> str:
+    """merge commit を既定メッセージで作成して SHA を返す。"""
+    run_git_command(repo_root, "commit", "--no-edit")
+    return get_head_sha(repo_root)
+
+
+def push_current_branch(repo_root: Path, token: str) -> None:
+    """現在のブランチを upstream へ push する。"""
+    _run_git_command_env(repo_root, _build_push_env(token), "push")
+
+
+def generate_diff_patch(repo_root: Path, base_sha: str) -> str:
+    """base_sha から HEAD までの diff patch を生成する。"""
+    return run_git_command(repo_root, "diff", "--binary", f"{base_sha}..HEAD")
 
 
 def create_and_checkout_branch(
@@ -188,3 +325,41 @@ def generate_implement_branch_name(issue_id: str) -> str:
     """Issue 識別子から実装用ブランチ名を生成する。"""
     suffix = secrets.token_hex(4)
     return f"vv-ai/issue-{issue_id}-{suffix}"
+
+
+def _split_git_path_nul(output: str) -> list[str]:
+    """NUL 区切りの Git path 出力を一覧へ変換する。"""
+    return [path for path in output.split("\0") if path != ""]
+
+
+def _parse_porcelain_z_paths(output: str) -> set[str]:
+    """NUL 区切りの porcelain status から path 一覧を返す。"""
+    records = _split_git_path_nul(output)
+    paths: set[str] = set()
+    index = 0
+    while index < len(records):
+        record = records[index]
+        if len(record) < 4:
+            raise GitOpsError("git status の出力形式が不正です")
+        status = record[:2]
+        paths.add(record[3:])
+        if "R" in status or "C" in status:
+            if index + 1 >= len(records):
+                raise GitOpsError("git status の rename 出力形式が不正です")
+            index += 2
+        else:
+            index += 1
+    return paths
+
+
+def _has_conflict_markers(file_path: Path) -> bool:
+    """ファイルが conflict marker 一式を含むか返す。"""
+    marker_lines = set()
+    for line in file_path.read_bytes().splitlines():
+        if line.startswith(b"<<<<<<< "):
+            marker_lines.add("start")
+        elif line == b"=======":
+            marker_lines.add("middle")
+        elif line.startswith(b">>>>>>> "):
+            marker_lines.add("end")
+    return marker_lines == {"start", "middle", "end"}
