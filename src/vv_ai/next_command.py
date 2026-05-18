@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from vv_ai.config import VVAIConfig
-from vv_ai.github import GitHubClient, GitHubComment, build_github_client
-from vv_ai.input import CommandName, InputError, parse_comment_invocation
+from vv_ai.github import (
+    GitHubClient,
+    GitHubIssueTimelineEvent,
+    build_github_client,
+)
+from vv_ai.input import (
+    CommandName,
+    InputError,
+    parse_comment_invocation,
+    parse_label_invocation,
+)
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
+
+HistorySource = Literal["comment", "label"]
 
 
 class NextResolutionError(Exception):
@@ -24,6 +36,7 @@ class NextHistoryEntry(BaseModel):
     command: CommandName
     created_at: str
     id: int | None
+    source: HistorySource
 
 
 def resolve_next_command(
@@ -102,59 +115,88 @@ def _load_github_history(
 ) -> list[NextHistoryEntry]:
     repository_full_name, number = _require_github_target_fields(target)
     try:
-        comments = github_client.list_issue_comments(repository_full_name, number)
+        timeline_events = github_client.list_issue_timeline_events(
+            repository_full_name,
+            number,
+        )
     except Exception as exc:
-        raise NextResolutionError("コメント履歴の取得に失敗しました") from exc
+        raise NextResolutionError("timeline 履歴の取得に失敗しました") from exc
 
-    current_sort_key = _resolve_current_comment_sort_key(command, comments)
-    sorted_comments = sorted(comments, key=lambda comment: (comment.created_at, comment.id))
+    current_index = _resolve_current_history_index(command, timeline_events)
     history: list[NextHistoryEntry] = []
-    for comment in sorted_comments:
-        if not _is_before_current_comment(comment, current_sort_key):
+    for index, timeline_event in enumerate(timeline_events):
+        if current_index is not None and index >= current_index:
             continue
-        entry = _build_github_history_entry(target, config, comment)
+        entry = _build_github_history_entry(target, config, timeline_event)
         if entry is not None:
             history.append(entry)
     return history
 
 
-def _resolve_current_comment_sort_key(
+def _resolve_current_history_index(
     command: ResolvedCommand,
-    comments: list[GitHubComment],
-) -> tuple[str, int] | None:
-    if command.comment_id is None:
-        return None
-    for comment in comments:
-        if comment.id == command.comment_id:
-            return comment.created_at, comment.id
+    timeline_events: list[GitHubIssueTimelineEvent],
+) -> int | None:
+    if command.comment_id is not None:
+        return _resolve_current_comment_index(command, timeline_events)
+    if command.trigger_label_name is not None:
+        return _resolve_current_label_index(command, timeline_events)
+    return None
+
+
+def _resolve_current_comment_index(
+    command: ResolvedCommand,
+    timeline_events: list[GitHubIssueTimelineEvent],
+) -> int:
+    for index, timeline_event in enumerate(timeline_events):
+        if timeline_event.event == "commented" and timeline_event.id == command.comment_id:
+            return index
     raise NextResolutionError("現在処理中のコメントが履歴内に見つかりません")
 
 
-def _is_before_current_comment(
-    comment: GitHubComment,
-    current_sort_key: tuple[str, int] | None,
-) -> bool:
-    if current_sort_key is None:
-        return True
-    return (comment.created_at, comment.id) < current_sort_key
+def _resolve_current_label_index(
+    command: ResolvedCommand,
+    timeline_events: list[GitHubIssueTimelineEvent],
+) -> int:
+    if command.trigger_label_name is None:
+        raise NextResolutionError("現在処理中のラベル名がありません")
+    if command.actor is None:
+        raise NextResolutionError("現在処理中のラベル actor がありません")
+    if command.trigger_event_created_at is None:
+        raise NextResolutionError("現在処理中のラベル event 時刻がありません")
+
+    current_indexes = [
+        index
+        for index, timeline_event in enumerate(timeline_events)
+        if timeline_event.event == "labeled"
+        and timeline_event.label_name == command.trigger_label_name
+        and timeline_event.actor.login == command.actor
+        and timeline_event.created_at == command.trigger_event_created_at
+    ]
+    if len(current_indexes) == 0:
+        raise NextResolutionError("現在処理中のラベル event が履歴内に見つかりません")
+    if len(current_indexes) > 1:
+        raise NextResolutionError("現在処理中のラベル event が一意に見つかりません")
+    return current_indexes[0]
 
 
 def _build_github_history_entry(
     target: ResolvedTarget,
     config: VVAIConfig,
-    comment: GitHubComment,
+    timeline_event: GitHubIssueTimelineEvent,
 ) -> NextHistoryEntry | None:
-    if comment.author.login not in config.allowed_users:
+    if timeline_event.actor.login not in config.allowed_users:
         return None
-    command = _parse_history_command(comment.body)
+    command = _parse_timeline_history_command(timeline_event)
     if command is None:
         return None
     if _should_ignore_command(target, command):
         return None
     return NextHistoryEntry(
         command=command,
-        created_at=comment.created_at,
-        id=comment.id,
+        created_at=timeline_event.created_at,
+        id=timeline_event.id,
+        source="comment" if timeline_event.event == "commented" else "label",
     )
 
 
@@ -181,6 +223,7 @@ def _load_local_history(repo_root: Path, target: ResolvedTarget) -> list[NextHis
                 command=command,
                 created_at=comment_file.name,
                 id=None,
+                source="comment",
             )
         )
     return history
@@ -189,6 +232,27 @@ def _load_local_history(repo_root: Path, target: ResolvedTarget) -> list[NextHis
 def _parse_history_command(body: str) -> CommandName | None:
     try:
         return parse_comment_invocation(body).command
+    except InputError:
+        return None
+
+
+def _parse_timeline_history_command(
+    timeline_event: GitHubIssueTimelineEvent,
+) -> CommandName | None:
+    if timeline_event.event == "commented":
+        if timeline_event.body is None:
+            raise NextResolutionError("commented event の本文がありません")
+        return _parse_history_command(timeline_event.body)
+    if timeline_event.event == "labeled":
+        if timeline_event.label_name is None:
+            raise NextResolutionError("labeled event のラベル名がありません")
+        return _parse_label_history_command(timeline_event.label_name)
+    raise NextResolutionError("未対応の timeline event です")
+
+
+def _parse_label_history_command(label_name: str) -> CommandName | None:
+    try:
+        return parse_label_invocation(label_name)
     except InputError:
         return None
 

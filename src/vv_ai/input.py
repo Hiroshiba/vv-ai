@@ -101,6 +101,7 @@ class IssueCommentTarget(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     number: int
+    updated_at: str | None = None
     pull_request: dict[str, Any] | None = None
 
 
@@ -154,6 +155,7 @@ class PullRequestTarget(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     number: int
+    updated_at: str | None = None
 
 
 class PullRequestLabeledEvent(BaseModel):
@@ -190,6 +192,7 @@ class RawInput(BaseModel):
     comment_author: str | None = None
     comment_body: str | None = None
     trigger_label_name: str | None = None
+    trigger_event_created_at: str | None = None
 
 
 class CommentInvocation(BaseModel):
@@ -318,6 +321,7 @@ def build_raw_input_from_issue_labeled_event(event: IssueLabeledEvent) -> RawInp
         repository_full_name=event.repository.full_name,
         actor=event.sender.login,
         trigger_label_name=event.label.name,
+        trigger_event_created_at=event.issue.updated_at,
     )
 
 
@@ -336,6 +340,7 @@ def build_raw_input_from_pull_request_labeled_event(
         repository_full_name=event.repository.full_name,
         actor=event.sender.login,
         trigger_label_name=event.label.name,
+        trigger_event_created_at=event.pull_request.updated_at,
     )
 
 

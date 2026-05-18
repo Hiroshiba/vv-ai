@@ -27,7 +27,7 @@ def _make_issue_labeled_payload(label_name: str, actor: str) -> dict[str, object
     """issues labeled payload を生成する。"""
     return {
         "action": "labeled",
-        "issue": {"number": 42},
+        "issue": {"number": 42, "updated_at": "2026-05-18T04:00:00Z"},
         "label": {"name": label_name},
         "repository": {"full_name": "org/repo"},
         "sender": {"login": actor},
@@ -40,7 +40,7 @@ def _make_pull_request_labeled_payload(
     """pull_request labeled payload を生成する。"""
     return {
         "action": "labeled",
-        "pull_request": {"number": 43},
+        "pull_request": {"number": 43, "updated_at": "2026-05-18T04:00:00Z"},
         "label": {"name": label_name},
         "repository": {"full_name": "org/repo"},
         "sender": {"login": actor},
