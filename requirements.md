@@ -34,6 +34,16 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
 | `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
 
+`sync` は PR 専用コマンドとして実行する。PR head branch を checkout し、`origin/<base>` を明示 fetch して取り込み状況を確認する。base branch がすでに HEAD の祖先なら merge commit は作らない。取り込みが必要なら `--no-ff --no-commit` で merge し、conflict がなければ wrapper が merge commit を作成する。
+
+conflict がある場合、AI には conflict file の解消だけを依頼する。AI が commit や stage を行った場合、想定外の staged diff がある場合、conflict marker が残った場合、未解消 conflict が残った場合は失敗する。wrapper は AI が解消した conflict file だけを stage し、merge commit を作成する。
+
+merge commit 後または merge 不要判定後、AI に整合性確認と必要最小限の修正を依頼する。修正がある場合、wrapper が `chore: sync 整合性を修正する` で別 commit を作成する。merge commit も整合性修正 commit もない場合は push しない。
+
+push が必要な same repository PR では head branch を origin へ push する。push が必要な fork PR では現在 branch の upstream へ push し、失敗した場合は patch または手順を PR にコメントして失敗する。push 不要の fork PR は push 権限不足を失敗扱いしない。
+
+push 成功後または push 不要時、GitHub PR 状態を取得して最終コメント本文を AI に作成させ、wrapper が投稿する。GitHub 状態取得と最終コメント投稿の失敗は、push 済みまたは push 不要の同期結果を失敗に変えない。最終コメント生成 AI が失敗した場合は AI のエラー本文を投稿せず失敗する。
+
 ### オプション
 
 | オプション                          | 説明                                                   | デフォルト              |
