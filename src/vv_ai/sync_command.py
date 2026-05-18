@@ -14,6 +14,7 @@ from vv_ai.git_ops import (
     checkout_fork_pr,
     commit_all_changes,
     commit_merge_no_edit,
+    ensure_merge_base_available,
     ensure_worktree_clean,
     fetch_and_checkout_branch,
     fetch_remote_branch,
@@ -128,8 +129,15 @@ def run_sync_command(
             fetch_and_checkout_branch(repo_root, pr_info.head_ref_name)
         fetch_remote_branch(repo_root, "origin", pr_info.base_ref_name)
 
-        head_sha_before = get_head_sha(repo_root)
         base_ref = f"origin/{pr_info.base_ref_name}"
+        ensure_merge_base_available(
+            repo_root,
+            "origin",
+            target.number,
+            pr_info.base_ref_name,
+            base_ref,
+        )
+        head_sha_before = get_head_sha(repo_root)
         if not is_ancestor(repo_root, base_ref, "HEAD"):
             _merge_base_branch(
                 repo_root,
