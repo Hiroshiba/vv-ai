@@ -31,7 +31,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `address`      | PR のレビュー指摘に対応して追コミット                         | —        | ✅     |
 | `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
 | `sync`         | PR ブランチをベースブランチに同期する                       | —        | ✅     |
-| `issue`        | 自然言語指示から Issue を作成    | ✅        | ✅     |
+| `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
 | `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
 
 `sync` は PR 専用コマンドとして実行する。PR head branch を checkout し、`origin/<base>` を明示 fetch して取り込み状況を確認する。base branch がすでに HEAD の祖先なら merge commit は作らない。取り込みが必要なら `--no-ff --no-commit` で merge し、conflict がなければ wrapper が merge commit を作成する。
