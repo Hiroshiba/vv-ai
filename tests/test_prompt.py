@@ -196,3 +196,8 @@ class TestBreakdownPrompt:
         prompt = _build_breakdown_prompt()
 
         assert "親 Issue: #<番号>" not in prompt
+
+    def test_prompt_does_not_mention_natural_expression(self) -> None:
+        prompt = _build_breakdown_prompt()
+
+        assert "表現はタスク本文に自然に合う形で構いません。" not in prompt

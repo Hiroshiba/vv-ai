@@ -42,7 +42,6 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
         "\n"
         "各タスクの本文には、breakdown 対象 Issue が親 Issue であることを"
         "読者が辿れる言及を含めてください。\n"
-        "表現はタスク本文に自然に合う形で構いません。\n"
         "\n"
         "最後に、作成したディレクトリの絶対パスだけを以下の形式で出力してください:\n"
         "BREAKDOWN_DIR: /絶対パス\n"
