@@ -532,6 +532,45 @@ def test_run_sync_command_fork_push_failure_posts_allow_edits_notice(
     assert "Allow edits from maintainers" in body
 
 
+def test_run_sync_command_keeps_restored_allow_edits_notice_state(
+    tmp_path: Path,
+) -> None:
+    """復元済みの allow edits 案内済み状態を今回の結果へ引き継ぐ。"""
+    ready = _make_ready_execution()
+    assert ready.resolved_session is not None
+    ready.resolved_session.allow_edits_notice_posted = True
+    pr = _make_pull_request(True, False)
+    github_client = _make_github_client(pr)
+
+    with (
+        patch("vv_ai.sync_command.checkout_fork_pr"),
+        patch("vv_ai.sync_command.ensure_worktree_clean"),
+        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
+        patch("vv_ai.sync_command.is_ancestor", return_value=True),
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            return_value=_make_execution_result("success", "修正不要", "s1"),
+        ),
+        patch(
+            "vv_ai.sync_command._validate_provider_did_not_take_over_git",
+            return_value=None,
+        ),
+        patch("vv_ai.sync_command.list_changed_files", return_value=[]),
+        patch("vv_ai.sync_command.list_staged_files", return_value=[]),
+        patch("vv_ai.sync_command.list_conflict_marker_files", return_value=[]),
+        patch("vv_ai.sync_command.commit_all_changes", return_value=False),
+        patch("vv_ai.sync_command.try_push_current_branch", return_value=False),
+        patch("vv_ai.sync_command.generate_diff_patch", return_value="diff --git a/a b/a"),
+    ):
+        result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
+
+    body = github_client.create_issue_comment.call_args.args[2]
+    assert result.status == "failure"
+    assert result.allow_edits_notice_posted is True
+    assert "Allow edits from maintainers" not in body
+
+
 def test_ensure_worktree_clean_rejects_dirty_worktree(tmp_path: Path) -> None:
     """ensure_worktree_clean は変更がある作業ツリーを拒否する。"""
     repo = _init_repo(tmp_path)

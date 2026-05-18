@@ -31,9 +31,12 @@ def build_allow_edits_notice(
     pr_info: GitHubPullRequest,
 ) -> str:
     """fork PR で maintainer edits を促す案内文を返す。"""
+    notice_already_posted = _get_allow_edits_notice_posted(ready_execution)
+    if notice_already_posted:
+        execution_result.allow_edits_notice_posted = True
     if pr_info.maintainer_can_modify:
         return ""
-    if _get_allow_edits_notice_posted(ready_execution):
+    if notice_already_posted:
         return ""
     execution_result.allow_edits_notice_posted = True
     return (
