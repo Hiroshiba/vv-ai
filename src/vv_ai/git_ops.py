@@ -246,7 +246,7 @@ def fetch_remote_branch(repo_root: Path, remote: str, branch_name: str) -> None:
         repo_root,
         "fetch",
         remote,
-        f"refs/heads/{branch_name}:refs/remotes/{remote}/{branch_name}",
+        f"+refs/heads/{branch_name}:refs/remotes/{remote}/{branch_name}",
     )
 
 

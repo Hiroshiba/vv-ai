@@ -126,6 +126,28 @@ def test_fetch_remote_branch_fetches_branch_when_tag_has_same_name(
     ).strip()
 
 
+def test_fetch_remote_branch_force_updates_remote_tracking_ref(
+    tmp_path: Path,
+) -> None:
+    """fetch_remote_branch は remote-tracking ref を強制更新する。"""
+    source = _init_repo_at(tmp_path / "source")
+    main_sha = _run_git(source, "rev-parse", "main").strip()
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "feature.txt", "feature\n")
+    _run_git(source, "add", "feature.txt")
+    _run_git(source, "commit", "-m", "feature")
+    feature_sha = _run_git(source, "rev-parse", "feature").strip()
+    _run_git(source, "checkout", "main")
+    clone = _clone_main_only(tmp_path, source, "force-fetch")
+
+    fetch_remote_branch(clone, "origin", "feature")
+    _run_git(source, "branch", "-f", "feature", "main")
+    fetch_remote_branch(clone, "origin", "feature")
+
+    assert _run_git(clone, "rev-parse", "origin/feature").strip() == main_sha
+    assert _run_git(clone, "rev-parse", "origin/feature").strip() != feature_sha
+
+
 def test_merge_no_ff_no_commit_can_commit_successful_merge(tmp_path: Path) -> None:
     """merge_no_ff_no_commit は成功した merge を commit できる状態にする。"""
     repo = _init_repo(tmp_path)
