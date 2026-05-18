@@ -195,6 +195,16 @@ class TestAddressPrompt:
         assert "1行目: COMMIT_MESSAGE: <コミットメッセージ>" in prompt
         assert "2行目: BODY:" in prompt
 
+    def test_prompt_prioritizes_final_output_format(self) -> None:
+        prompt = _build_prompt("pr", "address")
+
+        assert (
+            "address-review スキルに結果報告の形式指定がある場合でも、"
+            "最終出力では必ず上記の形式を優先してください。"
+            in prompt
+        )
+        assert "スキルの結果報告は BODY に含めてください。" in prompt
+
     def test_prompt_does_not_use_implement_task(self) -> None:
         prompt = _build_prompt("pr", "address")
 
