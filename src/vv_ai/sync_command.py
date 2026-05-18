@@ -567,11 +567,24 @@ def _build_sync_result(
         ),
         state_ref=_resolve_final_state_ref(ready_execution, provider_results),
         provider_session_path=_resolve_final_provider_session_path(provider_results),
-        allow_edits_notice_posted=any(
-            result.allow_edits_notice_posted for result in provider_results
+        allow_edits_notice_posted=_resolve_allow_edits_notice_posted(
+            ready_execution,
+            provider_results,
         ),
         response_text=response_text,
     )
+
+
+def _resolve_allow_edits_notice_posted(
+    ready_execution: ReadyExecution,
+    provider_results: list[ExecutionResult],
+) -> bool:
+    """allow edits 案内済み状態を返す。"""
+    restored_session = ready_execution.resolved_session
+    return (
+        restored_session is not None
+        and restored_session.allow_edits_notice_posted
+    ) or any(result.allow_edits_notice_posted for result in provider_results)
 
 
 def _build_report_sections(

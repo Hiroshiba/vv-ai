@@ -651,6 +651,36 @@ def test_run_sync_command_keeps_restored_allow_edits_notice_state(
     assert "Allow edits from maintainers" not in body
 
 
+def test_run_sync_command_keeps_restored_allow_edits_notice_state_on_ai_failure(
+    tmp_path: Path,
+) -> None:
+    """push fallback 前の失敗でも復元済みの allow edits 案内済み状態を引き継ぐ。"""
+    ready = _make_ready_execution()
+    assert ready.resolved_session is not None
+    ready.resolved_session.allow_edits_notice_posted = True
+    pr = _make_pull_request(True, False)
+    github_client = _make_github_client(pr)
+
+    with (
+        patch("vv_ai.sync_command.checkout_fork_pr"),
+        patch("vv_ai.sync_command.ensure_worktree_clean"),
+        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
+        patch("vv_ai.sync_command.is_ancestor", return_value=True),
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            return_value=_make_execution_result("failure", "失敗", "s1"),
+        ),
+        patch("vv_ai.sync_command.try_push_current_branch") as try_push,
+    ):
+        result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
+
+    assert result.status == "failure"
+    assert result.allow_edits_notice_posted is True
+    try_push.assert_not_called()
+    github_client.create_issue_comment.assert_not_called()
+
+
 def test_ensure_worktree_clean_rejects_dirty_worktree(tmp_path: Path) -> None:
     """ensure_worktree_clean は変更がある作業ツリーを拒否する。"""
     repo = _init_repo(tmp_path)
