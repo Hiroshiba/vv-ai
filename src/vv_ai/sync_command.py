@@ -101,8 +101,13 @@ def run_sync_command(
     if merge_needed:
         merge_attempt = merge_no_ff_no_commit(repo_root, base_ref)
         conflict_detected = len(merge_attempt.unmerged_files) > 0
+        marker_files_before_conflict_ai: list[str] = []
         if conflict_detected:
             staged_files_before_conflict_ai = list_staged_files(repo_root)
+            marker_files_before_conflict_ai = list_conflict_marker_files(
+                repo_root,
+                merge_attempt.unmerged_files,
+            )
             result = _execute_provider_step(
                 repo_root,
                 ready_execution,
@@ -148,8 +153,12 @@ def run_sync_command(
                     _format_unresolved_conflict_message([], marker_files),
                     result.response_text,
                 )
-        run_git_command(repo_root, "add", "-A")
         if conflict_detected:
+            resolved_marker_files = sorted(
+                set(marker_files_before_conflict_ai) - set(marker_files)
+            )
+            if len(resolved_marker_files) > 0:
+                run_git_command(repo_root, "add", "--", *resolved_marker_files)
             unresolved = list_unmerged_files(repo_root)
             if len(unresolved) > 0:
                 return _build_sync_result(
@@ -160,6 +169,8 @@ def run_sync_command(
                     _format_unresolved_conflict_message(unresolved, []),
                     result.response_text,
                 )
+        else:
+            run_git_command(repo_root, "add", "-A")
         merge_commit_sha = commit_merge_no_edit(repo_root)
 
     before_consistency_sha = get_head_sha(repo_root)

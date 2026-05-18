@@ -150,9 +150,12 @@ def test_run_sync_command_resolves_conflict_with_ai_before_merge_commit(
         ),
         patch("vv_ai.sync_command.list_staged_files", return_value=[]),
         patch("vv_ai.sync_command.list_changed_files", return_value=["a.txt"]),
-        patch("vv_ai.sync_command.list_conflict_marker_files", return_value=[]),
+        patch(
+            "vv_ai.sync_command.list_conflict_marker_files",
+            side_effect=[["a.txt"], []],
+        ),
         patch("vv_ai.sync_command.list_unmerged_files", return_value=[]),
-        patch("vv_ai.sync_command.run_git_command"),
+        patch("vv_ai.sync_command.run_git_command") as run_git,
         patch("vv_ai.sync_command.commit_merge_no_edit", return_value="merge-sha") as commit_merge,
         patch("vv_ai.sync_command.execute_provider", side_effect=results) as provider,
         patch(
@@ -168,6 +171,7 @@ def test_run_sync_command_resolves_conflict_with_ai_before_merge_commit(
     assert result.status == "success"
     assert "conflict 解消だけ" in conflict_prompt
     assert "a.txt" in conflict_prompt
+    run_git.assert_called_once_with(tmp_path, "add", "--", "a.txt")
     commit_merge.assert_called_once_with(tmp_path)
 
 
@@ -191,7 +195,7 @@ def test_run_sync_command_stops_when_conflict_remains(tmp_path: Path) -> None:
         patch("vv_ai.sync_command.list_changed_files", return_value=["a.txt"]),
         patch("vv_ai.sync_command.list_conflict_marker_files", return_value=[]),
         patch("vv_ai.sync_command.list_unmerged_files", return_value=["a.txt"]),
-        patch("vv_ai.sync_command.run_git_command"),
+        patch("vv_ai.sync_command.run_git_command") as run_git,
         patch(
             "vv_ai.sync_command.execute_provider",
             return_value=_make_execution_result("success", "途中", "s1"),
@@ -202,6 +206,45 @@ def test_run_sync_command_stops_when_conflict_remains(tmp_path: Path) -> None:
         result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
 
     assert result.status == "failure"
+    run_git.assert_not_called()
+    commit_merge.assert_not_called()
+    push_branch.assert_not_called()
+
+
+def test_run_sync_command_stops_markerless_conflict_without_staging(
+    tmp_path: Path,
+) -> None:
+    """marker がない conflict は wrapper が stage せず未解消として停止する。"""
+    ready = _make_ready_execution()
+    pr = _make_pull_request(is_cross_repository=False)
+    github_client = _make_github_client(pr)
+
+    with (
+        patch("vv_ai.sync_command.fetch_and_checkout_branch"),
+        patch("vv_ai.sync_command.ensure_worktree_clean"),
+        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
+        patch("vv_ai.sync_command.is_ancestor", return_value=False),
+        patch(
+            "vv_ai.sync_command.merge_no_ff_no_commit",
+            return_value=MergeAttempt(False, ["binary.dat"], "", ""),
+        ),
+        patch("vv_ai.sync_command.list_staged_files", return_value=[]),
+        patch("vv_ai.sync_command.list_changed_files", return_value=["binary.dat"]),
+        patch("vv_ai.sync_command.list_conflict_marker_files", return_value=[]),
+        patch("vv_ai.sync_command.list_unmerged_files", return_value=["binary.dat"]),
+        patch("vv_ai.sync_command.run_git_command") as run_git,
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            return_value=_make_execution_result("success", "途中", "s1"),
+        ),
+        patch("vv_ai.sync_command.commit_merge_no_edit") as commit_merge,
+        patch("vv_ai.sync_command.push_branch") as push_branch,
+    ):
+        result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
+
+    assert result.status == "failure"
+    run_git.assert_not_called()
     commit_merge.assert_not_called()
     push_branch.assert_not_called()
 
