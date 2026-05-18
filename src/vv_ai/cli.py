@@ -25,7 +25,7 @@ from vv_ai.execution import (
     SavedExecutionArtifacts,
     save_execution_artifacts,
 )
-from vv_ai.github import GitHubPullRequest
+from vv_ai.backends.github.models import GitHubPullRequest
 from vv_ai.input import CLIInput, InputError, build_raw_input_from_cli
 from vv_ai.metrics_artifact import (
     MetricsBehavior,

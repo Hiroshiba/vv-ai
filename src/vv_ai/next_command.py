@@ -8,11 +8,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from vv_ai.config import VVAIConfig
-from vv_ai.github import (
-    GitHubClient,
-    GitHubIssueTimelineEvent,
-    build_github_client,
-)
+from vv_ai.backends.github.client import GitHubClient, build_github_client
+from vv_ai.backends.github.models import GitHubIssueTimelineEvent
 from vv_ai.input import (
     CommandName,
     InputError,

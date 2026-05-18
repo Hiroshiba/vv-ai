@@ -32,11 +32,12 @@ from vv_ai.git_ops import (
     stage_paths,
     try_push_current_branch,
 )
-from vv_ai.github import GitHubClient, GitHubClientError, GitHubPullRequestSyncState
-from vv_ai.github_comment import (
+from vv_ai.backends.github.client import GitHubClient
+from vv_ai.backends.github.comments import (
     post_fork_push_failure_comment,
     post_issue_comment_safely,
 )
+from vv_ai.backends.github.models import GitHubClientError, GitHubPullRequestSyncState
 from vv_ai.metrics_artifact import (
     MetricsBehavior,
     MetricsUsage,
