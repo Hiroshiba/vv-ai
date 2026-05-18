@@ -15,6 +15,7 @@ from vv_ai.git_ops import (
     MergeAttempt,
     commit_merge_no_edit,
     ensure_worktree_clean,
+    fetch_and_checkout_branch,
     generate_diff_patch,
     is_ancestor,
     list_changed_files,
@@ -724,6 +725,18 @@ def test_list_conflict_marker_files_ignores_resolved_content(tmp_path: Path) -> 
     assert list_conflict_marker_files(repo, ["file.txt"]) == []
 
 
+def test_fetch_and_checkout_branch_creates_local_branch_from_fetch_head(
+    tmp_path: Path,
+) -> None:
+    """fetch_and_checkout_branch は shallow な default checkout から PR branch を作る。"""
+    repo = _init_single_branch_clone_with_feature_remote(tmp_path)
+
+    fetch_and_checkout_branch(repo, "feature")
+
+    assert _run_git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feature"
+    assert (repo / "feature.txt").read_text(encoding="utf-8") == "feature\n"
+
+
 def _make_ready_execution() -> ReadyExecution:
     """テスト用 ReadyExecution を生成する。"""
     target = ResolvedTarget(
@@ -850,6 +863,39 @@ def _init_repo(tmp_path: Path) -> Path:
     return repo
 
 
+def _init_single_branch_clone_with_feature_remote(tmp_path: Path) -> Path:
+    """feature branch を持つ origin から main だけの clone を作る。"""
+    origin = tmp_path / "origin.git"
+    source = tmp_path / "source"
+    clone = tmp_path / "clone"
+    _run_command(tmp_path, "git", "init", "--bare", "--initial-branch=main", str(origin))
+    source.mkdir()
+    _run_git(source, "init", "--initial-branch=main")
+    _run_git(source, "config", "user.email", "test@example.com")
+    _run_git(source, "config", "user.name", "テストユーザー")
+    _write(source, "file.txt", "base\n")
+    _run_git(source, "add", "file.txt")
+    _run_git(source, "commit", "-m", "base")
+    _run_git(source, "remote", "add", "origin", str(origin))
+    _run_git(source, "push", "origin", "main")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "feature.txt", "feature\n")
+    _run_git(source, "add", "feature.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "push", "origin", "feature")
+    _run_command(
+        tmp_path,
+        "git",
+        "clone",
+        "--single-branch",
+        "--branch",
+        "main",
+        str(origin),
+        str(clone),
+    )
+    return clone
+
+
 def _write(repo: Path, relative_path: str, text: str) -> None:
     """repository 内のファイルへ文字列を書く。"""
     path = repo / relative_path
@@ -859,9 +905,14 @@ def _write(repo: Path, relative_path: str, text: str) -> None:
 
 def _run_git(repo: Path, *args: str) -> str:
     """テスト用 Git コマンドを実行して標準出力を返す。"""
+    return _run_command(repo, "git", *args)
+
+
+def _run_command(cwd: Path, *args: str) -> str:
+    """テスト用コマンドを実行して標準出力を返す。"""
     result = subprocess.run(
-        ["git", *args],
-        cwd=repo,
+        [*args],
+        cwd=cwd,
         check=False,
         capture_output=True,
         text=True,

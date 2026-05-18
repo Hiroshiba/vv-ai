@@ -244,8 +244,9 @@ def checkout_ref(repo_root: Path, ref_name: str) -> None:
 
 def fetch_and_checkout_branch(repo_root: Path, branch_name: str) -> None:
     """リモートブランチを fetch してチェックアウトする。"""
-    run_git_command(repo_root, "fetch", "origin", branch_name)
-    run_git_command(repo_root, "checkout", branch_name)
+    remote_ref = f"refs/remotes/origin/{branch_name}"
+    run_git_command(repo_root, "fetch", "origin", f"{branch_name}:{remote_ref}")
+    run_git_command(repo_root, "checkout", "-B", branch_name, f"origin/{branch_name}")
 
 
 def push_branch(repo_root: Path, branch_name: str, token: str | None) -> None:
