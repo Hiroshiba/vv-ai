@@ -475,8 +475,6 @@ def test_list_repository_artifacts_by_prefix_returns_empty() -> None:
     )
 
     assert artifacts == []
-
-
 def test_build_github_client_with_token_uses_gh_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
