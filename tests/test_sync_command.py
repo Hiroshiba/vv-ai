@@ -25,6 +25,7 @@ from vv_ai.git_ops import (
 )
 from vv_ai.github import (
     GitHubActor,
+    GitHubClientError,
     GitHubPullRequest,
     GitHubStatusCheckSummary,
     GitHubPullRequestSyncState,
@@ -41,7 +42,7 @@ from vv_ai.sync_command import run_sync_command
 def test_run_sync_command_merges_and_pushes_without_conflict(tmp_path: Path) -> None:
     """conflict なしの場合は merge commit を作成して push する。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=False)
+    pr = _make_pull_request(False, True)
     github_client = _make_github_client(pr)
     results = [
         _make_execution_result("success", "整合性問題なし", "s1"),
@@ -91,7 +92,7 @@ def test_run_sync_command_merges_and_pushes_without_conflict(tmp_path: Path) -> 
 def test_run_sync_command_skips_merge_when_base_is_ancestor(tmp_path: Path) -> None:
     """base branch が取り込み済みなら merge commit を作らない。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=False)
+    pr = _make_pull_request(False, True)
     github_client = _make_github_client(pr)
     results = [
         _make_execution_result("success", "修正不要", "s1"),
@@ -130,7 +131,7 @@ def test_run_sync_command_resolves_conflict_with_ai_before_merge_commit(
 ) -> None:
     """conflict ありの場合は AI 解消後に wrapper が merge commit を作る。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=False)
+    pr = _make_pull_request(False, True)
     github_client = _make_github_client(pr)
     results = [
         _make_execution_result("success", "conflict 解消", "s1"),
@@ -178,7 +179,7 @@ def test_run_sync_command_resolves_conflict_with_ai_before_merge_commit(
 def test_run_sync_command_stops_when_conflict_remains(tmp_path: Path) -> None:
     """未解消 conflict が残る場合は commit と push を行わない。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=False)
+    pr = _make_pull_request(False, True)
     github_client = _make_github_client(pr)
 
     with (
@@ -216,7 +217,7 @@ def test_run_sync_command_stops_markerless_conflict_without_staging(
 ) -> None:
     """marker がない conflict は wrapper が stage せず未解消として停止する。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=False)
+    pr = _make_pull_request(False, True)
     github_client = _make_github_client(pr)
 
     with (
@@ -254,7 +255,7 @@ def test_run_sync_command_commits_consistency_fix_after_merge(
 ) -> None:
     """AI が整合性修正を残した場合は merge commit 後に別 commit を作る。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=False)
+    pr = _make_pull_request(False, True)
     github_client = _make_github_client(pr)
     results = [
         _make_execution_result("success", "修正した", "s1"),
@@ -293,7 +294,7 @@ def test_run_sync_command_commits_consistency_fix_after_merge(
 def test_run_sync_command_stops_when_ai_commits(tmp_path: Path) -> None:
     """AI が commit した場合は HEAD SHA の変化で失敗する。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=False)
+    pr = _make_pull_request(False, True)
     github_client = _make_github_client(pr)
 
     with (
@@ -320,7 +321,7 @@ def test_run_sync_command_stops_when_ai_commits(tmp_path: Path) -> None:
 def test_run_sync_command_stops_when_ai_stages_diff(tmp_path: Path) -> None:
     """AI が staged diff を残した場合は失敗する。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=False)
+    pr = _make_pull_request(False, True)
     github_client = _make_github_client(pr)
 
     with (
@@ -347,7 +348,7 @@ def test_run_sync_command_stops_when_ai_stages_diff(tmp_path: Path) -> None:
 def test_run_sync_command_final_prompt_includes_github_state(tmp_path: Path) -> None:
     """push 後の GitHub 状態を最終コメント AI prompt に含める。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=False)
+    pr = _make_pull_request(False, True)
     github_client = _make_github_client(pr)
     github_client.get_pull_request_sync_state.return_value = GitHubPullRequestSyncState(
         mergeable="MERGEABLE",
@@ -389,12 +390,80 @@ def test_run_sync_command_final_prompt_includes_github_state(tmp_path: Path) -> 
     assert "CLEAN" in final_prompt
 
 
+def test_run_sync_command_does_not_post_failed_final_comment(
+    tmp_path: Path,
+) -> None:
+    """最終コメント生成 AI が失敗した場合は応答本文を投稿しない。"""
+    ready = _make_ready_execution()
+    pr = _make_pull_request(False, True)
+    github_client = _make_github_client(pr)
+    results = [
+        _make_execution_result("success", "修正不要", "s1"),
+        _make_execution_result("failure", "エラー本文", "s2"),
+    ]
+
+    with (
+        patch("vv_ai.sync_command.fetch_and_checkout_branch"),
+        patch("vv_ai.sync_command.ensure_worktree_clean"),
+        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
+        patch("vv_ai.sync_command.is_ancestor", return_value=True),
+        patch("vv_ai.sync_command.execute_provider", side_effect=results),
+        patch(
+            "vv_ai.sync_command._validate_provider_did_not_take_over_git",
+            return_value=None,
+        ),
+        patch("vv_ai.sync_command.list_changed_files", return_value=[]),
+        patch("vv_ai.sync_command.commit_all_changes", return_value=False),
+        patch("vv_ai.sync_command.push_branch"),
+    ):
+        result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
+
+    assert result.status == "failure"
+    assert result.report_sections.summary == "最終コメント生成 AI が失敗しました。"
+    github_client.create_issue_comment.assert_not_called()
+
+
+def test_run_sync_command_comment_post_failure_does_not_fail_sync(
+    tmp_path: Path,
+) -> None:
+    """sync コメント投稿に失敗しても push 済みの sync は成功扱いにする。"""
+    ready = _make_ready_execution()
+    pr = _make_pull_request(False, True)
+    github_client = _make_github_client(pr)
+    github_client.create_issue_comment.side_effect = GitHubClientError("一時エラー")
+    results = [
+        _make_execution_result("success", "修正不要", "s1"),
+        _make_execution_result("success", "コメント本文", "s2"),
+    ]
+
+    with (
+        patch("vv_ai.sync_command.fetch_and_checkout_branch"),
+        patch("vv_ai.sync_command.ensure_worktree_clean"),
+        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
+        patch("vv_ai.sync_command.is_ancestor", return_value=True),
+        patch("vv_ai.sync_command.execute_provider", side_effect=results),
+        patch(
+            "vv_ai.sync_command._validate_provider_did_not_take_over_git",
+            return_value=None,
+        ),
+        patch("vv_ai.sync_command.list_changed_files", return_value=[]),
+        patch("vv_ai.sync_command.commit_all_changes", return_value=False),
+        patch("vv_ai.sync_command.push_branch"),
+    ):
+        result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
+
+    assert result.status == "success"
+    github_client.create_issue_comment.assert_called_once()
+
+
 def test_run_sync_command_fork_push_failure_posts_patch_and_fails(
     tmp_path: Path,
 ) -> None:
     """fork PR で push できない場合は patch コメントを投稿して failure を返す。"""
     ready = _make_ready_execution()
-    pr = _make_pull_request(is_cross_repository=True)
+    pr = _make_pull_request(True, True)
     github_client = _make_github_client(pr)
 
     with (
@@ -424,6 +493,43 @@ def test_run_sync_command_fork_push_failure_posts_patch_and_fails(
     checkout.assert_called_once_with(tmp_path, "org/repo", 5)
     github_client.create_issue_comment.assert_called_once()
     assert "diff --git" in github_client.create_issue_comment.call_args.args[2]
+
+
+def test_run_sync_command_fork_push_failure_posts_allow_edits_notice(
+    tmp_path: Path,
+) -> None:
+    """fork PR で maintainer edits が無効なら有効化案内を一度だけ載せる。"""
+    ready = _make_ready_execution()
+    pr = _make_pull_request(True, False)
+    github_client = _make_github_client(pr)
+
+    with (
+        patch("vv_ai.sync_command.checkout_fork_pr"),
+        patch("vv_ai.sync_command.ensure_worktree_clean"),
+        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
+        patch("vv_ai.sync_command.is_ancestor", return_value=True),
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            return_value=_make_execution_result("success", "修正不要", "s1"),
+        ),
+        patch(
+            "vv_ai.sync_command._validate_provider_did_not_take_over_git",
+            return_value=None,
+        ),
+        patch("vv_ai.sync_command.list_changed_files", return_value=[]),
+        patch("vv_ai.sync_command.list_staged_files", return_value=[]),
+        patch("vv_ai.sync_command.list_conflict_marker_files", return_value=[]),
+        patch("vv_ai.sync_command.commit_all_changes", return_value=False),
+        patch("vv_ai.sync_command.try_push_current_branch", return_value=False),
+        patch("vv_ai.sync_command.generate_diff_patch", return_value="diff --git a/a b/a"),
+    ):
+        result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
+
+    body = github_client.create_issue_comment.call_args.args[2]
+    assert result.status == "failure"
+    assert result.allow_edits_notice_posted is True
+    assert "Allow edits from maintainers" in body
 
 
 def test_ensure_worktree_clean_rejects_dirty_worktree(tmp_path: Path) -> None:
@@ -545,7 +651,10 @@ def _make_ready_execution() -> ReadyExecution:
     )
 
 
-def _make_pull_request(is_cross_repository: bool) -> GitHubPullRequest:
+def _make_pull_request(
+    is_cross_repository: bool,
+    maintainer_can_modify: bool,
+) -> GitHubPullRequest:
     """テスト用 GitHubPullRequest を生成する。"""
     head_repository_full_name = "fork/repo" if is_cross_repository else "org/repo"
     return GitHubPullRequest(
@@ -560,7 +669,7 @@ def _make_pull_request(is_cross_repository: bool) -> GitHubPullRequest:
         base_ref_name="main",
         head_repository_full_name=head_repository_full_name,
         is_cross_repository=is_cross_repository,
-        maintainer_can_modify=True,
+        maintainer_can_modify=maintainer_can_modify,
     )
 
 

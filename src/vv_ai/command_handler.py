@@ -31,6 +31,7 @@ from vv_ai.github import (
     GitHubReactionContent,
     build_github_client,
 )
+from vv_ai.github_comment import build_allow_edits_notice, post_issue_comment_safely
 from vv_ai.preflight import ReadyExecution
 from vv_ai.prompt import build_provider_prompt
 from vv_ai.provider_execution import execute_provider
@@ -535,16 +536,7 @@ def _post_fork_patch_fallback(
         print("fork PR への push に失敗し、patch も空のため投稿をスキップします。")
         return
 
-    notice_already_posted = _get_allow_edits_notice_posted(ready_execution)
-    notice = ""
-    if not pr_info.maintainer_can_modify and not notice_already_posted:
-        notice = (
-            "\n\n---\n"
-            "**Note**: この PR で \"Allow edits from maintainers\" を有効にすると、"
-            "次回以降 vv-ai が直接修正をプッシュできるようになります。"
-            "PR の右サイドバー下部にあるチェックボックスから設定できます。"
-        )
-        execution_result.allow_edits_notice_posted = True
+    notice = build_allow_edits_notice(ready_execution, execution_result, pr_info)
 
     truncated = patch[:60000]
     response_block = f"{response_body}\n\n---\n\n" if response_body else ""
@@ -556,20 +548,16 @@ def _post_fork_patch_fallback(
         f"{notice}"
     )
 
-    try:
-        github_client.create_issue_comment(repository_full_name, number, body)
-    except GitHubClientError as exc:
-        print(f"patch コメント投稿に失敗しました: {exc}", file=sys.stderr)
+    posted = post_issue_comment_safely(
+        github_client,
+        repository_full_name,
+        number,
+        body,
+        "patch コメント投稿",
+    )
+    if not posted:
         return
     print("fork PR への push に失敗したため、patch をコメントで投稿しました。")
-
-
-def _get_allow_edits_notice_posted(ready_execution: ReadyExecution) -> bool:
-    """復元済み session から allow_edits_notice_posted を取得する。"""
-    session = ready_execution.resolved_session
-    if session is None:
-        return False
-    return session.allow_edits_notice_posted
 
 
 def _post_implement_response_comment(
@@ -584,10 +572,13 @@ def _post_implement_response_comment(
         print(response_body)
         return
 
-    try:
-        github_client.create_issue_comment(repository_full_name, number, response_body)
-    except GitHubClientError as exc:
-        print(f"implement 応答コメント投稿に失敗しました: {exc}", file=sys.stderr)
+    post_issue_comment_safely(
+        github_client,
+        repository_full_name,
+        number,
+        response_body,
+        "implement 応答コメント投稿",
+    )
 
 
 def _parse_implement_issue_output(response_text: str) -> tuple[str, str, str]:
@@ -853,12 +844,13 @@ def _post_response_comment(
     assert target is not None
     assert target.repository_full_name is not None
     assert target.number is not None
-    try:
-        github_client.create_issue_comment(
-            target.repository_full_name, target.number, response_text
-        )
-    except GitHubClientError as exc:
-        print(f"コメント投稿に失敗しました: {exc}", file=sys.stderr)
+    post_issue_comment_safely(
+        github_client,
+        target.repository_full_name,
+        target.number,
+        response_text,
+        "コメント投稿",
+    )
 
 
 def _add_reaction_safe(

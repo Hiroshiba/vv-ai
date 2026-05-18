@@ -29,6 +29,7 @@ from vv_ai.git_ops import (
     try_push_current_branch,
 )
 from vv_ai.github import GitHubClient, GitHubPullRequest, GitHubPullRequestSyncState
+from vv_ai.github_comment import build_allow_edits_notice, post_issue_comment_safely
 from vv_ai.metrics_artifact import (
     ClaudeProviderMetrics,
     CodexProviderMetrics,
@@ -214,6 +215,7 @@ def run_sync_command(
     pushed, patch_comment_posted = _push_or_comment_patch(
         repo_root,
         ready_execution,
+        result,
         github_client,
         env,
         pr,
@@ -270,9 +272,26 @@ def run_sync_command(
             failure_message,
             comment_result.response_text,
         )
+    if comment_result.status != "success":
+        return _build_sync_result(
+            "failure",
+            ready_execution,
+            preflight_duration_seconds,
+            provider_results,
+            "最終コメント生成 AI が失敗しました。",
+            comment_result.response_text,
+        )
     comment_body = _require_response_text(comment_result)
-    if not ready_execution.command.dry_run:
-        github_client.create_issue_comment(pr.repository_full_name, pr.number, comment_body)
+    if ready_execution.command.dry_run:
+        print(comment_body)
+    else:
+        post_issue_comment_safely(
+            github_client,
+            pr.repository_full_name,
+            pr.number,
+            comment_body,
+            "sync コメント投稿",
+        )
 
     return _build_sync_result(
         comment_result.status,
@@ -343,6 +362,7 @@ def _validate_provider_did_not_take_over_git(
 def _push_or_comment_patch(
     repo_root: Path,
     ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
     github_client: GitHubClient,
     env: Mapping[str, str],
     pr: GitHubPullRequest,
@@ -356,28 +376,56 @@ def _push_or_comment_patch(
         return True, False
     if try_push_current_branch(repo_root, env.get("GITHUB_TOKEN")):
         return True, False
-    body = _build_fork_push_failure_body(repo_root, initial_head_sha)
-    github_client.create_issue_comment(pr.repository_full_name, pr.number, body)
-    return False, True
+    body = _build_fork_push_failure_body(
+        repo_root,
+        ready_execution,
+        execution_result,
+        pr,
+        initial_head_sha,
+    )
+    posted = post_issue_comment_safely(
+        github_client,
+        pr.repository_full_name,
+        pr.number,
+        body,
+        "fork push 失敗コメント投稿",
+    )
+    return False, posted
 
 
-def _build_fork_push_failure_body(repo_root: Path, initial_head_sha: str) -> str:
+def _build_fork_push_failure_body(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
+    pr: GitHubPullRequest,
+    initial_head_sha: str,
+) -> str:
     """fork PR へ push できなかった場合のコメント本文を返す。"""
+    notice = build_allow_edits_notice(ready_execution, execution_result, pr)
     try:
         patch = generate_diff_patch(repo_root, initial_head_sha)
     except GitOpsError as exc:
-        return f"fork リポジトリへの push に失敗し、patch 生成にも失敗しました。\n\n{exc}"
+        return (
+            "fork リポジトリへの push に失敗し、patch 生成にも失敗しました。"
+            f"\n\n{exc}"
+            f"{notice}"
+        )
     if patch.strip() == "":
-        return "fork リポジトリへの push に失敗しました。ローカル差分は空です。"
+        return (
+            "fork リポジトリへの push に失敗しました。ローカル差分は空です。"
+            f"{notice}"
+        )
     if len(patch) > _PATCH_COMMENT_LIMIT:
         return (
             "fork リポジトリへの push に失敗しました。\n\n"
             "patch が大きいためコメントには含めません。"
             "メンテナーが push できる環境で sync を再実行してください。"
+            f"{notice}"
         )
     return (
         "fork リポジトリへの push に失敗したため、変更内容を patch として提示します。\n\n"
         f"```diff\n{patch}\n```"
+        f"{notice}"
     )
 
 
