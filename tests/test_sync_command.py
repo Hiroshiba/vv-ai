@@ -329,6 +329,43 @@ def test_run_sync_command_passes_consistency_result_to_final_prompt_when_session
     assert "整合性確認 AI の出力:\n整合性確認で追従漏れを修正しました" in prompts[1]
 
 
+def test_run_sync_command_passes_conflict_result_to_final_prompt_when_session_is_new(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は session 継続なしなら conflict 結果を最終 prompt に渡す。"""
+    source = _make_conflict_source(tmp_path)
+    clone = _clone_all_branches(tmp_path, source, "sync-conflict-final-prompt")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+    prompts: list[str] = []
+
+    def execute_provider_mock(
+        repo_root: Path,
+        ready_execution: ReadyExecution,
+        env: object,
+        preflight_duration_seconds: float,
+        provider_prompt: str,
+    ) -> ExecutionResult:
+        prompts.append(provider_prompt)
+        if len(prompts) == 1:
+            _write(repo_root, "file.txt", "resolved\n")
+            return _make_execution_result("success", "conflict を解消しました")
+        if len(prompts) == 2:
+            return _make_execution_result("success", "整合性確認完了")
+        return _make_execution_result("success", "BODY:\nsync 完了")
+
+    with (
+        patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock),
+        patch("vv_ai.sync_command.push_branch"),
+    ):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "success"
+    assert "conflict occurred: True" in prompts[2]
+    assert "conflict resolved by AI: True" in prompts[2]
+    assert "conflict 解消 AI の出力:\nconflict を解消しました" in prompts[2]
+
+
 def test_run_sync_command_rejects_consistency_marker_before_commit(
     tmp_path: Path,
 ) -> None:

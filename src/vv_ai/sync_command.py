@@ -71,6 +71,8 @@ class SyncExecutionFacts:
     head_ref_name: str
     base_ref_name: str
     is_cross_repository: bool
+    conflict_occurred: bool
+    conflict_resolved_by_ai: bool
     merge_commit_created: bool
     consistency_commit_created: bool
     push_needed: bool
@@ -83,6 +85,9 @@ class SyncRuntimeState:
 
     provider_results: list[ExecutionResult] = field(default_factory=list)
     allow_edits_notice_posted: bool = False
+    conflict_occurred: bool = False
+    conflict_resolved_by_ai: bool = False
+    conflict_result_text: str | None = None
     merge_commit_created: bool = False
     consistency_commit_created: bool = False
     push_needed: bool = False
@@ -177,6 +182,8 @@ def run_sync_command(
             head_ref_name=pr_info.head_ref_name,
             base_ref_name=pr_info.base_ref_name,
             is_cross_repository=pr_info.is_cross_repository,
+            conflict_occurred=runtime.conflict_occurred,
+            conflict_resolved_by_ai=runtime.conflict_resolved_by_ai,
             merge_commit_created=runtime.merge_commit_created,
             consistency_commit_created=runtime.consistency_commit_created,
             push_needed=runtime.push_needed,
@@ -221,7 +228,11 @@ def run_sync_command(
             _build_final_comment_prompt(
                 facts,
                 runtime.github_state_text,
-                _resolve_explicit_consistency_result(
+                _resolve_explicit_runtime_text(
+                    ready_execution,
+                    runtime.conflict_result_text,
+                ),
+                _resolve_explicit_provider_result(
                     ready_execution,
                     consistency_result,
                 ),
@@ -272,6 +283,7 @@ def _merge_base_branch(
 
     conflict_files = attempt.unmerged_files
     conflict_file_set = set(conflict_files)
+    runtime.conflict_occurred = True
     snapshots = _snapshot_conflict_files(repo_root, conflict_files)
     head_sha_before_ai = get_head_sha(repo_root)
     staged_signature_before_ai = get_staged_diff_signature(repo_root)
@@ -323,6 +335,8 @@ def _merge_base_branch(
             "未解消 conflict が残っています: " + ", ".join(remaining_unmerged)
         )
     commit_merge_no_edit(repo_root)
+    runtime.conflict_resolved_by_ai = True
+    runtime.conflict_result_text = _get_provider_response_text(conflict_result)
     runtime.merge_commit_created = True
     runtime.push_needed = True
 
@@ -425,11 +439,17 @@ def _build_consistency_prompt(head_ref_name: str, base_ref_name: str) -> str:
 def _build_final_comment_prompt(
     facts: SyncExecutionFacts,
     github_state_text: str | None,
+    conflict_result_text: str | None,
     consistency_result_text: str | None,
 ) -> str:
     """最終コメント生成 prompt を返す。"""
     state_text = (
         github_state_text if github_state_text is not None else "取得できませんでした"
+    )
+    conflict_block = (
+        ""
+        if conflict_result_text is None
+        else f"\nconflict 解消 AI の出力:\n{conflict_result_text}"
     )
     consistency_block = (
         ""
@@ -445,25 +465,43 @@ def _build_final_comment_prompt(
         f"head branch: {facts.head_ref_name}\n"
         f"base branch: {facts.base_ref_name}\n"
         f"fork PR: {facts.is_cross_repository}\n"
+        f"conflict occurred: {facts.conflict_occurred}\n"
+        f"conflict resolved by AI: {facts.conflict_resolved_by_ai}\n"
         f"merge commit created: {facts.merge_commit_created}\n"
         f"consistency commit created: {facts.consistency_commit_created}\n"
         f"push needed: {facts.push_needed}\n"
         f"push succeeded: {facts.push_succeeded}\n"
         f"GitHub state: {state_text}"
+        f"{conflict_block}"
         f"{consistency_block}"
     )
 
 
-def _resolve_explicit_consistency_result(
+def _resolve_explicit_provider_result(
     ready_execution: ReadyExecution,
-    consistency_result: ExecutionResult,
+    provider_result: ExecutionResult,
 ) -> str | None:
-    """provider session が継続されない場合だけ整合性確認結果を返す。"""
+    """provider session が継続されない場合だけ provider 結果を返す。"""
     if _continues_provider_session(ready_execution):
         return None
-    if consistency_result.response_text is None:
+    return _get_provider_response_text(provider_result)
+
+
+def _resolve_explicit_runtime_text(
+    ready_execution: ReadyExecution,
+    text: str | None,
+) -> str | None:
+    """provider session が継続されない場合だけ runtime text を返す。"""
+    if _continues_provider_session(ready_execution):
+        return None
+    return text
+
+
+def _get_provider_response_text(provider_result: ExecutionResult) -> str:
+    """provider result の応答本文を prompt 用に返す。"""
+    if provider_result.response_text is None:
         return "応答本文なし"
-    return consistency_result.response_text
+    return provider_result.response_text
 
 
 def _continues_provider_session(ready_execution: ReadyExecution) -> bool:
@@ -536,6 +574,8 @@ def _replace_push_succeeded(
         head_ref_name=facts.head_ref_name,
         base_ref_name=facts.base_ref_name,
         is_cross_repository=facts.is_cross_repository,
+        conflict_occurred=facts.conflict_occurred,
+        conflict_resolved_by_ai=facts.conflict_resolved_by_ai,
         merge_commit_created=facts.merge_commit_created,
         consistency_commit_created=facts.consistency_commit_created,
         push_needed=facts.push_needed,
