@@ -168,6 +168,16 @@ def list_staged_files(repo_root: Path) -> list[str]:
     )
 
 
+def get_staged_diff_signature(repo_root: Path) -> str:
+    """staged diff の内容比較用 signature を返す。"""
+    return run_git_command(repo_root, "diff", "--cached", "--raw", "-z")
+
+
+def list_unstaged_files(repo_root: Path) -> list[str]:
+    """unstaged diff を持つファイル一覧を返す。"""
+    return _split_git_path_nul(run_git_command(repo_root, "diff", "--name-only", "-z"))
+
+
 def list_conflict_marker_files(repo_root: Path, paths: list[str]) -> list[str]:
     """conflict marker を含むファイル一覧を返す。"""
     marker_files: list[str] = []

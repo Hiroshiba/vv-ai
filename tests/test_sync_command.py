@@ -21,6 +21,7 @@ from vv_ai.git_ops import (
     list_changed_files,
     list_conflict_marker_files,
     list_staged_files,
+    list_unstaged_files,
     list_unmerged_files,
     merge_no_ff_no_commit,
     stage_paths,
@@ -218,6 +219,14 @@ def test_list_conflict_marker_files_ignores_resolved_content(tmp_path: Path) -> 
     assert list_conflict_marker_files(repo, ["file.txt"]) == []
 
 
+def test_list_unstaged_files_detects_worktree_only_changes(tmp_path: Path) -> None:
+    """list_unstaged_files は未 stage の tracked 変更を返す。"""
+    repo = _init_repo(tmp_path)
+    _write(repo, "file.txt", "変更\n")
+
+    assert list_unstaged_files(repo) == ["file.txt"]
+
+
 def test_run_sync_command_skips_push_when_base_is_ancestor(tmp_path: Path) -> None:
     """run_sync_command は base 取り込み済みなら push しない。"""
     source = _init_repo_at(tmp_path / "source")
@@ -284,6 +293,50 @@ def test_run_sync_command_pushes_after_merge_commit(tmp_path: Path) -> None:
 
     assert result.status == "success"
     push_branch.assert_called_once_with(clone, "feature", "token")
+
+
+def test_run_sync_command_rejects_ai_staging_conflict_file(tmp_path: Path) -> None:
+    """run_sync_command は conflict 解消 AI の stage を拒否する。"""
+    source = _make_conflict_source(tmp_path)
+    clone = _clone_all_branches(tmp_path, source, "sync-ai-stage")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+
+    with (
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            side_effect=_resolve_conflict_and_stage,
+        ),
+        patch("vv_ai.sync_command.push_branch") as push_branch,
+    ):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "failure"
+    assert result.response_text == "conflict 解消 AI が stage しました"
+    push_branch.assert_not_called()
+
+
+def test_run_sync_command_rejects_ai_changes_outside_conflict_files(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は conflict file 以外の AI 変更を拒否する。"""
+    source = _make_conflict_source(tmp_path)
+    clone = _clone_all_branches(tmp_path, source, "sync-ai-outside-change")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+
+    with (
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            side_effect=_resolve_conflict_and_change_other_file,
+        ),
+        patch("vv_ai.sync_command.push_branch") as push_branch,
+    ):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "failure"
+    assert result.response_text == "conflict file 以外が変更されました: other.txt"
+    push_branch.assert_not_called()
 
 
 def test_run_sync_command_rejects_non_pr_target(tmp_path: Path) -> None:
@@ -373,6 +426,46 @@ def _clone_all_branches(tmp_path: Path, source: Path, name: str) -> Path:
     _run_git(clone, "config", "user.email", "test@example.com")
     _run_git(clone, "config", "user.name", "テストユーザー")
     return clone
+
+
+def _make_conflict_source(tmp_path: Path) -> Path:
+    """sync conflict テスト用 repository を作成する。"""
+    source = _init_repo_at(tmp_path / "source")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "file.txt", "feature\n")
+    _run_git(source, "add", "file.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "checkout", "main")
+    _write(source, "file.txt", "main\n")
+    _run_git(source, "add", "file.txt")
+    _run_git(source, "commit", "-m", "main")
+    return source
+
+
+def _resolve_conflict_and_stage(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    env: object,
+    preflight_duration_seconds: float,
+    provider_prompt: str,
+) -> ExecutionResult:
+    """conflict file を解消して stage する provider mock。"""
+    _write(repo_root, "file.txt", "resolved\n")
+    _run_git(repo_root, "add", "file.txt")
+    return _make_execution_result("success", "conflict 解消")
+
+
+def _resolve_conflict_and_change_other_file(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    env: object,
+    preflight_duration_seconds: float,
+    provider_prompt: str,
+) -> ExecutionResult:
+    """conflict file と対象外ファイルを変更する provider mock。"""
+    _write(repo_root, "file.txt", "resolved\n")
+    _write(repo_root, "other.txt", "outside\n")
+    return _make_execution_result("success", "conflict 解消")
 
 
 def _write(repo: Path, relative_path: str, text: str) -> None:

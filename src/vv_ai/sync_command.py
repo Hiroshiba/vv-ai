@@ -18,11 +18,13 @@ from vv_ai.git_ops import (
     fetch_and_checkout_branch,
     fetch_remote_branch,
     generate_diff_patch,
+    get_staged_diff_signature,
     get_head_sha,
     is_ancestor,
     list_changed_files,
     list_conflict_marker_files,
     list_staged_files,
+    list_unstaged_files,
     list_unmerged_files,
     merge_no_ff_no_commit,
     push_branch,
@@ -250,9 +252,11 @@ def _merge_base_branch(
         return
 
     conflict_files = attempt.unmerged_files
+    conflict_file_set = set(conflict_files)
     snapshots = _snapshot_conflict_files(repo_root, conflict_files)
     head_sha_before_ai = get_head_sha(repo_root)
-    staged_before_ai = list_staged_files(repo_root)
+    staged_signature_before_ai = get_staged_diff_signature(repo_root)
+    changed_files_before_ai = set(list_changed_files(repo_root))
     conflict_result = _run_provider_step(
         repo_root,
         ready_execution,
@@ -265,8 +269,21 @@ def _merge_base_branch(
         raise SyncCommandError("conflict 解消 AI が失敗しました")
     if get_head_sha(repo_root) != head_sha_before_ai:
         raise SyncCommandError("conflict 解消 AI が commit しました")
-    if list_staged_files(repo_root) != staged_before_ai:
+    if get_staged_diff_signature(repo_root) != staged_signature_before_ai:
         raise SyncCommandError("conflict 解消 AI が stage しました")
+    unexpected_changed_files = sorted(
+        set(list_changed_files(repo_root)) - changed_files_before_ai - conflict_file_set
+    )
+    unexpected_unstaged_files = sorted(
+        set(list_unstaged_files(repo_root)) - conflict_file_set
+    )
+    unexpected_files = sorted(
+        set(unexpected_changed_files) | set(unexpected_unstaged_files)
+    )
+    if len(unexpected_files) > 0:
+        raise SyncCommandError(
+            "conflict file 以外が変更されました: " + ", ".join(unexpected_files)
+        )
     marker_files = list_conflict_marker_files(repo_root, conflict_files)
     if len(marker_files) > 0:
         raise SyncCommandError(
