@@ -26,6 +26,11 @@ def test_label_names_include_next() -> None:
     assert "vv-ai:next" in {label.name for label in VV_AI_LABELS}
 
 
+def test_label_names_include_address() -> None:
+    """作成対象ラベル名に address ラベルを含む。"""
+    assert "vv-ai:address" in {label.name for label in VV_AI_LABELS}
+
+
 def test_label_names_include_sync() -> None:
     """作成対象ラベル名に sync ラベルを含む。"""
     assert "vv-ai:sync" in {label.name for label in VV_AI_LABELS}

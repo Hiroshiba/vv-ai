@@ -14,7 +14,7 @@ prompt.txt に記載された手順に従う。
 
 ## 修正指示を受けた場合
 
-team-leadから受け取ったファイルパスのレビュー結果を Read で確認し、review-triage スキルを実行する。
+team-leadから受け取ったファイルパスのレビュー結果を Read で確認し、address-review スキルを実行する。
 ただし PR レビューではなくそのファイルのレビュー指摘を対象とする。
 完了後、team-leadに「REVIEW_DONE: 変更あり」または「REVIEW_DONE: 変更なし」とだけ送る。
 

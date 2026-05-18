@@ -30,7 +30,7 @@ implementer からの完了報告を受けたら、以下のループを開始�
    - prompt は以下の文面のみとし、他の情報を一切追加しないこと:
      「review-diff スキルを実行してください」
 2. reviewer からファイルパスを受け取り、reviewer を shutdown する
-3. implementer にレビュー結果ファイルのパスを伝え、「review-triage スキルを実行してください。修正するかどうかはあなたが判断してください」と依頼する
+3. implementer にレビュー結果ファイルのパスを伝え、「address-review スキルを実行してください。修正するかどうかはあなたが判断してください」と依頼する
 4. implementer のプラン承認リクエストが来たら承認する
 5. implementer から「REVIEW_DONE: 変更あり」または「REVIEW_DONE: 変更なし」が届くまで待つ：
    - 変更あり → N を increment して 1 に戻る

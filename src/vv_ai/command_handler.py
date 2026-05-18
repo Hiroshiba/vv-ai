@@ -46,6 +46,7 @@ from vv_ai.target_context import (
 _ISSUE_CONTEXT_COMMANDS = frozenset(
     {"confirm", "reply", "requirements", "arch", "detail", "breakdown"}
 )
+_PR_CHANGE_COMMANDS = frozenset({"implement", "address"})
 
 
 class CommandCleanupError(RuntimeError):
@@ -72,6 +73,9 @@ def run_command(
 
     if command.command == "review" and (target is None or target.kind != "pr"):
         raise RuntimeError("`review` コマンドは PR を対象に指定してください")
+
+    if command.command == "address" and (target is None or target.kind != "pr"):
+        raise RuntimeError("`address` コマンドは PR を対象に指定してください")
 
     if command.command == "breakdown" and (
         target is None or target.kind != "issue" or target.backend != "github"
@@ -141,14 +145,16 @@ def run_command(
                 if worktree_ref is not None:
                     checkout_ref(repo_root, worktree_ref)
             elif (
-                command.command == "implement"
+                command.command in _PR_CHANGE_COMMANDS
                 and target is not None
                 and target.kind == "pr"
             ):
                 assert target.repository_full_name is not None
                 assert target.number is not None
                 if not _is_github_target(target):
-                    raise RuntimeError("ローカル PR への implement は未対応です")
+                    raise RuntimeError(
+                        f"ローカル PR への {command.command} は未対応です"
+                    )
                 assert github_client is not None
                 pr_info = github_client.get_pull_request(
                     target.repository_full_name, target.number
@@ -343,10 +349,10 @@ def _handle_post_execution(
         _handle_breakdown_post_execution(repo_root, ready_execution, execution_result, github_client)
     elif command_name == "issue":
         _handle_issue_post_execution(ready_execution, execution_result, github_client)
-    elif command_name == "implement" and implement_branch_name is not None:
+    elif command_name in _PR_CHANGE_COMMANDS and implement_branch_name is not None:
         target = ready_execution.command.target
         if target is not None and target.kind == "pr":
-            _handle_implement_pr_post_execution(
+            _handle_pr_change_post_execution(
                 repo_root,
                 ready_execution,
                 execution_result,
@@ -356,7 +362,7 @@ def _handle_post_execution(
                 head_sha_before,
                 env,
             )
-        else:
+        elif command_name == "implement":
             return _handle_implement_issue_post_execution(
                 repo_root, ready_execution, execution_result, github_client, implement_branch_name, fork_base_ref, env
             )
@@ -422,7 +428,7 @@ def _handle_implement_issue_post_execution(
     return pr
 
 
-def _handle_implement_pr_post_execution(
+def _handle_pr_change_post_execution(
     repo_root: Path,
     ready_execution: ReadyExecution,
     execution_result: ExecutionResult,
@@ -432,7 +438,7 @@ def _handle_implement_pr_post_execution(
     head_sha_before: str | None,
     env: Mapping[str, str],
 ) -> None:
-    """implement + PR 起点の後処理（push / patch fallback）を行う。"""
+    """PR 変更反映コマンドの後処理を行う。"""
     command = ready_execution.command
     target = command.target
 
@@ -450,7 +456,7 @@ def _handle_implement_pr_post_execution(
     if response_text is None:
         raise RuntimeError("AI からのコミットメッセージと本文がありません")
 
-    commit_message, response_body = _parse_implement_pr_output(response_text)
+    commit_message, response_body = _parse_pr_change_output(response_text)
 
     committed = commit_all_changes(repo_root, commit_message)
     if committed:
@@ -460,7 +466,7 @@ def _handle_implement_pr_post_execution(
         push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
         print(f"ブランチ `{implement_branch_name}` を push しました。")
         assert target.repository_full_name is not None
-        _post_implement_response_comment(
+        _post_pr_change_response_comment(
             ready_execution,
             github_client,
             target.repository_full_name,
@@ -473,7 +479,7 @@ def _handle_implement_pr_post_execution(
 
     if try_push_current_branch(repo_root, env.get("GITHUB_TOKEN")):
         print(f"fork ブランチ `{implement_branch_name}` を push しました。")
-        _post_implement_response_comment(
+        _post_pr_change_response_comment(
             ready_execution,
             github_client,
             target.repository_full_name,
@@ -558,14 +564,14 @@ def _get_allow_edits_notice_posted(ready_execution: ReadyExecution) -> bool:
     return session.allow_edits_notice_posted
 
 
-def _post_implement_response_comment(
+def _post_pr_change_response_comment(
     ready_execution: ReadyExecution,
     github_client: GitHubClient | None,
     repository_full_name: str,
     number: int,
     response_body: str,
 ) -> None:
-    """PR 起点 implement の応答テキストを PR にコメント投稿する。"""
+    """PR 変更反映コマンドの応答テキストを PR にコメント投稿する。"""
     if ready_execution.command.dry_run or github_client is None:
         print(response_body)
         return
@@ -573,7 +579,7 @@ def _post_implement_response_comment(
     try:
         github_client.create_issue_comment(repository_full_name, number, response_body)
     except GitHubClientError as exc:
-        print(f"implement 応答コメント投稿に失敗しました: {exc}", file=sys.stderr)
+        print(f"PR 変更反映の応答コメント投稿に失敗しました: {exc}", file=sys.stderr)
 
 
 def _parse_implement_issue_output(response_text: str) -> tuple[str, str, str]:
@@ -591,8 +597,8 @@ def _parse_implement_issue_output(response_text: str) -> tuple[str, str, str]:
     return title, commit_message, body
 
 
-def _parse_implement_pr_output(response_text: str) -> tuple[str, str]:
-    """PR 起点 implement の AI 出力からコミットメッセージと本文を抽出する。"""
+def _parse_pr_change_output(response_text: str) -> tuple[str, str]:
+    """PR 変更反映コマンドの AI 出力からコミットメッセージと本文を抽出する。"""
     lines = response_text.split("\n")
     commit_message = _parse_required_prefixed_line(
         lines,

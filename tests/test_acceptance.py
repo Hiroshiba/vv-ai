@@ -375,6 +375,57 @@ class TestReviewDryRun:
         assert exit_code == 1
 
 
+class TestAddressDryRun:
+    """address コマンド dry-run のシナリオ。"""
+
+    def test_address_pr_exits_zero(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "address",
+            "--target-url", "https://github.com/org/repo/pull/10",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#10", "codex")
+        result = _make_execution_result("success", "対応しました")
+        mock_gh = MagicMock()
+        mock_gh.get_pull_request.return_value = _make_github_pr(
+            "org/repo", 10, "feature-branch"
+        )
+
+        with contextlib.ExitStack() as stack:
+            _enter_common_patches(stack, tmp_path, session, result, mock_gh)
+            mock_checkout = stack.enter_context(
+                patch("vv_ai.command_handler.fetch_and_checkout_branch")
+            )
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        mock_checkout.assert_called_once_with(tmp_path, "feature-branch")
+
+    def test_address_issue_exits_1(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "address",
+            "--target-url", "https://github.com/org/repo/issues/1",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "未使用")
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack, tmp_path, session, result, MagicMock()
+            )
+            exit_code = main(argv)
+
+        assert exit_code == 1
+        execute_provider.assert_not_called()
+
+
 class TestIssueDryRun:
     """issue コマンド dry-run のシナリオ。"""
 
@@ -476,7 +527,7 @@ class TestNextDryRun:
         assert session_command.command == "review"
         assert ready_execution.command.command == "review"
 
-    def test_pr_after_review_runs_as_implement(
+    def test_pr_after_review_runs_as_address(
         self,
         tmp_path: Path,
     ) -> None:
@@ -489,7 +540,7 @@ class TestNextDryRun:
             "--dry-run",
         ]
         session = _make_resolved_session("github", "org/repo#5", "codex")
-        result = _make_execution_result("success", "実装しました")
+        result = _make_execution_result("success", "対応しました")
         mock_gh = MagicMock()
         mock_gh.get_pull_request.return_value = _make_github_pr(
             "org/repo",
@@ -515,7 +566,7 @@ class TestNextDryRun:
 
         ready_execution = execute_provider.call_args.args[1]
         assert exit_code == 0
-        assert ready_execution.command.command == "implement"
+        assert ready_execution.command.command == "address"
         mock_checkout.assert_called_once()
 
     def test_issue_after_breakdown_exits_two_without_provider(
