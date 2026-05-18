@@ -135,6 +135,9 @@ Issue / PR で使えるコマンド:
 @vv-ai issue [--repo org/repo] instruction
 ```
 
+`issue` は要望を短く整理して Issue を作成します。
+`requirements` は作成済みの Issue や PR に対して要件を整理します。
+
 Issue でのみ使えるコマンド:
 
 ```
