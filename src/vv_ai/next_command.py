@@ -261,7 +261,7 @@ def _should_ignore_command(target: ResolvedTarget, command: CommandName) -> bool
     if command in {"reply", "issue", "sync"}:
         return True
     if target.kind == "issue":
-        return command == "review"
+        return command in {"address", "review"}
     if target.kind == "pr":
         return command in {"confirm", "requirements", "arch", "detail", "breakdown"}
     raise NextResolutionError("未対応の target 種別です")
@@ -329,8 +329,8 @@ def _resolve_pr_next_command(resolved_history: list[CommandName]) -> CommandName
 
     last_command = resolved_history[-1]
     if last_command == "review":
-        return "implement"
-    if last_command == "implement":
+        return "address"
+    if last_command in {"address", "implement"}:
         return "review"
     raise NextResolutionError("PR の履歴から `next` を解決できません")
 

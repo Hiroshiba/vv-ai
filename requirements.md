@@ -27,11 +27,22 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `arch`       | basic-design スキルで基本設計を行いコメントで返す            | ✅        | ✅     |
 | `detail`       | detailed-design スキルで詳細設計を行いコメントで返す         | ✅        | ✅     |
 | `breakdown`    | task-breakdown スキルでタスク分割し、サブ Issue を作成する   | ✅        | —      |
-| `implement`    | 実装して PR 作成、または既存 PR に追コミット                 | ✅        | ✅     |
+| `implement`    | 実装して PR 作成、または既存 PR に追コミット                       | ✅        | ✅     |
+| `address`      | PR のレビュー指摘に対応して追コミット                         | —        | ✅     |
 | `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
 | `sync`         | PR ブランチをベースブランチに同期する                       | —        | ✅     |
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
 | `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
+
+`sync` は PR 専用コマンドとして実行する。PR head branch を checkout し、`origin/<base>` を明示 fetch して取り込み状況を確認する。base branch がすでに HEAD の祖先なら merge commit は作らない。取り込みが必要なら `--no-ff --no-commit` で merge し、conflict がなければ wrapper が merge commit を作成する。
+
+conflict がある場合、AI には conflict file の解消だけを依頼する。AI が commit や stage を行った場合、想定外の staged diff がある場合、conflict marker が残った場合、未解消 conflict が残った場合は失敗する。wrapper は AI が解消した conflict file だけを stage し、merge commit を作成する。
+
+merge commit 後または merge 不要判定後、AI に整合性確認と必要最小限の修正を依頼する。修正がある場合、wrapper が `chore: sync 整合性を修正する` で別 commit を作成する。merge commit も整合性修正 commit もない場合は push しない。
+
+push が必要な same repository PR では head branch を origin へ push する。push が必要な fork PR では現在 branch の upstream へ push し、失敗した場合は patch または手順を PR にコメントして失敗する。push 不要の fork PR は push 権限不足を失敗扱いしない。
+
+push 成功後または push 不要時、GitHub PR 状態を取得して最終コメント本文を AI に作成させ、wrapper が投稿する。GitHub 状態取得と最終コメント投稿の失敗は、push 済みまたは push 不要の同期結果を失敗に変えない。最終コメント生成 AI が失敗した場合は AI のエラー本文を投稿せず失敗する。
 
 ### オプション
 
@@ -52,6 +63,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 @vv-ai detail
 @vv-ai breakdown
 @vv-ai implement --provider codex このIssueを実装して
+@vv-ai address --provider codex レビュー指摘に対応して
 @vv-ai review --session_mode inherit このPRをレビューして
 @vv-ai sync
 @vv-ai issue --repo org/repo この不具合をIssue化して
@@ -68,7 +80,8 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 - 親 Issue の `breakdown` 後の `next` はエラー終了
 - Issue の `implement` 後の `next` はエラー終了
 - PR の履歴なし `next` は `review`
-- PR では `review` と `implement` を交互に実行
+- PR では `review` と `address` を交互に実行
+- PR の `implement` 後の `next` は `review`
 
 ---
 
@@ -89,7 +102,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 
 - 手元 PC から `gh workflow run ...` で起動
 - 入力項目:
-  - `command`: confirm | requirements | arch | detail | breakdown | implement | review | sync | issue | next | reply
+  - `command`: confirm | requirements | arch | detail | breakdown | implement | address | review | sync | issue | next | reply
   - `target_type`: issue | pr（任意）
   - `target_number`: 番号（任意）
   - `target_url`: Issue/PR URL（任意）
@@ -102,9 +115,9 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
   - `target_url` が優先
 - 対象省略時の扱い:
   - `issue` コマンド: 対象不要（repo 未指定なら workflow のある repo に作成）
-  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `sync` / `next`: 対象必須（不足ならエラー終了）
+  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `address` / `review` / `sync` / `next`: 対象必須（不足ならエラー終了）
 - `instruction` 省略:
-  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `sync` / `issue` / `next`: 省略可
+  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `address` / `review` / `sync` / `issue` / `next`: 省略可
 - GitHub 上への可視化: **何もしない**。Actions Run と artifact だけを見る運用
 - 認可: `github.actor == "Hiroshiba"` を必須チェック（workflow 実行権限があっても Hiroshiba 以外は即終了）
 - 対象 repo:
@@ -289,7 +302,7 @@ provider_priority:
 
 ### セッションスコープ
 
-- **同一 Issue/PR 内** で `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` は **同じセッション**（main lane）を共有
+- **同一 Issue/PR 内** で `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `address` は **同じセッション**（main lane）を共有
 - `review` は **別セッション**（review lane）
 - `next` は既存コマンドへ解決した後、そのコマンドの lane を使う
 - セッションキー: `<backend> / <target> / <provider> / <lane>`
@@ -522,7 +535,7 @@ provider_priority:
 ### 実行
 
 - ワークフロー側は TITLE 行を抽出して `--title` に、BODY 以降を `/tmp/issue.md` に書いて `gh issue create --body-file` で作成
-- タイトル / 本文 / ラベル / assignee 等の内容決定はユーザーが用意するプロンプトに委譲
+- タイトルと本文の内容決定はユーザーが用意するプロンプトに委譲
 
 ### 結果の通知
 
@@ -740,7 +753,7 @@ provider_priority:
 ## SUCCESS METRICS
 
 - プロトタイプとして 1 リポジトリで安定動作すること
-- Codex / Claude Code の両方で基本フロー（confirm → requirements → arch → detail → breakdown → implement → review）が回ること
+- Codex / Claude Code の両方で基本フロー（confirm → requirements → arch → detail → breakdown → implement → review → address）が回ること
 - セッション継続が機能し、文脈を引き継いだ作業ができること
 - fork PR でも安全に動作すること（API キー漏洩なし）
 - per-run の metrics / report が確実に保存されること

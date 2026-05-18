@@ -10,7 +10,7 @@ import pytest
 from vv_ai.cli import _run_ready_execution
 from vv_ai.command_handler import (
     _handle_implement_issue_post_execution,
-    _handle_implement_pr_post_execution,
+    _handle_pr_change_post_execution,
     _handle_issue_post_execution,
     _post_response_comment,
 )
@@ -196,7 +196,28 @@ class TestDryRunSuppression:
         github_client = MagicMock()
 
         with patch("vv_ai.command_handler.push_branch") as mock_push:
-            _handle_implement_pr_post_execution(
+            _handle_pr_change_post_execution(
+                Path("/dummy"), ready, result, github_client, "feature-branch", None, None, {}
+            )
+            mock_push.assert_not_called()
+
+        github_client.create_issue_comment.assert_not_called()
+
+    def test_dryrun_suppresses_address_pr_push(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="address", target=ResolvedTarget(
+                backend="github",
+                kind="pr",
+                canonical_id="org/repo#2",
+                repository_full_name="org/repo",
+                number=2,
+            ))
+        )
+        result = _make_execution_result("success")
+        github_client = MagicMock()
+
+        with patch("vv_ai.command_handler.push_branch") as mock_push:
+            _handle_pr_change_post_execution(
                 Path("/dummy"), ready, result, github_client, "feature-branch", None, None, {}
             )
             mock_push.assert_not_called()
@@ -470,7 +491,7 @@ class TestImplementResponseComment:
             ) as mock_commit,
             patch("vv_ai.command_handler.push_branch"),
         ):
-            _handle_implement_pr_post_execution(
+            _handle_pr_change_post_execution(
                 Path("/dummy"),
                 ready,
                 result,
@@ -484,6 +505,48 @@ class TestImplementResponseComment:
         mock_commit.assert_called_once_with(Path("/dummy"), "fix: ai commit")
         github_client.create_issue_comment.assert_called_once_with(
             "org/repo", 2, "追コミット完了"
+        )
+
+    def test_address_pr_posts_response_to_target_pr(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(
+                command="address",
+                dry_run=False,
+                target=ResolvedTarget(
+                    backend="github",
+                    kind="pr",
+                    canonical_id="org/repo#2",
+                    repository_full_name="org/repo",
+                    number=2,
+                ),
+            )
+        )
+        result = _make_execution_result(
+            "success",
+            response_text="COMMIT_MESSAGE: fix: address review\nBODY:\nレビュー指摘対応完了",
+        )
+        github_client = MagicMock()
+
+        with (
+            patch(
+                "vv_ai.command_handler.commit_all_changes", return_value=True
+            ) as mock_commit,
+            patch("vv_ai.command_handler.push_branch"),
+        ):
+            _handle_pr_change_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "feature-branch",
+                _make_github_pr(number=2, is_cross_repository=False),
+                None,
+                {},
+            )
+
+        mock_commit.assert_called_once_with(Path("/dummy"), "fix: address review")
+        github_client.create_issue_comment.assert_called_once_with(
+            "org/repo", 2, "レビュー指摘対応完了"
         )
 
     def test_fork_patch_comment_includes_response_text(self) -> None:
@@ -511,7 +574,7 @@ class TestImplementResponseComment:
             patch("vv_ai.command_handler.try_push_current_branch", return_value=False),
             patch("vv_ai.command_handler.generate_patch", return_value="diff --git a/a b/a"),
         ):
-            _handle_implement_pr_post_execution(
+            _handle_pr_change_post_execution(
                 Path("/dummy"),
                 ready,
                 result,
@@ -553,7 +616,7 @@ class TestImplementResponseComment:
                 match="1行目は `COMMIT_MESSAGE: <コミットメッセージ>`",
             ),
         ):
-            _handle_implement_pr_post_execution(
+            _handle_pr_change_post_execution(
                 Path("/dummy"),
                 ready,
                 result,
@@ -593,7 +656,7 @@ class TestImplementResponseComment:
             patch("vv_ai.command_handler.push_branch") as mock_push,
             pytest.raises(RuntimeError, match="COMMIT_MESSAGE が空です"),
         ):
-            _handle_implement_pr_post_execution(
+            _handle_pr_change_post_execution(
                 Path("/dummy"),
                 ready,
                 result,
@@ -634,7 +697,7 @@ class TestImplementResponseComment:
             ) as mock_commit,
             patch("vv_ai.command_handler.push_branch"),
         ):
-            _handle_implement_pr_post_execution(
+            _handle_pr_change_post_execution(
                 Path("/dummy"),
                 ready,
                 result,

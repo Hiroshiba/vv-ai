@@ -67,7 +67,7 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
     repo = _resolve_repo(command, raw_input)
 
     target_required_commands: set[CommandName] = {
-        "confirm", "reply", "implement", "review", "next",
+        "confirm", "reply", "implement", "address", "review", "next",
         "requirements", "arch", "detail", "breakdown", "sync",
     }
     if command in target_required_commands and not has_target:

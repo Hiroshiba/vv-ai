@@ -21,7 +21,7 @@ flowchart TD
   pr[["PR"]]
   review(["レビュー"])
   review_result{"レビュー結果"}
-  implement_pr(["レビュー対応を追コミット"])
+  address(["レビュー指摘対応"])
   merged[["マージ済み PR"]]
 
   issue -- "confirm" --> intent
@@ -35,11 +35,11 @@ flowchart TD
   pr -- "review" --> review
   review --> review_result
   review_result -- "OK" --> merged
-  review_result -- "修正あり" --> implement_pr
-  implement_pr --> pr
+  review_result -- "修正あり" --> address
+  address --> pr
 
   class issue,subissues,pr,merged githubObject
-  class intent,requirements,arch,detail,breakdown,implement_issue,review,implement_pr aiStep
+  class intent,requirements,arch,detail,breakdown,implement_issue,review,address aiStep
   class review_result decision
 
   classDef githubObject fill:#e8f3ff,stroke:#2f6f9f,stroke-width:2px
@@ -135,6 +135,9 @@ Issue / PR で使えるコマンド:
 @vv-ai issue [--repo org/repo] instruction
 ```
 
+`issue` は要望を短く整理して Issue を作成します。
+`requirements` は作成済みの Issue や PR に対して要件を整理します。
+
 Issue でのみ使えるコマンド:
 
 ```
@@ -144,6 +147,7 @@ Issue でのみ使えるコマンド:
 PR でのみ使えるコマンド:
 
 ```
+@vv-ai address [instruction]
 @vv-ai review [instruction]
 ```
 
@@ -190,6 +194,7 @@ gh workflow run vv-ai.yml \
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command requirements --target-url https://github.com/org/repo/issues/123 --instruction "要件を整理して"
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command implement --target-url https://github.com/org/repo/issues/123 --dry-run
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command address --target-url https://github.com/org/repo/pull/123 --dry-run
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --target-type issue --target-number 123 --instruction "このIssueの要点を教えて"
 ```
 
@@ -197,7 +202,7 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 
 | 引数 | 説明 |
 | --- | --- |
-| `--command` | `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue` / `next` / `reply` |
+| `--command` | `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `address` / `review` / `issue` / `next` / `reply` |
 | `--instruction` | 自然言語の指示本文 |
 | `--target-url` | 対象の Issue / PR URL またはローカルパス |
 | `--target-type` | `issue` または `pr` |

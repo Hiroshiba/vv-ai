@@ -1,5 +1,5 @@
 ---
-name: review-triage
+name: address-review
 description: PR のレビューコメントを収集し、ローカルコードで検証して MUST-FIX / DISCUSS / SKIP に分類し、MUST-FIX を実装して返信と resolve まで進める。レビュー指摘を鵜呑みにせず裏取りして扱うときに使う。
 ---
 

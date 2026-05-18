@@ -40,6 +40,9 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
         "   BODY:\n"
         "   本文（Markdown）...\n"
         "\n"
+        "各タスクの本文には、親 Issue である breakdown 対象 Issue へ"
+        "GitHub 上で辿れる参照を含めてください。\n"
+        "\n"
         "最後に、作成したディレクトリの絶対パスだけを以下の形式で出力してください:\n"
         "BREAKDOWN_DIR: /絶対パス\n"
         "\n"
@@ -65,7 +68,13 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
         "タイトル、コミットメッセージ、本文以外の余計な出力は含めないでください。"
     ),
     "issue": (
-        "以下の指示に基づいて GitHub Issue を作成するための内容を生成してください。\n"
+        "以下の指示に基づいて、議論の出発点になる GitHub Issue を作成するための"
+        "内容を生成してください。\n"
+        "本文はユーザーが明示した内容を中心に短く整理してください。\n"
+        "細かい仕様、受入基準、対象外、実装方式、テスト方針は、"
+        "明示されている場合や Issue として自然に必要な場合だけ書いてください。\n"
+        "未確定の詳細は確定した仕様のように断定せず、"
+        "必要に応じて補足や確認したいこととして扱ってください。\n"
         "出力は以下のフォーマットに厳密に従ってください:\n"
         "1行目: TITLE: <タイトル文字列>\n"
         "2行目: BODY:\n"
@@ -77,6 +86,22 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
 
 _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
     "この PR の内容・コメントの指示に基づいて追加実装してください。"
+    "ファイル変更のみ行ってください。git の操作は不要です。"
+    "終了後にワーキングツリーの全変更が git add -A でコミットされます。"
+    "GitHub 実行時は、あなたの最終出力の本文が対象 PR にコメントとして投稿されます。"
+    "fork PR で push できず patch コメントを投稿する場合、あなたの最終出力の本文は patch コメント内に含まれます。"
+    "一時ファイルやキャッシュは削除してから終了してください。"
+    "コミットメッセージは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。"
+    "以下のフォーマットに厳密に従ってください:\n"
+    "1行目: COMMIT_MESSAGE: <コミットメッセージ>\n"
+    "2行目: BODY:\n"
+    "3行目以降: Markdown の PR コメント本文\n"
+    "\n"
+    "コミットメッセージと本文以外の余計な出力は含めないでください。"
+)
+
+_ADDRESS_TASK_DESCRIPTION: str = (
+    "address-review スキルを使って、この PR のレビュー指摘に対応してください。"
     "ファイル変更のみ行ってください。git の操作は不要です。"
     "終了後にワーキングツリーの全変更が git add -A でコミットされます。"
     "GitHub 実行時は、あなたの最終出力の本文が対象 PR にコメントとして投稿されます。"
@@ -112,7 +137,9 @@ def build_provider_prompt(
 
     command_name = ready_execution.command.command
     target = ready_execution.command.target
-    if command_name == "implement" and target is not None and target.kind == "pr":
+    if command_name == "address":
+        sections.append(_ADDRESS_TASK_DESCRIPTION)
+    elif command_name == "implement" and target is not None and target.kind == "pr":
         sections.append(_IMPLEMENT_PR_TASK_DESCRIPTION)
     elif command_name in _COMMAND_TASK_DESCRIPTION:
         sections.append(_COMMAND_TASK_DESCRIPTION[command_name])

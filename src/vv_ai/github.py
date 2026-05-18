@@ -132,6 +132,27 @@ class GitHubPullRequest(BaseModel):
     maintainer_can_modify: bool
 
 
+class GitHubStatusCheckSummary(BaseModel):
+    """PR status check の集計を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    success_count: int
+    failure_count: int
+    pending_count: int
+    unknown_count: int
+
+
+class GitHubPullRequestSyncState(BaseModel):
+    """sync が参照する Pull Request 状態を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mergeable: str
+    merge_state_status: str
+    status_check_summary: GitHubStatusCheckSummary
+
+
 class GitHubArtifact(BaseModel):
     """GitHub Actions artifact を表す。"""
 
@@ -248,6 +269,27 @@ query($owner: String!, $repo: String!, $number: Int!) {
         if not isinstance(raw_pr, dict):
             raise GitHubClientError("Pull Request 取得結果の JSON 形式が不正です")
         return _build_pull_request(repository_full_name, raw_pr)
+
+    def get_pull_request_sync_state(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> GitHubPullRequestSyncState:
+        """sync が参照する Pull Request 状態を取得する。"""
+        payload = self._run_json(
+            [
+                "pr",
+                "view",
+                str(_require_positive_id(number, "number")),
+                "--repo",
+                _require_repository_full_name(repository_full_name),
+                "--json",
+                "mergeable,mergeStateStatus,statusCheckRollup",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("Pull Request sync 状態の JSON 形式が不正です")
+        return _build_pull_request_sync_state(payload)
 
     def list_issue_comments(
         self,
@@ -863,6 +905,95 @@ def _build_pull_request(
         "maintainer_can_modify": raw_pr.get("maintainerCanModify"),
     }
     return _validate_model(GitHubPullRequest, payload, "Pull Request")
+
+
+def _build_pull_request_sync_state(
+    raw_state: dict[str, object],
+) -> GitHubPullRequestSyncState:
+    """Pull Request sync 状態 JSON を model へ変換する。"""
+    payload = {
+        "mergeable": _require_string(raw_state.get("mergeable"), "mergeable"),
+        "merge_state_status": _require_string(
+            raw_state.get("mergeStateStatus"),
+            "mergeStateStatus",
+        ),
+        "status_check_summary": _build_status_check_summary(
+            raw_state.get("statusCheckRollup")
+        ),
+    }
+    return _validate_model(GitHubPullRequestSyncState, payload, "Pull Request sync 状態")
+
+
+def _build_status_check_summary(raw_rollup: object) -> GitHubStatusCheckSummary:
+    """statusCheckRollup JSON を集計 model へ変換する。"""
+    if not isinstance(raw_rollup, list):
+        raise GitHubClientError("statusCheckRollup の JSON 形式が不正です")
+    counts = {
+        "success_count": 0,
+        "failure_count": 0,
+        "pending_count": 0,
+        "unknown_count": 0,
+    }
+    for raw_check in raw_rollup:
+        if not isinstance(raw_check, dict):
+            raise GitHubClientError("statusCheckRollup の要素形式が不正です")
+        counts[_classify_status_check(raw_check)] += 1
+    return _validate_model(
+        GitHubStatusCheckSummary,
+        counts,
+        "status check 集計",
+    )
+
+
+def _classify_status_check(raw_check: dict[str, object]) -> str:
+    """status check JSON を集計区分へ変換する。"""
+    state = raw_check.get("state")
+    if isinstance(state, str):
+        return _classify_status_context_state(state)
+    status = raw_check.get("status")
+    conclusion = raw_check.get("conclusion")
+    if isinstance(status, str):
+        return _classify_check_run_status(status, conclusion)
+    return "unknown_count"
+
+
+def _classify_status_context_state(state: str) -> str:
+    """StatusContext の state を集計区分へ変換する。"""
+    if state == "SUCCESS":
+        return "success_count"
+    if state in {"ERROR", "FAILURE"}:
+        return "failure_count"
+    if state in {"EXPECTED", "PENDING"}:
+        return "pending_count"
+    return "unknown_count"
+
+
+def _classify_check_run_status(status: str, conclusion: object) -> str:
+    """CheckRun の status と conclusion を集計区分へ変換する。"""
+    if status != "COMPLETED":
+        if status in {
+            "ACTION_REQUIRED",
+            "IN_PROGRESS",
+            "PENDING",
+            "QUEUED",
+            "REQUESTED",
+            "WAITING",
+        }:
+            return "pending_count"
+        return "unknown_count"
+    if not isinstance(conclusion, str):
+        return "unknown_count"
+    if conclusion in {"NEUTRAL", "SKIPPED", "SUCCESS"}:
+        return "success_count"
+    if conclusion in {
+        "ACTION_REQUIRED",
+        "CANCELLED",
+        "FAILURE",
+        "STARTUP_FAILURE",
+        "TIMED_OUT",
+    }:
+        return "failure_count"
+    return "unknown_count"
 
 
 def _build_pull_request_from_rest(

@@ -84,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
             "detail",
             "breakdown",
             "implement",
+            "address",
             "review",
             "issue",
             "reply",

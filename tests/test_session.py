@@ -531,6 +531,34 @@ class TestResolveSessionDefault:
         assert resolved.restore_strategy == "new"
         assert resolved.restore_manifest is None
 
+    def test_address_uses_main_lane(self, tmp_path: Path) -> None:
+        from vv_ai.session import resolve_session
+
+        command = ResolvedCommand.model_validate(
+            {
+                "event_name": "local",
+                "command": "address",
+                "has_target": True,
+                "session_mode": "new",
+                "target": ResolvedTarget(
+                    backend="local",
+                    kind="pr",
+                    canonical_id="pr:test",
+                    local_id="test",
+                    path=str(tmp_path / ".vv-ai/prs/test"),
+                ),
+            }
+        )
+        resolved = resolve_session(
+            repo_root=tmp_path,
+            workflow_id="wf-test",
+            resolved_command=command,
+            resolved_provider=_make_provider(),
+            env={},
+        )
+        assert resolved.lane == "main"
+        assert resolved.key.canonical_key == "local/pr:test/codex/main"
+
 
 def test_build_manifest_from_restored_artifact_keeps_target_context_state() -> None:
     state = TargetContextState(
