@@ -55,12 +55,39 @@ def _make_ready_execution(kind: Literal["issue", "pr"]) -> ReadyExecution:
     )
 
 
+def _make_breakdown_ready_execution() -> ReadyExecution:
+    """breakdown 用の ReadyExecution を生成する。"""
+    return ReadyExecution(
+        command=ResolvedCommand(
+            event_name="issue_comment",
+            command="breakdown",
+            has_target=True,
+            dry_run=False,
+            repository_full_name="org/repo",
+            target=_make_target("issue", 1),
+        ),
+        config=VVAIConfig(allowed_users=["Hiroshiba"]),
+        resolved_provider=_make_provider(),
+        workflow_id="test-run-1",
+    )
+
+
 def _build_prompt(kind: Literal["issue", "pr"]) -> str:
     """対象種別ごとの provider prompt を生成する。"""
     return build_provider_prompt(
         ready_execution=_make_ready_execution(kind),
         target_context_block="テストコンテキスト",
         implement_branch_name="feature-branch",
+        worktree_ref=None,
+    )
+
+
+def _build_breakdown_prompt() -> str:
+    """breakdown の provider prompt を生成する。"""
+    return build_provider_prompt(
+        ready_execution=_make_breakdown_ready_execution(),
+        target_context_block="テストコンテキスト",
+        implement_branch_name=None,
         worktree_ref=None,
     )
 
@@ -145,3 +172,27 @@ class TestImplementPrompt:
             "コミットメッセージは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。"
             in prompt
         )
+
+
+class TestBreakdownPrompt:
+    """breakdown の provider prompt を検証する。"""
+
+    def test_prompt_mentions_parent_issue_reference_in_task_body(self) -> None:
+        prompt = _build_breakdown_prompt()
+
+        assert (
+            "各タスクの本文には、breakdown 対象 Issue が親 Issue であることを"
+            "読者が辿れる言及を含めてください。"
+            in prompt
+        )
+
+    def test_prompt_keeps_task_file_format(self) -> None:
+        prompt = _build_breakdown_prompt()
+
+        assert "TITLE: タイトル" in prompt
+        assert "BODY:" in prompt
+
+    def test_prompt_does_not_require_fixed_parent_issue_format(self) -> None:
+        prompt = _build_breakdown_prompt()
+
+        assert "親 Issue: #<番号>" not in prompt
