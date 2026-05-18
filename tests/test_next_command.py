@@ -254,6 +254,17 @@ def test_pr履歴では設計工程を無視する() -> None:
     assert result.command == "review"
 
 
+def test_pr履歴ではsyncを無視する() -> None:
+    result = _resolve_github(
+        _make_target("pr", "github"),
+        _make_comments(["sync"]),
+        None,
+        None,
+    )
+
+    assert result.command == "review"
+
+
 def test_github_issue_comment起動では現在コメントより後を履歴に入れない() -> None:
     comments = [
         _make_comment(1, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:01:00Z"),

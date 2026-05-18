@@ -29,6 +29,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `breakdown`    | task-breakdown スキルでタスク分割し、サブ Issue を作成する   | ✅        | —      |
 | `implement`    | 実装して PR 作成、または既存 PR に追コミット                 | ✅        | ✅     |
 | `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
+| `sync`         | PR ブランチをベースブランチに同期する                       | —        | ✅     |
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
 | `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
 
@@ -52,6 +53,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 @vv-ai breakdown
 @vv-ai implement --provider codex このIssueを実装して
 @vv-ai review --session_mode inherit このPRをレビューして
+@vv-ai sync
 @vv-ai issue --repo org/repo この不具合をIssue化して
 @vv-ai next
 @vv-ai implement --dry-run この修正を試してみて
@@ -87,7 +89,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 
 - 手元 PC から `gh workflow run ...` で起動
 - 入力項目:
-  - `command`: confirm | requirements | arch | detail | breakdown | implement | review | issue | next | reply
+  - `command`: confirm | requirements | arch | detail | breakdown | implement | review | sync | issue | next | reply
   - `target_type`: issue | pr（任意）
   - `target_number`: 番号（任意）
   - `target_url`: Issue/PR URL（任意）
@@ -100,9 +102,9 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
   - `target_url` が優先
 - 対象省略時の扱い:
   - `issue` コマンド: 対象不要（repo 未指定なら workflow のある repo に作成）
-  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `next`: 対象必須（不足ならエラー終了）
+  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `sync` / `next`: 対象必須（不足ならエラー終了）
 - `instruction` 省略:
-  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `issue` / `next`: 省略可
+  - `confirm` / `reply` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `review` / `sync` / `issue` / `next`: 省略可
 - GitHub 上への可視化: **何もしない**。Actions Run と artifact だけを見る運用
 - 認可: `github.actor == "Hiroshiba"` を必須チェック（workflow 実行権限があっても Hiroshiba 以外は即終了）
 - 対象 repo:

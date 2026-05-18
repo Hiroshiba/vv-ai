@@ -194,7 +194,7 @@ def _parse_history_command(body: str) -> CommandName | None:
 
 
 def _should_ignore_command(target: ResolvedTarget, command: CommandName) -> bool:
-    if command in {"reply", "issue"}:
+    if command in {"reply", "issue", "sync"}:
         return True
     if target.kind == "issue":
         return command == "review"

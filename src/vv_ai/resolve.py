@@ -67,10 +67,12 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
 
     target_required_commands: set[CommandName] = {
         "confirm", "reply", "implement", "review", "next",
-        "requirements", "arch", "detail", "breakdown",
+        "requirements", "arch", "detail", "breakdown", "sync",
     }
     if command in target_required_commands and not has_target:
         raise ResolutionError(f"`{command}` コマンドには target 指定が必要です")
+    if command == "sync" and target_type == "issue":
+        raise ResolutionError("`sync` コマンドは PR 専用です")
 
     return ResolvedCommand(
         event_name=raw_input.event_name,

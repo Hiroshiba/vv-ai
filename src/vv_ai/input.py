@@ -13,7 +13,7 @@ from vv_ai.config import ProviderName
 
 CommandName = Literal[
     "confirm", "reply", "implement", "review", "issue", "next",
-    "requirements", "arch", "detail", "breakdown",
+    "requirements", "arch", "detail", "breakdown", "sync",
 ]
 EventName = Literal[
     "issue_comment", "workflow_dispatch", "issues", "pull_request", "local",
@@ -23,7 +23,7 @@ TargetType = Literal["issue", "pr"]
 
 _COMMAND_NAMES: set[str] = {
     "confirm", "reply", "implement", "review", "issue", "next",
-    "requirements", "arch", "detail", "breakdown",
+    "requirements", "arch", "detail", "breakdown", "sync",
 }
 _LABEL_COMMANDS: dict[str, CommandName] = {
     "vv-ai:reply": "reply",
@@ -36,6 +36,7 @@ _LABEL_COMMANDS: dict[str, CommandName] = {
     "vv-ai:review": "review",
     "vv-ai:issue": "issue",
     "vv-ai:next": "next",
+    "vv-ai:sync": "sync",
 }
 _ISSUE_LABEL_COMMANDS: set[CommandName] = {
     "reply", "confirm", "requirements", "arch", "detail",
@@ -43,7 +44,7 @@ _ISSUE_LABEL_COMMANDS: set[CommandName] = {
 }
 _PULL_REQUEST_LABEL_COMMANDS: set[CommandName] = {
     "reply", "confirm", "requirements", "arch", "detail",
-    "implement", "review", "issue", "next",
+    "implement", "review", "issue", "next", "sync",
 }
 
 

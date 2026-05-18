@@ -44,6 +44,14 @@ class TestGitHubTargetFromUrl:
         assert target.canonical_id == "org/repo#10"
         assert target.url == "https://github.com/org/repo/pull/10"
 
+    def test_sync_rejects_issue_url(self) -> None:
+        cmd = _make_command(
+            command="sync",
+            target_url="https://github.com/org/repo/issues/42",
+        )
+        with pytest.raises(TargetResolutionError, match="PR 専用"):
+            resolve_target(Path("/dummy"), cmd)
+
     def test_invalid_path_format(self) -> None:
         cmd = _make_command(target_url="https://github.com/org/repo")
         with pytest.raises(TargetResolutionError, match="形式"):
@@ -97,6 +105,13 @@ class TestLocalTargetFromPath:
         assert result.target is not None
         assert result.target.kind == "pr"
         assert result.target.canonical_id == "pr:refactor-9m3x"
+
+    def test_sync_rejects_issue_directory(self, tmp_path: Path) -> None:
+        issue_dir = tmp_path / ".vv-ai" / "issues" / "login-403-7k2p9a"
+        issue_dir.mkdir(parents=True)
+        cmd = _make_command(command="sync", target_url=str(issue_dir))
+        with pytest.raises(TargetResolutionError, match="PR 専用"):
+            resolve_target(tmp_path, cmd)
 
     def test_pr_md_file(self, tmp_path: Path) -> None:
         pr_dir = tmp_path / ".vv-ai" / "prs" / "feature-xyz"

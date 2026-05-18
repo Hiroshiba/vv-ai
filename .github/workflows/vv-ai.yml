@@ -24,6 +24,7 @@ on:
             review,
             issue,
             next,
+            sync,
             reply,
           ]
       target_type:
