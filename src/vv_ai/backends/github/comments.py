@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import sys
 
-from vv_ai.github import GitHubClient, GitHubClientError, GitHubPullRequest
+from vv_ai.backends.github.client import GitHubClient
+from vv_ai.backends.github.models import GitHubClientError, GitHubPullRequest
 
 _ALLOW_EDITS_NOTICE = (
     "\n\n---\n"

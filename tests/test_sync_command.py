@@ -27,7 +27,7 @@ from vv_ai.git_ops import (
     merge_no_ff_no_commit,
     stage_paths,
 )
-from vv_ai.github import (
+from vv_ai.backends.github.models import (
     GitHubActor,
     GitHubPullRequest,
     GitHubPullRequestSyncState,

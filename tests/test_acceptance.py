@@ -13,7 +13,7 @@ from vv_ai.command_handler import run_command
 from vv_ai.cli import main
 from vv_ai.config import VVAIConfig
 from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
-from vv_ai.github import (
+from vv_ai.backends.github.models import (
     GitHubActor,
     GitHubComment,
     GitHubIssue,

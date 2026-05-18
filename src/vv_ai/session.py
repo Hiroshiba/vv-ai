@@ -10,13 +10,14 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from vv_ai.artifact_crypto import ArtifactCryptoError, resolve_age_secret_key
-from vv_ai.github import GitHubClientError, build_github_client
+from vv_ai.backends.github.client import build_github_client
+from vv_ai.backends.github.models import GitHubClientError
 from vv_ai.input import SessionMode
 from vv_ai.provider import ResolvedProvider
 from vv_ai.resolve import BackendName, ResolvedCommand
 
 if TYPE_CHECKING:
-    from vv_ai.github import GitHubClient
+    from vv_ai.backends.github.client import GitHubClient
     from vv_ai.session_artifact import RestoredSessionArtifact
 
 SessionLane = Literal["main", "review"]

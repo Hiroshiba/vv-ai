@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from vv_ai.config import VVAIConfig
-from vv_ai.github import GitHubActor, GitHubIssueTimelineEvent
+from vv_ai.backends.github.models import GitHubActor, GitHubIssueTimelineEvent
 from vv_ai.next_command import NextResolutionError, resolve_next_command
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 

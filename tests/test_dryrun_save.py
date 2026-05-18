@@ -16,7 +16,7 @@ from vv_ai.command_handler import (
 )
 from vv_ai.config import VVAIConfig
 from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
-from vv_ai.github import GitHubActor, GitHubIssue, GitHubPullRequest
+from vv_ai.backends.github.models import GitHubActor, GitHubIssue, GitHubPullRequest
 from vv_ai.metrics_artifact import (
     MetricsBehavior,
     MetricsUsage,

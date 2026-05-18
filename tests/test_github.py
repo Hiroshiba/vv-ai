@@ -8,11 +8,11 @@ from collections.abc import Sequence
 
 import pytest
 
-from vv_ai.github import (
+from vv_ai.backends.github.client import (
     GitHubClient,
-    GitHubClientError,
     build_github_client_with_token,
 )
+from vv_ai.backends.github.models import GitHubClientError
 
 
 def test_get_issue_parent_number_returns_parent_number() -> None:
