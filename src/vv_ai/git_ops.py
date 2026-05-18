@@ -188,9 +188,12 @@ def commit_merge_no_edit(repo_root: Path) -> str:
     return get_head_sha(repo_root)
 
 
-def push_current_branch(repo_root: Path, token: str) -> None:
+def push_current_branch(repo_root: Path, token: str | None) -> None:
     """現在のブランチを upstream へ push する。"""
-    _run_git_command_env(repo_root, _build_push_env(token), "push")
+    if token is not None:
+        _run_git_command_env(repo_root, _build_push_env(token), "push")
+        return
+    run_git_command(repo_root, "push")
 
 
 def generate_diff_patch(repo_root: Path, base_sha: str) -> str:
@@ -237,6 +240,16 @@ def fetch_remote(repo_root: Path, remote: str) -> None:
     run_git_command(repo_root, "fetch", remote)
 
 
+def fetch_remote_branch(repo_root: Path, remote: str, branch_name: str) -> None:
+    """指定リモートブランチを remote-tracking ref へ fetch する。"""
+    run_git_command(
+        repo_root,
+        "fetch",
+        remote,
+        f"+refs/heads/{branch_name}:refs/remotes/{remote}/{branch_name}",
+    )
+
+
 def checkout_ref(repo_root: Path, ref_name: str) -> None:
     """指定 ref をチェックアウトする。"""
     run_git_command(repo_root, "checkout", ref_name)
@@ -244,16 +257,30 @@ def checkout_ref(repo_root: Path, ref_name: str) -> None:
 
 def fetch_and_checkout_branch(repo_root: Path, branch_name: str) -> None:
     """リモートブランチを fetch してチェックアウトする。"""
-    run_git_command(repo_root, "fetch", "origin", branch_name)
-    run_git_command(repo_root, "checkout", branch_name)
+    fetch_remote_branch(repo_root, "origin", branch_name)
+    run_git_command(repo_root, "checkout", "-B", branch_name, f"origin/{branch_name}")
 
 
 def push_branch(repo_root: Path, branch_name: str, token: str | None) -> None:
     """ブランチを origin へ push する。"""
     if token is not None:
-        _run_git_command_env(repo_root, _build_push_env(token), "push", "-u", "origin", branch_name)
+        _run_git_command_env(
+            repo_root,
+            _build_push_env(token),
+            "push",
+            "-u",
+            "origin",
+            branch_name,
+        )
     else:
         run_git_command(repo_root, "push", "-u", "origin", branch_name)
+
+
+def stage_paths(repo_root: Path, paths: list[str]) -> None:
+    """指定 path だけを stage する。"""
+    if len(paths) == 0:
+        raise GitOpsError("stage 対象の path が指定されていません")
+    run_git_command(repo_root, "add", "-A", "--", *paths)
 
 
 # TODO: git add -A は AI が残した不要ファイルも含めてしまうリスクがある。本来は変更対象を絞りたい。
