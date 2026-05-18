@@ -535,7 +535,7 @@ provider_priority:
 ### 実行
 
 - ワークフロー側は TITLE 行を抽出して `--title` に、BODY 以降を `/tmp/issue.md` に書いて `gh issue create --body-file` で作成
-- タイトル / 本文 / ラベル / assignee 等の内容決定はユーザーが用意するプロンプトに委譲
+- タイトルと本文の内容決定はユーザーが用意するプロンプトに委譲
 
 ### 結果の通知
 

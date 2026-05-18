@@ -75,6 +75,40 @@ def _make_breakdown_ready_execution() -> ReadyExecution:
     )
 
 
+def _make_issue_command_ready_execution() -> ReadyExecution:
+    """issue コマンド用の ReadyExecution を生成する。"""
+    return ReadyExecution(
+        command=ResolvedCommand(
+            event_name="issue_comment",
+            command="issue",
+            has_target=False,
+            dry_run=False,
+            repository_full_name="org/repo",
+            repo="org/repo",
+        ),
+        config=VVAIConfig(allowed_users=["Hiroshiba"]),
+        resolved_provider=_make_provider(),
+        workflow_id="test-run-1",
+    )
+
+
+def _make_requirements_ready_execution() -> ReadyExecution:
+    """requirements 用の ReadyExecution を生成する。"""
+    return ReadyExecution(
+        command=ResolvedCommand(
+            event_name="issue_comment",
+            command="requirements",
+            has_target=True,
+            dry_run=False,
+            repository_full_name="org/repo",
+            target=_make_target("issue", 1),
+        ),
+        config=VVAIConfig(allowed_users=["Hiroshiba"]),
+        resolved_provider=_make_provider(),
+        workflow_id="test-run-1",
+    )
+
+
 def _build_prompt(
     kind: Literal["issue", "pr"],
     command: Literal["address", "implement"],
@@ -92,6 +126,26 @@ def _build_breakdown_prompt() -> str:
     """breakdown の provider prompt を生成する。"""
     return build_provider_prompt(
         ready_execution=_make_breakdown_ready_execution(),
+        target_context_block="テストコンテキスト",
+        implement_branch_name=None,
+        worktree_ref=None,
+    )
+
+
+def _build_issue_command_prompt() -> str:
+    """issue コマンドの provider prompt を生成する。"""
+    return build_provider_prompt(
+        ready_execution=_make_issue_command_ready_execution(),
+        target_context_block=None,
+        implement_branch_name=None,
+        worktree_ref=None,
+    )
+
+
+def _build_requirements_prompt() -> str:
+    """requirements の provider prompt を生成する。"""
+    return build_provider_prompt(
+        ready_execution=_make_requirements_ready_execution(),
         target_context_block="テストコンテキスト",
         implement_branch_name=None,
         worktree_ref=None,
@@ -178,6 +232,38 @@ class TestImplementPrompt:
             "コミットメッセージは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。"
             in prompt
         )
+
+
+class TestIssueCommandPrompt:
+    """issue コマンドの provider prompt を検証する。"""
+
+    def test_prompt_mentions_issue_creation_as_discussion_start(self) -> None:
+        prompt = _build_issue_command_prompt()
+
+        assert "議論の出発点になる GitHub Issue を作成する" in prompt
+
+    def test_prompt_mentions_user_explicit_content_priority(self) -> None:
+        prompt = _build_issue_command_prompt()
+
+        assert "本文はユーザーが明示した内容を中心に短く整理してください。" in prompt
+
+    def test_prompt_mentions_uncertain_details_are_not_fixed_specs(self) -> None:
+        prompt = _build_issue_command_prompt()
+
+        assert "未確定の詳細は確定した仕様のように断定せず" in prompt
+        assert "必要に応じて補足や確認したいこととして扱ってください。" in prompt
+
+    def test_prompt_keeps_title_body_format(self) -> None:
+        prompt = _build_issue_command_prompt()
+
+        assert "1行目: TITLE: <タイトル文字列>" in prompt
+        assert "2行目: BODY:" in prompt
+        assert "3行目以降: Markdown 本文" in prompt
+
+    def test_requirements_prompt_uses_define_requirements(self) -> None:
+        prompt = _build_requirements_prompt()
+
+        assert "define-requirements スキルに従って要件定義を行ってください。" in prompt
 
 
 class TestAddressPrompt:
