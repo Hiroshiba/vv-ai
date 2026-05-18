@@ -17,7 +17,7 @@ from vv_ai.github import (
     GitHubActor,
     GitHubComment,
     GitHubIssue,
-    GitHubIssueLabeledEvent,
+    GitHubIssueTimelineEvent,
     GitHubPullRequest,
     RepoInfo,
 )
@@ -134,13 +134,33 @@ def _make_github_comment(comment_id: int, body: str) -> GitHubComment:
     )
 
 
-def _make_github_labeled_event(event_id: int, label_name: str) -> GitHubIssueLabeledEvent:
-    """テスト用 GitHubIssueLabeledEvent を生成する。"""
-    return GitHubIssueLabeledEvent(
+def _make_github_timeline_comment(
+    event_id: int,
+    body: str,
+) -> GitHubIssueTimelineEvent:
+    """テスト用 GitHubIssueTimelineEvent comment を生成する。"""
+    return GitHubIssueTimelineEvent(
         id=event_id,
+        event="commented",
+        actor=GitHubActor(login="Hiroshiba"),
+        created_at="2026-05-08T00:00:00Z",
+        body=body,
+        label_name=None,
+    )
+
+
+def _make_github_labeled_event(
+    event_id: int,
+    label_name: str,
+) -> GitHubIssueTimelineEvent:
+    """テスト用 GitHubIssueTimelineEvent label を生成する。"""
+    return GitHubIssueTimelineEvent(
+        id=event_id,
+        event="labeled",
         label_name=label_name,
         actor=GitHubActor(login="Hiroshiba"),
         created_at="2026-05-08T00:00:00Z",
+        body=None,
     )
 
 
@@ -206,7 +226,7 @@ def _enter_common_patches(
         )
         github_client.get_issue.return_value = _make_github_issue("org/repo", 1)
         github_client.list_issue_comments.return_value = []
-        github_client.list_issue_labeled_events.return_value = []
+        github_client.list_issue_timeline_events.return_value = []
     return execute_provider
 
 
@@ -245,7 +265,7 @@ def _enter_next_patches(
     )
     github_client.get_issue.return_value = _make_github_issue("org/repo", 1)
     github_client.list_issue_comments.return_value = []
-    github_client.list_issue_labeled_events.return_value = []
+    github_client.list_issue_timeline_events.return_value = []
     return resolve_session, execute_provider
 
 
@@ -485,8 +505,8 @@ class TestNextDryRun:
                 result,
                 mock_gh,
             )
-            mock_gh.list_issue_comments.return_value = [
-                _make_github_comment(1000, "@vv-ai review"),
+            mock_gh.list_issue_timeline_events.return_value = [
+                _make_github_timeline_comment(1000, "@vv-ai review"),
             ]
             mock_checkout = stack.enter_context(
                 patch("vv_ai.command_handler.fetch_and_checkout_branch")
@@ -523,12 +543,12 @@ class TestNextDryRun:
                 result,
                 mock_gh,
             )
-            mock_gh.list_issue_comments.return_value = [
-                _make_github_comment(1000, "@vv-ai confirm"),
-                _make_github_comment(1001, "@vv-ai requirements"),
-                _make_github_comment(1002, "@vv-ai arch"),
-                _make_github_comment(1003, "@vv-ai detail"),
-                _make_github_comment(1004, "@vv-ai breakdown"),
+            mock_gh.list_issue_timeline_events.return_value = [
+                _make_github_timeline_comment(1000, "@vv-ai confirm"),
+                _make_github_timeline_comment(1001, "@vv-ai requirements"),
+                _make_github_timeline_comment(1002, "@vv-ai arch"),
+                _make_github_timeline_comment(1003, "@vv-ai detail"),
+                _make_github_timeline_comment(1004, "@vv-ai breakdown"),
             ]
             exit_code = main(argv)
 
@@ -644,7 +664,7 @@ class TestLabelEvent:
         """issues labeled event payload を JSON ファイルとして書き出す。"""
         payload = {
             "action": "labeled",
-            "issue": {"number": 1},
+            "issue": {"number": 1, "updated_at": "2026-05-08T00:00:00Z"},
             "label": {"name": label_name},
             "repository": {"full_name": "org/repo"},
             "sender": {"login": "Hiroshiba"},
@@ -661,7 +681,7 @@ class TestLabelEvent:
         """pull_request labeled event payload を JSON ファイルとして書き出す。"""
         payload = {
             "action": "labeled",
-            "pull_request": {"number": 1},
+            "pull_request": {"number": 1, "updated_at": "2026-05-08T00:00:00Z"},
             "label": {"name": label_name},
             "repository": {"full_name": "org/repo"},
             "sender": {"login": "Hiroshiba"},
@@ -700,7 +720,7 @@ class TestLabelEvent:
 
         with contextlib.ExitStack() as stack:
             _enter_next_patches(stack, tmp_path, session, result, mock_gh)
-            mock_gh.list_issue_labeled_events.return_value = [
+            mock_gh.list_issue_timeline_events.return_value = [
                 _make_github_labeled_event(1000, "vv-ai:next"),
             ]
             exit_code = main(argv)
@@ -753,7 +773,7 @@ class TestLabelEvent:
 
         with contextlib.ExitStack() as stack:
             _enter_next_patches(stack, tmp_path, session, result, mock_gh)
-            mock_gh.list_issue_labeled_events.return_value = [
+            mock_gh.list_issue_timeline_events.return_value = [
                 _make_github_labeled_event(1000, "vv-ai:next"),
             ]
             exit_code = main(argv)

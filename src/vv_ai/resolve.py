@@ -54,6 +54,7 @@ class ResolvedCommand(BaseModel):
     comment_author: str | None = None
     comment_body: str | None = None
     trigger_label_name: str | None = None
+    trigger_event_created_at: str | None = None
     target: ResolvedTarget | None = None
 
 
@@ -91,6 +92,7 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
         comment_author=raw_input.comment_author,
         comment_body=raw_input.comment_body,
         trigger_label_name=raw_input.trigger_label_name,
+        trigger_event_created_at=raw_input.trigger_event_created_at,
     )
 
 
@@ -122,6 +124,7 @@ def _validate_event_requirements(raw_input: RawInput) -> None:
             "target_type": raw_input.target_type,
             "target_number": raw_input.target_number,
             "trigger_label_name": raw_input.trigger_label_name,
+            "trigger_event_created_at": raw_input.trigger_event_created_at,
         }
         _raise_for_missing_fields(raw_input.event_name, required_fields)
 

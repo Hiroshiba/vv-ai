@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from vv_ai.config import VVAIConfig
-from vv_ai.github import GitHubActor, GitHubComment, GitHubIssueLabeledEvent
+from vv_ai.github import GitHubActor, GitHubIssueTimelineEvent
 from vv_ai.next_command import NextResolutionError, resolve_next_command
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 
@@ -57,7 +57,10 @@ def _make_next_command(
     return _make_command("next", target, comment_id)
 
 
-def _make_next_label_command(target: ResolvedTarget) -> ResolvedCommand:
+def _make_next_label_command(
+    target: ResolvedTarget,
+    trigger_event_created_at: str,
+) -> ResolvedCommand:
     return ResolvedCommand(
         event_name="issues" if target.kind == "issue" else "pull_request",
         command="next",
@@ -67,6 +70,7 @@ def _make_next_label_command(target: ResolvedTarget) -> ResolvedCommand:
         repository_full_name=target.repository_full_name,
         actor="Hiroshiba",
         trigger_label_name="vv-ai:next",
+        trigger_event_created_at=trigger_event_created_at,
         target=target,
     )
 
@@ -76,18 +80,18 @@ def _make_comment(
     body: str,
     author: str,
     created_at: str,
-) -> GitHubComment:
-    return GitHubComment(
+) -> GitHubIssueTimelineEvent:
+    return GitHubIssueTimelineEvent(
         id=comment_id,
-        body=body,
-        author=GitHubActor(login=author),
+        event="commented",
+        actor=GitHubActor(login=author),
         created_at=created_at,
-        updated_at=created_at,
-        url=f"https://github.com/org/repo/issues/1#issuecomment-{comment_id}",
+        body=body,
+        label_name=None,
     )
 
 
-def _make_comments(commands: list[str]) -> list[GitHubComment]:
+def _make_comments(commands: list[str]) -> list[GitHubIssueTimelineEvent]:
     return [
         _make_comment(
             comment_id=index,
@@ -104,16 +108,18 @@ def _make_label_event(
     label_name: str,
     actor: str,
     created_at: str,
-) -> GitHubIssueLabeledEvent:
-    return GitHubIssueLabeledEvent(
+) -> GitHubIssueTimelineEvent:
+    return GitHubIssueTimelineEvent(
         id=event_id,
+        event="labeled",
         label_name=label_name,
         actor=GitHubActor(login=actor),
         created_at=created_at,
+        body=None,
     )
 
 
-def _make_label_events(commands: list[str]) -> list[GitHubIssueLabeledEvent]:
+def _make_label_events(commands: list[str]) -> list[GitHubIssueTimelineEvent]:
     return [
         _make_label_event(
             event_id=index,
@@ -127,31 +133,69 @@ def _make_label_events(commands: list[str]) -> list[GitHubIssueLabeledEvent]:
 
 def _resolve_github(
     target: ResolvedTarget,
-    comments: list[GitHubComment],
-    labeled_events: list[GitHubIssueLabeledEvent],
+    comments: list[GitHubIssueTimelineEvent],
+    labeled_events: list[GitHubIssueTimelineEvent],
     parent_number: int | None,
     comment_id: int | None,
 ) -> ResolvedCommand:
-    github_client = MagicMock()
-    github_client.list_issue_comments.return_value = comments
-    github_client.list_issue_labeled_events.return_value = labeled_events
-    github_client.get_issue_parent_number.return_value = parent_number
-    command = _make_next_command(target, comment_id)
-    with patch("vv_ai.next_command.build_github_client", return_value=github_client):
-        return resolve_next_command(Path("/dummy"), command, _make_config())
+    return _resolve_github_timeline(
+        target,
+        sorted([*comments, *labeled_events], key=lambda event: event.created_at),
+        parent_number,
+        _make_next_command(target, comment_id),
+    )
 
 
 def _resolve_github_label(
     target: ResolvedTarget,
-    comments: list[GitHubComment],
-    labeled_events: list[GitHubIssueLabeledEvent],
+    comments: list[GitHubIssueTimelineEvent],
+    labeled_events: list[GitHubIssueTimelineEvent],
     parent_number: int | None,
 ) -> ResolvedCommand:
+    timeline_events = sorted([*comments, *labeled_events], key=lambda event: event.created_at)
+    next_events = [
+        event
+        for event in timeline_events
+        if event.event == "labeled"
+        and event.label_name == "vv-ai:next"
+        and event.actor.login == "Hiroshiba"
+    ]
+    trigger_event_created_at = (
+        "2026-05-15T00:00:00Z"
+        if len(next_events) == 0
+        else next_events[-1].created_at
+    )
+    return _resolve_github_timeline(
+        target,
+        timeline_events,
+        parent_number,
+        _make_next_label_command(target, trigger_event_created_at),
+    )
+
+
+def _resolve_github_label_at(
+    target: ResolvedTarget,
+    timeline_events: list[GitHubIssueTimelineEvent],
+    parent_number: int | None,
+    trigger_event_created_at: str,
+) -> ResolvedCommand:
+    return _resolve_github_timeline(
+        target,
+        timeline_events,
+        parent_number,
+        _make_next_label_command(target, trigger_event_created_at),
+    )
+
+
+def _resolve_github_timeline(
+    target: ResolvedTarget,
+    timeline_events: list[GitHubIssueTimelineEvent],
+    parent_number: int | None,
+    command: ResolvedCommand,
+) -> ResolvedCommand:
     github_client = MagicMock()
-    github_client.list_issue_comments.return_value = comments
-    github_client.list_issue_labeled_events.return_value = labeled_events
+    github_client.list_issue_timeline_events.return_value = timeline_events
     github_client.get_issue_parent_number.return_value = parent_number
-    command = _make_next_label_command(target)
     with patch("vv_ai.next_command.build_github_client", return_value=github_client):
         return resolve_next_command(Path("/dummy"), command, _make_config())
 
@@ -414,6 +458,27 @@ def test_ラベルrequirements後のコメントnextはarchに解決される() 
     assert result.command == "arch"
 
 
+def test_同じcreated_atでラベルがコメントより前ならラベルを履歴に入れる() -> None:
+    timeline_events = [
+        _make_label_event(
+            10,
+            "vv-ai:requirements",
+            "Hiroshiba",
+            "2026-05-15T00:01:00Z",
+        ),
+        _make_comment(2, "@vv-ai next", "Hiroshiba", "2026-05-15T00:01:00Z"),
+    ]
+
+    result = _resolve_github_timeline(
+        _make_target("issue", "github"),
+        timeline_events,
+        None,
+        _make_next_command(_make_target("issue", "github"), 2),
+    )
+
+    assert result.command == "arch"
+
+
 def test_過去のnextラベルはその時点の履歴状態から実コマンド化される() -> None:
     result = _resolve_github_label(
         _make_target("issue", "github"),
@@ -466,6 +531,45 @@ def test_allowed_users外のgithubラベルは履歴に入らない() -> None:
     )
 
     assert result.command == "confirm"
+
+
+def test_古いnextラベルrunは後続の再付与ラベルを履歴に入れない() -> None:
+    target = _make_target("issue", "github")
+    timeline_events = [
+        _make_label_event(10, "vv-ai:next", "Hiroshiba", "2026-05-15T00:01:00Z"),
+        _make_label_event(
+            11,
+            "vv-ai:requirements",
+            "Hiroshiba",
+            "2026-05-15T00:02:00Z",
+        ),
+        _make_label_event(12, "vv-ai:next", "Hiroshiba", "2026-05-15T00:03:00Z"),
+    ]
+
+    result = _resolve_github_label_at(
+        target,
+        timeline_events,
+        None,
+        "2026-05-15T00:01:00Z",
+    )
+
+    assert result.command == "confirm"
+
+
+def test_nextラベル境界が一意に決まらない場合は失敗する() -> None:
+    target = _make_target("issue", "github")
+    timeline_events = [
+        _make_label_event(10, "vv-ai:next", "Hiroshiba", "2026-05-15T00:01:00Z"),
+        _make_label_event(11, "vv-ai:next", "Hiroshiba", "2026-05-15T00:01:00Z"),
+    ]
+
+    with pytest.raises(NextResolutionError, match="一意"):
+        _resolve_github_label_at(
+            target,
+            timeline_events,
+            None,
+            "2026-05-15T00:01:00Z",
+        )
 
 
 def test_vv_ai以外のラベルは履歴に入らない() -> None:

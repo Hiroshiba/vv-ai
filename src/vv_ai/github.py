@@ -20,6 +20,7 @@ from vv_ai.resolve import ResolvedTarget
 IssueState = Literal["OPEN", "CLOSED"]
 PullRequestState = Literal["OPEN", "CLOSED", "MERGED"]
 GitHubReactionContent = Literal["eyes", "confused"]
+GitHubIssueTimelineEventName = Literal["commented", "labeled"]
 GhTextRunner = Callable[[Sequence[str]], str]
 GhBinaryRunner = Callable[[Sequence[str]], bytes]
 
@@ -72,6 +73,19 @@ class GitHubIssueLabeledEvent(BaseModel):
     label_name: str
     actor: GitHubActor
     created_at: str
+
+
+class GitHubIssueTimelineEvent(BaseModel):
+    """Issue timeline の next 履歴用 event を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    event: GitHubIssueTimelineEventName
+    actor: GitHubActor
+    created_at: str
+    body: str | None = None
+    label_name: str | None = None
 
 
 class GitHubReaction(BaseModel):
@@ -265,6 +279,26 @@ query($owner: String!, $repo: String!, $number: Int!) {
         number: int,
     ) -> list[GitHubIssueLabeledEvent]:
         """Issue timeline の labeled event 一覧を取得する。"""
+        return [
+            GitHubIssueLabeledEvent(
+                id=event.id,
+                label_name=_require_non_empty_optional_text(
+                    event.label_name,
+                    "label_name",
+                ),
+                actor=event.actor,
+                created_at=event.created_at,
+            )
+            for event in self.list_issue_timeline_events(repository_full_name, number)
+            if event.event == "labeled"
+        ]
+
+    def list_issue_timeline_events(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> list[GitHubIssueTimelineEvent]:
+        """Issue timeline の next 履歴用 event 一覧を取得する。"""
         payload = self._run_json(
             [
                 "api",
@@ -276,11 +310,11 @@ query($owner: String!, $repo: String!, $number: Int!) {
         if not isinstance(payload, list):
             raise GitHubClientError("timeline 取得結果の JSON 形式が不正です")
 
-        events: list[GitHubIssueLabeledEvent] = []
+        events: list[GitHubIssueTimelineEvent] = []
         for page in payload:
             if not isinstance(page, list):
                 raise GitHubClientError("timeline 取得結果のページ形式が不正です")
-            events.extend(_build_issue_labeled_event_list(page))
+            events.extend(_build_issue_timeline_event_list(page))
         return events
 
     def create_issue_comment(
@@ -907,6 +941,54 @@ def _build_issue_labeled_event(
     return _validate_model(GitHubIssueLabeledEvent, payload, "labeled event")
 
 
+def _build_issue_timeline_event_list(
+    raw_events: list[object],
+) -> list[GitHubIssueTimelineEvent]:
+    """timeline event 配列 JSON を next 履歴用 model 配列へ変換する。"""
+    events: list[GitHubIssueTimelineEvent] = []
+    for raw_event in raw_events:
+        if not isinstance(raw_event, dict):
+            raise GitHubClientError("timeline event 要素の JSON 形式が不正です")
+        event_name = raw_event.get("event")
+        if event_name == "commented":
+            events.append(_build_issue_commented_timeline_event(raw_event))
+            continue
+        if event_name == "labeled":
+            events.append(_build_issue_labeled_timeline_event(raw_event))
+    return events
+
+
+def _build_issue_commented_timeline_event(
+    raw_event: dict[str, object],
+) -> GitHubIssueTimelineEvent:
+    """commented event JSON を next 履歴用 model へ変換する。"""
+    payload = {
+        "id": raw_event.get("id"),
+        "event": "commented",
+        "actor": _build_rest_user(raw_event.get("user")),
+        "created_at": raw_event.get("created_at"),
+        "body": _coerce_text(raw_event.get("body")),
+        "label_name": None,
+    }
+    return _validate_model(GitHubIssueTimelineEvent, payload, "commented event")
+
+
+def _build_issue_labeled_timeline_event(
+    raw_event: dict[str, object],
+) -> GitHubIssueTimelineEvent:
+    """labeled event JSON を next 履歴用 model へ変換する。"""
+    label = _require_mapping(raw_event.get("label"), "label")
+    payload = {
+        "id": raw_event.get("id"),
+        "event": "labeled",
+        "actor": _build_rest_user(raw_event.get("actor")),
+        "created_at": raw_event.get("created_at"),
+        "body": None,
+        "label_name": label.get("name"),
+    }
+    return _validate_model(GitHubIssueTimelineEvent, payload, "labeled event")
+
+
 def _build_reaction(raw_reaction: dict[str, object]) -> GitHubReaction:
     """reaction JSON を model へ変換する。"""
     payload = {
@@ -1083,6 +1165,13 @@ def _require_non_empty_text(value: str, field_name: str) -> str:
     if value.strip() == "":
         raise GitHubClientError(f"`{field_name}` は空文字にできません")
     return value
+
+
+def _require_non_empty_optional_text(value: str | None, field_name: str) -> str:
+    """None でない空でない文字列を返す。"""
+    if value is None:
+        raise GitHubClientError(f"`{field_name}` が見つかりません")
+    return _require_non_empty_text(value, field_name)
 
 
 def _require_mapping(value: object, field_name: str) -> dict[str, object]:

@@ -201,6 +201,39 @@ def test_list_issue_labeled_events_builds_models() -> None:
     assert events[1].label_name == "bug"
 
 
+def test_list_issue_timeline_events_builds_comment_and_label_models() -> None:
+    """list_issue_timeline_events は comment と label を返却順で model 化する。"""
+    client = GitHubClient(
+        lambda args: json.dumps(
+            [
+                [
+                    {
+                        "id": 201,
+                        "event": "commented",
+                        "body": "@vv-ai requirements",
+                        "user": {"login": "Hiroshiba"},
+                        "created_at": "2026-05-17T16:00:00Z",
+                    },
+                    {
+                        "id": 202,
+                        "event": "labeled",
+                        "label": {"name": "vv-ai:next"},
+                        "actor": {"login": "Hiroshiba"},
+                        "created_at": "2026-05-17T16:00:00Z",
+                    },
+                ]
+            ]
+        ),
+        lambda args: b"",
+    )
+
+    events = client.list_issue_timeline_events("org/repo", 1)
+
+    assert [event.event for event in events] == ["commented", "labeled"]
+    assert events[0].body == "@vv-ai requirements"
+    assert events[1].label_name == "vv-ai:next"
+
+
 def test_list_issue_labeled_events_rejects_invalid_page() -> None:
     """list_issue_labeled_events は不正なページ形式を拒否する。"""
     client = GitHubClient(lambda args: json.dumps([{"event": "labeled"}]), lambda args: b"")

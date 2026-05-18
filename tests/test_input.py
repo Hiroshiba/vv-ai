@@ -267,7 +267,7 @@ class TestBuildRawInputFromIssueLabeledEvent:
     def _make_event(self, label_name: str) -> IssueLabeledEvent:
         return IssueLabeledEvent.model_validate({
             "action": "labeled",
-            "issue": {"number": 42},
+            "issue": {"number": 42, "updated_at": "2026-05-18T04:00:00Z"},
             "label": {"name": label_name},
             "repository": {"full_name": "org/repo"},
             "sender": {"login": "Hiroshiba"},
@@ -289,6 +289,7 @@ class TestBuildRawInputFromIssueLabeledEvent:
         assert raw.repository_full_name == "org/repo"
         assert raw.actor == "Hiroshiba"
         assert raw.trigger_label_name == "vv-ai:confirm"
+        assert raw.trigger_event_created_at == "2026-05-18T04:00:00Z"
 
     def test_issue_labeled_reply_without_instruction(self) -> None:
         raw = build_raw_input_from_issue_labeled_event(
@@ -324,7 +325,7 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
     def _make_event(self, label_name: str) -> PullRequestLabeledEvent:
         return PullRequestLabeledEvent.model_validate({
             "action": "labeled",
-            "pull_request": {"number": 43},
+            "pull_request": {"number": 43, "updated_at": "2026-05-18T04:00:00Z"},
             "label": {"name": label_name},
             "repository": {"full_name": "org/repo"},
             "sender": {"login": "Hiroshiba"},
@@ -342,6 +343,7 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
         assert raw.repository_full_name == "org/repo"
         assert raw.actor == "Hiroshiba"
         assert raw.trigger_label_name == "vv-ai:review"
+        assert raw.trigger_event_created_at == "2026-05-18T04:00:00Z"
 
     def test_pull_request_labeled_next_without_instruction(self) -> None:
         raw = build_raw_input_from_pull_request_labeled_event(
@@ -365,7 +367,7 @@ class TestBuildRawInputFromEventFile:
         event_file.write_text(
             json.dumps({
                 "action": "labeled",
-                "issue": {"number": 42},
+                "issue": {"number": 42, "updated_at": "2026-05-18T04:00:00Z"},
                 "label": {"name": "vv-ai:confirm"},
                 "repository": {"full_name": "org/repo"},
                 "sender": {"login": "Hiroshiba"},
@@ -383,7 +385,7 @@ class TestBuildRawInputFromEventFile:
         event_file.write_text(
             json.dumps({
                 "action": "labeled",
-                "pull_request": {"number": 43},
+                "pull_request": {"number": 43, "updated_at": "2026-05-18T04:00:00Z"},
                 "label": {"name": "vv-ai:review"},
                 "repository": {"full_name": "org/repo"},
                 "sender": {"login": "Hiroshiba"},
@@ -569,9 +571,11 @@ class TestResolveRawInput:
             repository_full_name="org/repo",
             actor="Hiroshiba",
             trigger_label_name="vv-ai:confirm",
+            trigger_event_created_at="2026-05-18T04:00:00Z",
         )
         resolved = resolve_raw_input(raw)
         assert resolved.trigger_label_name == "vv-ai:confirm"
+        assert resolved.trigger_event_created_at == "2026-05-18T04:00:00Z"
 
     def test_empty_instruction_normalized_to_none(self) -> None:
         raw = RawInput(
