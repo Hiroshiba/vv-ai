@@ -3,13 +3,27 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from vv_ai.config import VVAIConfig
-from vv_ai.github import GitHubClient, GitHubComment, build_github_client
-from vv_ai.input import CommandName, InputError, parse_comment_invocation
+from vv_ai.github import (
+    GitHubClient,
+    GitHubComment,
+    GitHubIssueLabeledEvent,
+    build_github_client,
+)
+from vv_ai.input import (
+    CommandName,
+    InputError,
+    parse_comment_invocation,
+    parse_label_invocation,
+)
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
+
+HistorySource = Literal["comment", "label"]
+HistorySortKey = tuple[str, int, int]
 
 
 class NextResolutionError(Exception):
@@ -24,6 +38,7 @@ class NextHistoryEntry(BaseModel):
     command: CommandName
     created_at: str
     id: int | None
+    source: HistorySource
 
 
 def resolve_next_command(
@@ -105,41 +120,115 @@ def _load_github_history(
         comments = github_client.list_issue_comments(repository_full_name, number)
     except Exception as exc:
         raise NextResolutionError("コメント履歴の取得に失敗しました") from exc
+    try:
+        labeled_events = github_client.list_issue_labeled_events(
+            repository_full_name,
+            number,
+        )
+    except Exception as exc:
+        raise NextResolutionError("ラベル履歴の取得に失敗しました") from exc
 
-    current_sort_key = _resolve_current_comment_sort_key(command, comments)
-    sorted_comments = sorted(comments, key=lambda comment: (comment.created_at, comment.id))
+    current_sort_key = _resolve_current_history_sort_key(
+        command,
+        comments,
+        labeled_events,
+    )
     history: list[NextHistoryEntry] = []
-    for comment in sorted_comments:
-        if not _is_before_current_comment(comment, current_sort_key):
-            continue
-        entry = _build_github_history_entry(target, config, comment)
+    for comment in comments:
+        entry = _build_github_comment_history_entry(target, config, comment)
         if entry is not None:
             history.append(entry)
-    return history
+    for labeled_event in labeled_events:
+        entry = _build_github_label_history_entry(target, config, labeled_event)
+        if entry is not None:
+            history.append(entry)
+
+    return sorted(
+        [
+            entry
+            for entry in history
+            if _is_before_current_history(entry, current_sort_key)
+        ],
+        key=_history_sort_key,
+    )
+
+
+def _resolve_current_history_sort_key(
+    command: ResolvedCommand,
+    comments: list[GitHubComment],
+    labeled_events: list[GitHubIssueLabeledEvent],
+) -> HistorySortKey | None:
+    if command.comment_id is not None:
+        return _resolve_current_comment_sort_key(command, comments)
+    if command.trigger_label_name is not None:
+        return _resolve_current_label_sort_key(command, labeled_events)
+    return None
 
 
 def _resolve_current_comment_sort_key(
     command: ResolvedCommand,
     comments: list[GitHubComment],
-) -> tuple[str, int] | None:
-    if command.comment_id is None:
-        return None
+) -> HistorySortKey:
     for comment in comments:
         if comment.id == command.comment_id:
-            return comment.created_at, comment.id
+            return _history_sort_key(
+                NextHistoryEntry(
+                    command=command.command,
+                    created_at=comment.created_at,
+                    id=comment.id,
+                    source="comment",
+                )
+            )
     raise NextResolutionError("現在処理中のコメントが履歴内に見つかりません")
 
 
-def _is_before_current_comment(
-    comment: GitHubComment,
-    current_sort_key: tuple[str, int] | None,
+def _resolve_current_label_sort_key(
+    command: ResolvedCommand,
+    labeled_events: list[GitHubIssueLabeledEvent],
+) -> HistorySortKey:
+    if command.trigger_label_name is None:
+        raise NextResolutionError("現在処理中のラベル名がありません")
+    if command.actor is None:
+        raise NextResolutionError("現在処理中のラベル actor がありません")
+
+    current_events = [
+        labeled_event
+        for labeled_event in labeled_events
+        if labeled_event.label_name == command.trigger_label_name
+        and labeled_event.actor.login == command.actor
+    ]
+    if len(current_events) == 0:
+        raise NextResolutionError("現在処理中のラベル event が履歴内に見つかりません")
+    return max(
+        (
+            _history_sort_key(
+                NextHistoryEntry(
+                    command=command.command,
+                    created_at=labeled_event.created_at,
+                    id=labeled_event.id,
+                    source="label",
+                )
+            )
+            for labeled_event in current_events
+        )
+    )
+
+
+def _is_before_current_history(
+    entry: NextHistoryEntry,
+    current_sort_key: HistorySortKey | None,
 ) -> bool:
     if current_sort_key is None:
         return True
-    return (comment.created_at, comment.id) < current_sort_key
+    return _history_sort_key(entry) < current_sort_key
 
 
-def _build_github_history_entry(
+def _history_sort_key(entry: NextHistoryEntry) -> HistorySortKey:
+    source_order = 0 if entry.source == "comment" else 1
+    return entry.created_at, source_order, entry.id or 0
+
+
+def _build_github_comment_history_entry(
     target: ResolvedTarget,
     config: VVAIConfig,
     comment: GitHubComment,
@@ -155,6 +244,27 @@ def _build_github_history_entry(
         command=command,
         created_at=comment.created_at,
         id=comment.id,
+        source="comment",
+    )
+
+
+def _build_github_label_history_entry(
+    target: ResolvedTarget,
+    config: VVAIConfig,
+    labeled_event: GitHubIssueLabeledEvent,
+) -> NextHistoryEntry | None:
+    if labeled_event.actor.login not in config.allowed_users:
+        return None
+    command = _parse_label_history_command(labeled_event.label_name)
+    if command is None:
+        return None
+    if _should_ignore_command(target, command):
+        return None
+    return NextHistoryEntry(
+        command=command,
+        created_at=labeled_event.created_at,
+        id=labeled_event.id,
+        source="label",
     )
 
 
@@ -181,6 +291,7 @@ def _load_local_history(repo_root: Path, target: ResolvedTarget) -> list[NextHis
                 command=command,
                 created_at=comment_file.name,
                 id=None,
+                source="comment",
             )
         )
     return history
@@ -189,6 +300,13 @@ def _load_local_history(repo_root: Path, target: ResolvedTarget) -> list[NextHis
 def _parse_history_command(body: str) -> CommandName | None:
     try:
         return parse_comment_invocation(body).command
+    except InputError:
+        return None
+
+
+def _parse_label_history_command(label_name: str) -> CommandName | None:
+    try:
+        return parse_label_invocation(label_name)
     except InputError:
         return None
 

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from vv_ai.config import VVAIConfig
-from vv_ai.github import GitHubActor, GitHubComment
+from vv_ai.github import GitHubActor, GitHubComment, GitHubIssueLabeledEvent
 from vv_ai.next_command import NextResolutionError, resolve_next_command
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 
@@ -57,6 +57,20 @@ def _make_next_command(
     return _make_command("next", target, comment_id)
 
 
+def _make_next_label_command(target: ResolvedTarget) -> ResolvedCommand:
+    return ResolvedCommand(
+        event_name="issues" if target.kind == "issue" else "pull_request",
+        command="next",
+        target_type=target.kind,
+        target_number=target.number,
+        has_target=True,
+        repository_full_name=target.repository_full_name,
+        actor="Hiroshiba",
+        trigger_label_name="vv-ai:next",
+        target=target,
+    )
+
+
 def _make_comment(
     comment_id: int,
     body: str,
@@ -85,16 +99,59 @@ def _make_comments(commands: list[str]) -> list[GitHubComment]:
     ]
 
 
+def _make_label_event(
+    event_id: int,
+    label_name: str,
+    actor: str,
+    created_at: str,
+) -> GitHubIssueLabeledEvent:
+    return GitHubIssueLabeledEvent(
+        id=event_id,
+        label_name=label_name,
+        actor=GitHubActor(login=actor),
+        created_at=created_at,
+    )
+
+
+def _make_label_events(commands: list[str]) -> list[GitHubIssueLabeledEvent]:
+    return [
+        _make_label_event(
+            event_id=index,
+            label_name=f"vv-ai:{command}",
+            actor="Hiroshiba",
+            created_at=f"2026-05-15T00:{index:02}:30Z",
+        )
+        for index, command in enumerate(commands, start=1)
+    ]
+
+
 def _resolve_github(
     target: ResolvedTarget,
     comments: list[GitHubComment],
+    labeled_events: list[GitHubIssueLabeledEvent],
     parent_number: int | None,
     comment_id: int | None,
 ) -> ResolvedCommand:
     github_client = MagicMock()
     github_client.list_issue_comments.return_value = comments
+    github_client.list_issue_labeled_events.return_value = labeled_events
     github_client.get_issue_parent_number.return_value = parent_number
     command = _make_next_command(target, comment_id)
+    with patch("vv_ai.next_command.build_github_client", return_value=github_client):
+        return resolve_next_command(Path("/dummy"), command, _make_config())
+
+
+def _resolve_github_label(
+    target: ResolvedTarget,
+    comments: list[GitHubComment],
+    labeled_events: list[GitHubIssueLabeledEvent],
+    parent_number: int | None,
+) -> ResolvedCommand:
+    github_client = MagicMock()
+    github_client.list_issue_comments.return_value = comments
+    github_client.list_issue_labeled_events.return_value = labeled_events
+    github_client.get_issue_parent_number.return_value = parent_number
+    command = _make_next_label_command(target)
     with patch("vv_ai.next_command.build_github_client", return_value=github_client):
         return resolve_next_command(Path("/dummy"), command, _make_config())
 
@@ -108,13 +165,13 @@ def test_next以外は同じresolved_commandを返す() -> None:
 
 
 def test_github通常issueの履歴なしnextはconfirmに解決される() -> None:
-    result = _resolve_github(_make_target("issue", "github"), [], None, None)
+    result = _resolve_github(_make_target("issue", "github"), [], [], None, None)
 
     assert result.command == "confirm"
 
 
 def test_githubサブissueの履歴なしnextはimplementに解決される() -> None:
-    result = _resolve_github(_make_target("issue", "github"), [], 10, None)
+    result = _resolve_github(_make_target("issue", "github"), [], [], 10, None)
 
     assert result.command == "implement"
 
@@ -125,6 +182,7 @@ def test_issueの設計工程を履歴から再生する() -> None:
     result = _resolve_github(
         target,
         _make_comments(["confirm", "requirements", "arch", "detail"]),
+        [],
         None,
         None,
     )
@@ -137,6 +195,7 @@ def test_issueのbreakdown後のnextは失敗する() -> None:
         _resolve_github(
             _make_target("issue", "github"),
             _make_comments(["confirm", "requirements", "arch", "detail", "breakdown"]),
+            [],
             None,
             None,
         )
@@ -147,13 +206,14 @@ def test_issueのimplement後のnextは失敗する() -> None:
         _resolve_github(
             _make_target("issue", "github"),
             _make_comments(["implement"]),
+            [],
             None,
             None,
         )
 
 
 def test_prの履歴なしnextはreviewに解決される() -> None:
-    result = _resolve_github(_make_target("pr", "github"), [], None, None)
+    result = _resolve_github(_make_target("pr", "github"), [], [], None, None)
 
     assert result.command == "review"
 
@@ -162,6 +222,7 @@ def test_prのreviewとimplementを履歴から再生する() -> None:
     result = _resolve_github(
         _make_target("pr", "github"),
         _make_comments(["review", "implement"]),
+        [],
         None,
         None,
     )
@@ -173,6 +234,7 @@ def test_過去の連続nextはその時点の履歴状態から実コマンド�
     result = _resolve_github(
         _make_target("issue", "github"),
         _make_comments(["next", "next", "next"]),
+        [],
         None,
         None,
     )
@@ -194,6 +256,7 @@ def test_解決できない過去nextは履歴状態を更新しない() -> None
                 "confirm",
             ]
         ),
+        [],
         None,
         None,
     )
@@ -206,7 +269,7 @@ def test_allowed_users外のgithubコメントは履歴に入らない() -> None
         _make_comment(1, "@vv-ai confirm", "other-user", "2026-05-15T00:01:00Z"),
     ]
 
-    result = _resolve_github(_make_target("issue", "github"), comments, None, None)
+    result = _resolve_github(_make_target("issue", "github"), comments, [], None, None)
 
     assert result.command == "confirm"
 
@@ -216,7 +279,7 @@ def test_解析不能コメントは履歴に入らない() -> None:
         _make_comment(1, "hello", "Hiroshiba", "2026-05-15T00:01:00Z"),
     ]
 
-    result = _resolve_github(_make_target("issue", "github"), comments, None, None)
+    result = _resolve_github(_make_target("issue", "github"), comments, [], None, None)
 
     assert result.command == "confirm"
 
@@ -225,6 +288,7 @@ def test_replyとissueは履歴に入らない() -> None:
     result = _resolve_github(
         _make_target("issue", "github"),
         _make_comments(["reply", "issue"]),
+        [],
         None,
         None,
     )
@@ -236,6 +300,7 @@ def test_issue履歴ではreviewを無視する() -> None:
     result = _resolve_github(
         _make_target("issue", "github"),
         _make_comments(["review"]),
+        [],
         None,
         None,
     )
@@ -247,6 +312,7 @@ def test_pr履歴では設計工程を無視する() -> None:
     result = _resolve_github(
         _make_target("pr", "github"),
         _make_comments(["confirm", "requirements", "arch", "detail", "breakdown"]),
+        [],
         None,
         None,
     )
@@ -261,7 +327,7 @@ def test_github_issue_comment起動では現在コメントより後を履歴に
         _make_comment(3, "@vv-ai requirements", "Hiroshiba", "2026-05-15T00:03:00Z"),
     ]
 
-    result = _resolve_github(_make_target("issue", "github"), comments, None, 2)
+    result = _resolve_github(_make_target("issue", "github"), comments, [], None, 2)
 
     assert result.command == "requirements"
 
@@ -273,14 +339,14 @@ def test_同じcreated_atのコメントはidで境界を切る() -> None:
         _make_comment(12, "@vv-ai requirements", "Hiroshiba", "2026-05-15T00:01:00Z"),
     ]
 
-    result = _resolve_github(_make_target("issue", "github"), comments, None, 11)
+    result = _resolve_github(_make_target("issue", "github"), comments, [], None, 11)
 
     assert result.command == "requirements"
 
 
 def test_comment_idがあるのに現在コメントが見つからない場合は失敗する() -> None:
     with pytest.raises(NextResolutionError):
-        _resolve_github(_make_target("issue", "github"), [], None, 999)
+        _resolve_github(_make_target("issue", "github"), [], [], None, 999)
 
 
 def test_comment_idがnoneの場合は履歴全体を使う() -> None:
@@ -289,9 +355,179 @@ def test_comment_idがnoneの場合は履歴全体を使う() -> None:
         _make_comment(2, "@vv-ai requirements", "Hiroshiba", "2026-05-15T00:02:00Z"),
     ]
 
-    result = _resolve_github(_make_target("issue", "github"), comments, None, None)
+    result = _resolve_github(_make_target("issue", "github"), comments, [], None, None)
 
     assert result.command == "arch"
+
+
+def test_issueのラベルrequirements後のnextラベルはarchに解決される() -> None:
+    result = _resolve_github_label(
+        _make_target("issue", "github"),
+        [],
+        _make_label_events(["requirements", "next"]),
+        None,
+    )
+
+    assert result.command == "arch"
+
+
+def test_commentとラベル履歴をcreated_at順に再生する() -> None:
+    comments = [
+        _make_comment(1, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:01:00Z"),
+        _make_comment(2, "@vv-ai arch", "Hiroshiba", "2026-05-15T00:03:00Z"),
+    ]
+    labeled_events = [
+        _make_label_event(
+            10,
+            "vv-ai:requirements",
+            "Hiroshiba",
+            "2026-05-15T00:02:00Z",
+        ),
+        _make_label_event(11, "vv-ai:next", "Hiroshiba", "2026-05-15T00:04:00Z"),
+    ]
+
+    result = _resolve_github_label(
+        _make_target("issue", "github"),
+        comments,
+        labeled_events,
+        None,
+    )
+
+    assert result.command == "detail"
+
+
+def test_ラベルrequirements後のコメントnextはarchに解決される() -> None:
+    comments = [
+        _make_comment(2, "@vv-ai next", "Hiroshiba", "2026-05-15T00:02:00Z"),
+    ]
+    labeled_events = [
+        _make_label_event(
+            10,
+            "vv-ai:requirements",
+            "Hiroshiba",
+            "2026-05-15T00:01:00Z",
+        ),
+    ]
+
+    result = _resolve_github(_make_target("issue", "github"), comments, labeled_events, None, 2)
+
+    assert result.command == "arch"
+
+
+def test_過去のnextラベルはその時点の履歴状態から実コマンド化される() -> None:
+    result = _resolve_github_label(
+        _make_target("issue", "github"),
+        [],
+        _make_label_events(["next", "next", "next", "next"]),
+        None,
+    )
+
+    assert result.command == "detail"
+
+
+def test_prのreviewラベル後のnextラベルはimplementに解決される() -> None:
+    result = _resolve_github_label(
+        _make_target("pr", "github"),
+        [],
+        _make_label_events(["review", "next"]),
+        None,
+    )
+
+    assert result.command == "implement"
+
+
+def test_prのimplementラベル後のnextラベルはreviewに解決される() -> None:
+    result = _resolve_github_label(
+        _make_target("pr", "github"),
+        [],
+        _make_label_events(["implement", "next"]),
+        None,
+    )
+
+    assert result.command == "review"
+
+
+def test_allowed_users外のgithubラベルは履歴に入らない() -> None:
+    labeled_events = [
+        _make_label_event(
+            10,
+            "vv-ai:requirements",
+            "other-user",
+            "2026-05-15T00:01:00Z",
+        ),
+        _make_label_event(11, "vv-ai:next", "Hiroshiba", "2026-05-15T00:02:00Z"),
+    ]
+
+    result = _resolve_github_label(
+        _make_target("issue", "github"),
+        [],
+        labeled_events,
+        None,
+    )
+
+    assert result.command == "confirm"
+
+
+def test_vv_ai以外のラベルは履歴に入らない() -> None:
+    labeled_events = [
+        _make_label_event(10, "bug", "Hiroshiba", "2026-05-15T00:01:00Z"),
+        _make_label_event(11, "vv-ai:next", "Hiroshiba", "2026-05-15T00:02:00Z"),
+    ]
+
+    result = _resolve_github_label(
+        _make_target("issue", "github"),
+        [],
+        labeled_events,
+        None,
+    )
+
+    assert result.command == "confirm"
+
+
+def test_github_issue_comment起動では現在コメントより後のラベルを履歴に入れない() -> None:
+    comments = [
+        _make_comment(1, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:01:00Z"),
+        _make_comment(2, "@vv-ai next", "Hiroshiba", "2026-05-15T00:02:00Z"),
+    ]
+    labeled_events = [
+        _make_label_event(
+            10,
+            "vv-ai:requirements",
+            "Hiroshiba",
+            "2026-05-15T00:03:00Z",
+        ),
+    ]
+
+    result = _resolve_github(
+        _make_target("issue", "github"),
+        comments,
+        labeled_events,
+        None,
+        2,
+    )
+
+    assert result.command == "requirements"
+
+
+def test_nextラベル起動では現在ラベル自身を履歴に入れない() -> None:
+    result = _resolve_github_label(
+        _make_target("issue", "github"),
+        [],
+        _make_label_events(["requirements", "next"]),
+        None,
+    )
+
+    assert result.command == "arch"
+
+
+def test_nextラベル起動で現在ラベルが見つからない場合は失敗する() -> None:
+    with pytest.raises(NextResolutionError):
+        _resolve_github_label(
+            _make_target("issue", "github"),
+            [],
+            [],
+            None,
+        )
 
 
 def test_local_targetはcomments_mdをファイル名順に読む(tmp_path: Path) -> None:

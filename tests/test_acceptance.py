@@ -17,6 +17,7 @@ from vv_ai.github import (
     GitHubActor,
     GitHubComment,
     GitHubIssue,
+    GitHubIssueLabeledEvent,
     GitHubPullRequest,
     RepoInfo,
 )
@@ -133,6 +134,16 @@ def _make_github_comment(comment_id: int, body: str) -> GitHubComment:
     )
 
 
+def _make_github_labeled_event(event_id: int, label_name: str) -> GitHubIssueLabeledEvent:
+    """テスト用 GitHubIssueLabeledEvent を生成する。"""
+    return GitHubIssueLabeledEvent(
+        id=event_id,
+        label_name=label_name,
+        actor=GitHubActor(login="Hiroshiba"),
+        created_at="2026-05-08T00:00:00Z",
+    )
+
+
 def _make_ready_execution_for_label(dry_run: bool) -> ReadyExecution:
     """ラベル起動済みの ReadyExecution を生成する。"""
     target = ResolvedTarget(
@@ -195,6 +206,7 @@ def _enter_common_patches(
         )
         github_client.get_issue.return_value = _make_github_issue("org/repo", 1)
         github_client.list_issue_comments.return_value = []
+        github_client.list_issue_labeled_events.return_value = []
     return execute_provider
 
 
@@ -233,6 +245,7 @@ def _enter_next_patches(
     )
     github_client.get_issue.return_value = _make_github_issue("org/repo", 1)
     github_client.list_issue_comments.return_value = []
+    github_client.list_issue_labeled_events.return_value = []
     return resolve_session, execute_provider
 
 
@@ -687,6 +700,9 @@ class TestLabelEvent:
 
         with contextlib.ExitStack() as stack:
             _enter_next_patches(stack, tmp_path, session, result, mock_gh)
+            mock_gh.list_issue_labeled_events.return_value = [
+                _make_github_labeled_event(1000, "vv-ai:next"),
+            ]
             exit_code = main(argv)
 
         assert exit_code == 0
@@ -737,6 +753,9 @@ class TestLabelEvent:
 
         with contextlib.ExitStack() as stack:
             _enter_next_patches(stack, tmp_path, session, result, mock_gh)
+            mock_gh.list_issue_labeled_events.return_value = [
+                _make_github_labeled_event(1000, "vv-ai:next"),
+            ]
             exit_code = main(argv)
 
         assert exit_code == 0

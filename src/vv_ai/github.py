@@ -63,6 +63,17 @@ class GitHubComment(BaseModel):
     url: str
 
 
+class GitHubIssueLabeledEvent(BaseModel):
+    """Issue timeline の labeled event を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    label_name: str
+    actor: GitHubActor
+    created_at: str
+
+
 class GitHubReaction(BaseModel):
     """Issue comment reaction を表す。"""
 
@@ -247,6 +258,30 @@ query($owner: String!, $repo: String!, $number: Int!) {
                 raise GitHubClientError("コメント取得結果のページ形式が不正です")
             comments.extend(_build_comment_list(page))
         return comments
+
+    def list_issue_labeled_events(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> list[GitHubIssueLabeledEvent]:
+        """Issue timeline の labeled event 一覧を取得する。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--paginate",
+                "--slurp",
+                _build_issue_timeline_path(repository_full_name, number),
+            ]
+        )
+        if not isinstance(payload, list):
+            raise GitHubClientError("timeline 取得結果の JSON 形式が不正です")
+
+        events: list[GitHubIssueLabeledEvent] = []
+        for page in payload:
+            if not isinstance(page, list):
+                raise GitHubClientError("timeline 取得結果のページ形式が不正です")
+            events.extend(_build_issue_labeled_event_list(page))
+        return events
 
     def create_issue_comment(
         self,
@@ -844,6 +879,34 @@ def _build_comment(raw_comment: object) -> GitHubComment:
     return _validate_model(GitHubComment, payload, "コメント")
 
 
+def _build_issue_labeled_event_list(
+    raw_events: list[object],
+) -> list[GitHubIssueLabeledEvent]:
+    """timeline event 配列 JSON を labeled event model 配列へ変換する。"""
+    events: list[GitHubIssueLabeledEvent] = []
+    for raw_event in raw_events:
+        if not isinstance(raw_event, dict):
+            raise GitHubClientError("timeline event 要素の JSON 形式が不正です")
+        if raw_event.get("event") != "labeled":
+            continue
+        events.append(_build_issue_labeled_event(raw_event))
+    return events
+
+
+def _build_issue_labeled_event(
+    raw_event: dict[str, object],
+) -> GitHubIssueLabeledEvent:
+    """labeled event JSON を model へ変換する。"""
+    label = _require_mapping(raw_event.get("label"), "label")
+    payload = {
+        "id": raw_event.get("id"),
+        "label_name": label.get("name"),
+        "actor": _build_rest_user(raw_event.get("actor")),
+        "created_at": raw_event.get("created_at"),
+    }
+    return _validate_model(GitHubIssueLabeledEvent, payload, "labeled event")
+
+
 def _build_reaction(raw_reaction: dict[str, object]) -> GitHubReaction:
     """reaction JSON を model へ変換する。"""
     payload = {
@@ -944,6 +1007,14 @@ def _build_issue_comments_path(repository_full_name: str, number: int) -> str:
     return (
         f"repos/{_require_repository_full_name(repository_full_name)}"
         f"/issues/{_require_positive_id(number, 'number')}/comments"
+    )
+
+
+def _build_issue_timeline_path(repository_full_name: str, number: int) -> str:
+    """Issue timeline endpoint を返す。"""
+    return (
+        f"repos/{_require_repository_full_name(repository_full_name)}"
+        f"/issues/{_require_positive_id(number, 'number')}/timeline"
     )
 
 

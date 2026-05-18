@@ -146,6 +146,101 @@ def test_get_repository_blob_rejects_unknown_encoding() -> None:
         client.get_repository_blob("org/repo", "abc123")
 
 
+def test_list_issue_labeled_events_builds_models() -> None:
+    """list_issue_labeled_events は labeled event を model に変換する。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            [
+                [
+                    {
+                        "id": 101,
+                        "event": "labeled",
+                        "label": {"name": "vv-ai:requirements"},
+                        "actor": {"login": "Hiroshiba"},
+                        "created_at": "2026-05-17T16:00:00Z",
+                    },
+                    {
+                        "id": 102,
+                        "event": "renamed",
+                        "actor": {"login": "Hiroshiba"},
+                        "created_at": "2026-05-17T16:01:00Z",
+                    },
+                ],
+                [
+                    {
+                        "id": 103,
+                        "event": "labeled",
+                        "label": {"name": "bug"},
+                        "actor": {"login": "other-user"},
+                        "created_at": "2026-05-17T16:02:00Z",
+                    },
+                ],
+            ]
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    events = client.list_issue_labeled_events("org/repo", 1)
+
+    assert captured_args == [
+        "gh",
+        "api",
+        "--paginate",
+        "--slurp",
+        "repos/org/repo/issues/1/timeline",
+    ]
+    assert len(events) == 2
+    assert events[0].id == 101
+    assert events[0].label_name == "vv-ai:requirements"
+    assert events[0].actor.login == "Hiroshiba"
+    assert events[0].created_at == "2026-05-17T16:00:00Z"
+    assert events[1].id == 103
+    assert events[1].label_name == "bug"
+
+
+def test_list_issue_labeled_events_rejects_invalid_page() -> None:
+    """list_issue_labeled_events は不正なページ形式を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps([{"event": "labeled"}]), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match="ページ形式"):
+        client.list_issue_labeled_events("org/repo", 1)
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            [[{"id": 101, "event": "labeled", "actor": {"login": "Hiroshiba"}}]],
+            "label",
+        ),
+        (
+            [
+                [
+                    {
+                        "id": 101,
+                        "event": "labeled",
+                        "label": {"name": "vv-ai:next"},
+                    }
+                ]
+            ],
+            "REST user",
+        ),
+    ],
+)
+def test_list_issue_labeled_events_rejects_invalid_event(
+    payload: object,
+    message: str,
+) -> None:
+    """list_issue_labeled_events は不正な event 要素を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps(payload), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match=message):
+        client.list_issue_labeled_events("org/repo", 1)
+
+
 def test_remove_issue_label_uses_delete_method_with_encoded_label() -> None:
     """remove_issue_label は encode 済み label path を DELETE する。"""
     captured_args: list[Sequence[str]] = []
