@@ -295,6 +295,71 @@ def test_run_sync_command_pushes_after_merge_commit(tmp_path: Path) -> None:
     push_branch.assert_called_once_with(clone, "feature", "token")
 
 
+def test_run_sync_command_passes_consistency_result_to_final_prompt_when_session_is_new(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は session 継続なしなら整合性確認結果を最終 prompt に渡す。"""
+    source = _init_repo_at(tmp_path / "source")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "feature.txt", "feature\n")
+    _run_git(source, "add", "feature.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "checkout", "main")
+    clone = _clone_main_only(tmp_path, source, "sync-final-prompt")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+    prompts: list[str] = []
+
+    def execute_provider_mock(
+        repo_root: Path,
+        ready_execution: ReadyExecution,
+        env: object,
+        preflight_duration_seconds: float,
+        provider_prompt: str,
+    ) -> ExecutionResult:
+        prompts.append(provider_prompt)
+        if len(prompts) == 1:
+            return _make_execution_result("success", "整合性確認で追従漏れを修正しました")
+        return _make_execution_result("success", "BODY:\nsync 完了")
+
+    with patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "success"
+    assert "整合性確認 AI の出力:\n整合性確認で追従漏れを修正しました" in prompts[1]
+
+
+def test_run_sync_command_rejects_consistency_marker_before_commit(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は整合性修正 commit 前に conflict marker を拒否する。"""
+    source = _init_repo_at(tmp_path / "source")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "feature.txt", "feature\n")
+    _run_git(source, "add", "feature.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "checkout", "main")
+    clone = _clone_main_only(tmp_path, source, "sync-consistency-marker")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+
+    def execute_provider_mock(
+        repo_root: Path,
+        ready_execution: ReadyExecution,
+        env: object,
+        preflight_duration_seconds: float,
+        provider_prompt: str,
+    ) -> ExecutionResult:
+        _write(repo_root, "marker.txt", "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> main\n")
+        return _make_execution_result("success", "整合性修正")
+
+    with patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "failure"
+    assert result.response_text == "整合性確認 AI が conflict marker を残しました: marker.txt"
+
+
 def test_run_sync_command_rejects_ai_staging_conflict_file(tmp_path: Path) -> None:
     """run_sync_command は conflict 解消 AI の stage を拒否する。"""
     source = _make_conflict_source(tmp_path)

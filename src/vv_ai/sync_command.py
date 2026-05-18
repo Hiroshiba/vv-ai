@@ -150,7 +150,19 @@ def run_sync_command(
             return _build_sync_result("failure", runtime, "整合性確認 AI が commit しました")
         if len(list_staged_files(repo_root)) > 0:
             return _build_sync_result("failure", runtime, "整合性確認 AI が stage しました")
-        if len(list_changed_files(repo_root)) > 0:
+        changed_files_after_consistency = list_changed_files(repo_root)
+        marker_files_after_consistency = list_conflict_marker_files(
+            repo_root,
+            changed_files_after_consistency,
+        )
+        if len(marker_files_after_consistency) > 0:
+            return _build_sync_result(
+                "failure",
+                runtime,
+                "整合性確認 AI が conflict marker を残しました: "
+                + ", ".join(marker_files_after_consistency),
+            )
+        if len(changed_files_after_consistency) > 0:
             runtime.consistency_commit_created = commit_all_changes(
                 repo_root,
                 "chore: sync 整合性を修正する",
@@ -206,7 +218,14 @@ def run_sync_command(
             ready_execution,
             env,
             preflight_duration_seconds,
-            _build_final_comment_prompt(facts, runtime.github_state_text),
+            _build_final_comment_prompt(
+                facts,
+                runtime.github_state_text,
+                _resolve_explicit_consistency_result(
+                    ready_execution,
+                    consistency_result,
+                ),
+            ),
             runtime,
         )
         if comment_result.status != "success":
@@ -406,10 +425,16 @@ def _build_consistency_prompt(head_ref_name: str, base_ref_name: str) -> str:
 def _build_final_comment_prompt(
     facts: SyncExecutionFacts,
     github_state_text: str | None,
+    consistency_result_text: str | None,
 ) -> str:
     """最終コメント生成 prompt を返す。"""
     state_text = (
         github_state_text if github_state_text is not None else "取得できませんでした"
+    )
+    consistency_block = (
+        ""
+        if consistency_result_text is None
+        else f"\n整合性確認 AI の出力:\n{consistency_result_text}"
     )
     return (
         "sync コマンドの最終コメント本文を作成してください。\n"
@@ -425,7 +450,33 @@ def _build_final_comment_prompt(
         f"push needed: {facts.push_needed}\n"
         f"push succeeded: {facts.push_succeeded}\n"
         f"GitHub state: {state_text}"
+        f"{consistency_block}"
     )
+
+
+def _resolve_explicit_consistency_result(
+    ready_execution: ReadyExecution,
+    consistency_result: ExecutionResult,
+) -> str | None:
+    """provider session が継続されない場合だけ整合性確認結果を返す。"""
+    if _continues_provider_session(ready_execution):
+        return None
+    if consistency_result.response_text is None:
+        return "応答本文なし"
+    return consistency_result.response_text
+
+
+def _continues_provider_session(ready_execution: ReadyExecution) -> bool:
+    """次の provider 実行が直前の provider session を継続するか返す。"""
+    session = ready_execution.resolved_session
+    if session is None:
+        return False
+    if session.restore_strategy == "new":
+        return False
+    state_ref = session.state_ref
+    if state_ref is None:
+        return False
+    return state_ref.provider_session_id is not None
 
 
 def _parse_final_comment_body(response_text: str | None) -> str:

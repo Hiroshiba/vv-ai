@@ -12,6 +12,7 @@ _ALLOW_EDITS_NOTICE = (
     "次回以降 vv-ai が直接修正をプッシュできるようになります。"
     "PR の右サイドバー下部にあるチェックボックスから設定できます。"
 )
+_MAX_INLINE_PATCH_LENGTH = 60000
 
 
 def post_issue_comment_safely(
@@ -60,14 +61,18 @@ def build_fork_push_failure_comment(
 ) -> str:
     """fork PR への push 失敗時に投稿する本文を返す。"""
     response_block = f"{response_body}\n\n---\n\n" if response_body else ""
-    if patch.strip() != "":
-        truncated = patch[:60000]
-        detail = f"```diff\n{truncated}\n```"
-    else:
+    if patch.strip() == "":
         detail = (
             "変更内容を取得できませんでした。"
             "ローカルで必要な作業を実行し、生成されたコミットを fork ブランチへ push してください。"
         )
+    elif len(patch) > _MAX_INLINE_PATCH_LENGTH:
+        detail = (
+            "patch が大きいためコメント本文には含めません。"
+            "ローカルで必要な作業を実行し、生成されたコミットを fork ブランチへ push してください。"
+        )
+    else:
+        detail = f"```diff\n{patch}\n```"
 
     return (
         "fork リポジトリへの push ができなかったため、変更内容を提示します。\n\n"
