@@ -542,7 +542,7 @@ def _post_fork_patch_fallback(
         _get_allow_edits_notice_posted(ready_execution)
         or execution_result.allow_edits_notice_posted,
     )
-    print("fork PR への push に失敗したため、patch をコメントで投稿しました。")
+    print("fork PR への push に失敗したため、patch コメント投稿を試みました。")
 
 
 def _get_allow_edits_notice_posted(ready_execution: ReadyExecution) -> bool:
