@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from vv_ai.config import VVAIConfig
+from vv_ai.execution import ExecutionResult, ExecutionStatus
 from vv_ai.git_ops import (
     GitOpsError,
     commit_merge_no_edit,
@@ -22,6 +25,19 @@ from vv_ai.git_ops import (
     merge_no_ff_no_commit,
     stage_paths,
 )
+from vv_ai.github import (
+    GitHubActor,
+    GitHubPullRequest,
+    GitHubPullRequestSyncState,
+    GitHubStatusCheckSummary,
+)
+from vv_ai.metrics_artifact import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
+from vv_ai.preflight import ReadyExecution
+from vv_ai.provider import ResolvedProvider, get_provider_spec
+from vv_ai.report_artifact import ReportSections
+from vv_ai.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
+from vv_ai.sync_command import SyncCommandError, run_sync_command
 
 
 def test_ensure_worktree_clean_rejects_dirty_worktree(tmp_path: Path) -> None:
@@ -202,6 +218,96 @@ def test_list_conflict_marker_files_ignores_resolved_content(tmp_path: Path) -> 
     assert list_conflict_marker_files(repo, ["file.txt"]) == []
 
 
+def test_run_sync_command_skips_push_when_base_is_ancestor(tmp_path: Path) -> None:
+    """run_sync_command は base 取り込み済みなら push しない。"""
+    source = _init_repo_at(tmp_path / "source")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "feature.txt", "feature\n")
+    _run_git(source, "add", "feature.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "checkout", "main")
+    clone = _clone_main_only(tmp_path, source, "sync-no-push")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+
+    with (
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            side_effect=[
+                _make_execution_result("success", "整合性確認完了"),
+                _make_execution_result("success", "BODY:\nsync 完了"),
+            ],
+        ),
+        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.sync_command.try_push_current_branch") as try_push_current_branch,
+    ):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "success"
+    push_branch.assert_not_called()
+    try_push_current_branch.assert_not_called()
+    assert github_client.comments == [("org/repo", 1, "sync 完了")]
+
+
+def test_run_sync_command_pushes_after_merge_commit(tmp_path: Path) -> None:
+    """run_sync_command は merge commit 作成後に head branch を push する。"""
+    source = _init_repo_at(tmp_path / "source")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "feature.txt", "feature\n")
+    _run_git(source, "add", "feature.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "checkout", "main")
+    _write(source, "main.txt", "main\n")
+    _run_git(source, "add", "main.txt")
+    _run_git(source, "commit", "-m", "main advance")
+    clone = _clone_all_branches(tmp_path, source, "sync-push")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+
+    with (
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            side_effect=[
+                _make_execution_result("success", "整合性確認完了"),
+                _make_execution_result("success", "BODY:\nsync 完了"),
+            ],
+        ),
+        patch("vv_ai.sync_command.push_branch") as push_branch,
+    ):
+        result = run_sync_command(
+            clone,
+            ready_execution,
+            github_client,
+            {"GITHUB_TOKEN": "token"},
+            0.0,
+        )
+
+    assert result.status == "success"
+    push_branch.assert_called_once_with(clone, "feature", "token")
+
+
+def test_run_sync_command_rejects_non_pr_target(tmp_path: Path) -> None:
+    """run_sync_command は PR 以外の target を拒否する。"""
+    command = ResolvedCommand(
+        event_name="local",
+        command="sync",
+        target_type="issue",
+        target_number=1,
+        has_target=True,
+        target=ResolvedTarget(
+            backend="github",
+            kind="issue",
+            canonical_id="github:org/repo#1",
+            repository_full_name="org/repo",
+            number=1,
+        ),
+    )
+    ready_execution = _make_ready_execution_with_command(command)
+
+    with pytest.raises(SyncCommandError):
+        run_sync_command(tmp_path, ready_execution, _make_github_client(False), {}, 0.0)
+
+
 def _init_repo(tmp_path: Path) -> Path:
     """テスト用 repository を作成する。"""
     return _init_repo_at(tmp_path / "repo")
@@ -246,6 +352,29 @@ def _clone_main_only(tmp_path: Path, source: Path, name: str) -> Path:
     return clone
 
 
+def _clone_all_branches(tmp_path: Path, source: Path, name: str) -> Path:
+    """全履歴を持つテスト用 repository clone を作成する。"""
+    clone = tmp_path / name
+    result = subprocess.run(
+        [
+            "git",
+            "clone",
+            source.as_uri(),
+            str(clone),
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stderr)
+    _run_git(clone, "checkout", "main")
+    _run_git(clone, "config", "user.email", "test@example.com")
+    _run_git(clone, "config", "user.name", "テストユーザー")
+    return clone
+
+
 def _write(repo: Path, relative_path: str, text: str) -> None:
     """repository 内のファイルへ文字列を書く。"""
     path = repo / relative_path
@@ -265,3 +394,138 @@ def _run_git(repo: Path, *args: str) -> str:
     if result.returncode != 0:
         raise AssertionError(result.stderr)
     return result.stdout
+
+
+class _FakeGitHubClient:
+    """sync テスト用 GitHub client。"""
+
+    def __init__(self, is_cross_repository: bool) -> None:
+        self.pr = GitHubPullRequest(
+            repository_full_name="org/repo",
+            number=1,
+            title="テスト PR",
+            body="本文",
+            state="OPEN",
+            author=GitHubActor(login="Hiroshiba"),
+            url="https://github.com/org/repo/pull/1",
+            head_ref_name="feature",
+            base_ref_name="main",
+            head_repository_full_name="fork/repo" if is_cross_repository else "org/repo",
+            is_cross_repository=is_cross_repository,
+            maintainer_can_modify=True,
+        )
+        self.comments: list[tuple[str, int, str]] = []
+
+    def get_pull_request(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> GitHubPullRequest:
+        """Pull Request を返す。"""
+        return self.pr
+
+    def get_pull_request_sync_state(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> GitHubPullRequestSyncState:
+        """Pull Request sync 状態を返す。"""
+        return GitHubPullRequestSyncState(
+            mergeable="MERGEABLE",
+            merge_state_status="CLEAN",
+            status_check_summary=GitHubStatusCheckSummary(
+                success_count=1,
+                failure_count=0,
+                pending_count=0,
+                unknown_count=0,
+            ),
+        )
+
+    def create_issue_comment(
+        self,
+        repository_full_name: str,
+        number: int,
+        body: str,
+    ) -> None:
+        """Issue comment を保存する。"""
+        self.comments.append((repository_full_name, number, body))
+
+
+def _make_github_client(is_cross_repository: bool) -> _FakeGitHubClient:
+    """sync テスト用 GitHub client を生成する。"""
+    return _FakeGitHubClient(is_cross_repository)
+
+
+def _make_ready_execution() -> ReadyExecution:
+    """sync テスト用 ReadyExecution を生成する。"""
+    command = ResolvedCommand(
+        event_name="local",
+        command="sync",
+        target_type="pr",
+        target_number=1,
+        has_target=True,
+        target=ResolvedTarget(
+            backend="github",
+            kind="pr",
+            canonical_id="github:org/repo#1",
+            repository_full_name="org/repo",
+            number=1,
+            url="https://github.com/org/repo/pull/1",
+        ),
+    )
+    return _make_ready_execution_with_command(command)
+
+
+def _make_ready_execution_with_command(command: ResolvedCommand) -> ReadyExecution:
+    """指定 command で ReadyExecution を生成する。"""
+    provider = "codex"
+    return ReadyExecution(
+        command=command,
+        config=VVAIConfig(allowed_users=["Hiroshiba"]),
+        resolved_provider=ResolvedProvider(
+            spec=get_provider_spec(provider),
+            source="explicit",
+        ),
+        resolved_session=ResolvedSession(
+            requested_mode="new",
+            lane="main",
+            key=SessionKey(
+                backend="github",
+                target_key="org/repo#1",
+                provider=provider,
+                lane="main",
+                canonical_key=f"github/org/repo#1/{provider}/main",
+            ),
+            restore_strategy="new",
+            save_manifest_path="/tmp/test-manifest.json",
+        ),
+        workflow_id="test-workflow",
+    )
+
+
+def _make_execution_result(
+    status: ExecutionStatus,
+    response_text: str | None,
+) -> ExecutionResult:
+    """sync テスト用 ExecutionResult を生成する。"""
+    return ExecutionResult(
+        status=status,
+        report_sections=ReportSections(
+            summary="summary",
+            changes="changes",
+            decisions="decisions",
+            validation="validation",
+            risks_open_questions="risks",
+            next_actions="next",
+            notes="notes",
+        ),
+        usage=MetricsUsage(),
+        behavior=MetricsBehavior(),
+        tools={},
+        steps={},
+        provider_specific=ProviderSpecificMetrics(),
+        state_ref=SessionStateRef(),
+        provider_session_path=None,
+        allow_edits_notice_posted=False,
+        response_text=response_text,
+    )

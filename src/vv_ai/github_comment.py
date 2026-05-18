@@ -51,3 +51,53 @@ def mark_allow_edits_notice_posted(
     if current_value is True:
         return True
     return notice != "" and posted is True
+
+
+def build_fork_push_failure_comment(
+    response_body: str,
+    patch: str,
+    allow_edits_notice: str,
+) -> str:
+    """fork PR への push 失敗時に投稿する本文を返す。"""
+    response_block = f"{response_body}\n\n---\n\n" if response_body else ""
+    if patch.strip() != "":
+        truncated = patch[:60000]
+        detail = f"```diff\n{truncated}\n```"
+    else:
+        detail = (
+            "変更内容を取得できませんでした。"
+            "ローカルで必要な作業を実行し、生成されたコミットを fork ブランチへ push してください。"
+        )
+
+    return (
+        "fork リポジトリへの push ができなかったため、変更内容を提示します。\n\n"
+        f"{response_block}"
+        f"{detail}"
+        f"{allow_edits_notice}"
+    )
+
+
+def post_fork_push_failure_comment(
+    github_client: GitHubClient,
+    repository_full_name: str,
+    number: int,
+    response_body: str,
+    patch: str,
+    pr_info: GitHubPullRequest,
+    allow_edits_notice_posted: bool,
+) -> bool:
+    """fork PR への push 失敗時の comment を投稿し、案内済み状態を返す。"""
+    notice = build_allow_edits_notice(allow_edits_notice_posted, pr_info)
+    body = build_fork_push_failure_comment(response_body, patch, notice)
+    posted = post_issue_comment_safely(
+        github_client,
+        repository_full_name,
+        number,
+        body,
+        "fork PR push 失敗コメント投稿",
+    )
+    return mark_allow_edits_notice_posted(
+        allow_edits_notice_posted,
+        notice,
+        posted,
+    )

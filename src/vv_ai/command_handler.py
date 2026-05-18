@@ -31,11 +31,13 @@ from vv_ai.github import (
     GitHubReactionContent,
     build_github_client,
 )
+from vv_ai.github_comment import post_fork_push_failure_comment
 from vv_ai.preflight import ReadyExecution
 from vv_ai.prompt import build_provider_prompt
 from vv_ai.provider_execution import execute_provider
 from vv_ai.resolve import ResolvedTarget
 from vv_ai.session import SessionStateRef, TargetContextState
+from vv_ai.sync_command import run_sync_command
 from vv_ai.target_context import (
     build_target_context,
     empty_target_context_state,
@@ -110,6 +112,19 @@ def run_command(
     primary_error: BaseException | None = None
     try:
         try:
+            if command.command == "sync":
+                if github_client is None:
+                    raise RuntimeError("`sync` コマンドには GitHub target が必要です")
+                execution_result = run_sync_command(
+                    repo_root,
+                    ready_execution,
+                    github_client,
+                    env,
+                    preflight_duration_seconds,
+                )
+                finalize_status = execution_result.status
+                return execution_result, None
+
             if (
                 command.command == "implement"
                 and target is not None
@@ -517,36 +532,16 @@ def _post_fork_patch_fallback(
         print(f"patch 生成に失敗しました: {exc}", file=sys.stderr)
         return
 
-    if not patch.strip():
-        print("fork PR への push に失敗し、patch も空のため投稿をスキップします。")
-        return
-
-    notice_already_posted = _get_allow_edits_notice_posted(ready_execution)
-    notice = ""
-    if not pr_info.maintainer_can_modify and not notice_already_posted:
-        notice = (
-            "\n\n---\n"
-            "**Note**: この PR で \"Allow edits from maintainers\" を有効にすると、"
-            "次回以降 vv-ai が直接修正をプッシュできるようになります。"
-            "PR の右サイドバー下部にあるチェックボックスから設定できます。"
-        )
-        execution_result.allow_edits_notice_posted = True
-
-    truncated = patch[:60000]
-    response_block = f"{response_body}\n\n---\n\n" if response_body else ""
-
-    body = (
-        "fork リポジトリへの push ができなかったため、変更内容を patch として提示します。\n\n"
-        f"{response_block}"
-        f"```diff\n{truncated}\n```"
-        f"{notice}"
+    execution_result.allow_edits_notice_posted = post_fork_push_failure_comment(
+        github_client,
+        repository_full_name,
+        number,
+        response_body,
+        patch,
+        pr_info,
+        _get_allow_edits_notice_posted(ready_execution)
+        or execution_result.allow_edits_notice_posted,
     )
-
-    try:
-        github_client.create_issue_comment(repository_full_name, number, body)
-    except GitHubClientError as exc:
-        print(f"patch コメント投稿に失敗しました: {exc}", file=sys.stderr)
-        return
     print("fork PR への push に失敗したため、patch をコメントで投稿しました。")
 
 
