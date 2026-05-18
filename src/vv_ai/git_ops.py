@@ -237,6 +237,12 @@ def fetch_remote(repo_root: Path, remote: str) -> None:
     run_git_command(repo_root, "fetch", remote)
 
 
+def fetch_remote_branch(repo_root: Path, remote: str, branch_name: str) -> None:
+    """リモートブランチを remote tracking ref へ fetch する。"""
+    remote_ref = f"refs/remotes/{remote}/{branch_name}"
+    run_git_command(repo_root, "fetch", remote, f"+{branch_name}:{remote_ref}")
+
+
 def checkout_ref(repo_root: Path, ref_name: str) -> None:
     """指定 ref をチェックアウトする。"""
     run_git_command(repo_root, "checkout", ref_name)
@@ -244,8 +250,7 @@ def checkout_ref(repo_root: Path, ref_name: str) -> None:
 
 def fetch_and_checkout_branch(repo_root: Path, branch_name: str) -> None:
     """リモートブランチを fetch してチェックアウトする。"""
-    remote_ref = f"refs/remotes/origin/{branch_name}"
-    run_git_command(repo_root, "fetch", "origin", f"{branch_name}:{remote_ref}")
+    fetch_remote_branch(repo_root, "origin", branch_name)
     run_git_command(repo_root, "checkout", "-B", branch_name, f"origin/{branch_name}")
 
 

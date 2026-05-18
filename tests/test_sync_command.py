@@ -16,6 +16,7 @@ from vv_ai.git_ops import (
     commit_merge_no_edit,
     ensure_worktree_clean,
     fetch_and_checkout_branch,
+    fetch_remote_branch,
     generate_diff_patch,
     is_ancestor,
     list_changed_files,
@@ -53,7 +54,7 @@ def test_run_sync_command_merges_and_pushes_without_conflict(tmp_path: Path) -> 
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch") as checkout,
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=False),
         patch(
@@ -90,6 +91,42 @@ def test_run_sync_command_merges_and_pushes_without_conflict(tmp_path: Path) -> 
     assert ready.resolved_session.state_ref == SessionStateRef(provider_session_id="s2")
 
 
+def test_run_sync_command_fetches_base_branch_before_merge_check(
+    tmp_path: Path,
+) -> None:
+    """default 以外の base branch も origin ref を明示的に取得する。"""
+    ready = _make_ready_execution()
+    pr = _make_pull_request(False, True).model_copy(
+        update={"base_ref_name": "release"}
+    )
+    github_client = _make_github_client(pr)
+    results = [
+        _make_execution_result("success", "修正不要", "s1"),
+        _make_execution_result("success", "コメント本文", "s2"),
+    ]
+
+    with (
+        patch("vv_ai.sync_command.fetch_and_checkout_branch"),
+        patch("vv_ai.sync_command.ensure_worktree_clean"),
+        patch("vv_ai.sync_command.fetch_remote_branch") as fetch_base_branch,
+        patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
+        patch("vv_ai.sync_command.is_ancestor", return_value=True) as check_ancestor,
+        patch("vv_ai.sync_command.execute_provider", side_effect=results),
+        patch(
+            "vv_ai.sync_command._validate_provider_did_not_take_over_git",
+            return_value=None,
+        ),
+        patch("vv_ai.sync_command.list_changed_files", return_value=[]),
+        patch("vv_ai.sync_command.commit_all_changes", return_value=False),
+        patch("vv_ai.sync_command.push_branch"),
+    ):
+        result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
+
+    assert result.status == "success"
+    fetch_base_branch.assert_called_once_with(tmp_path, "origin", "release")
+    check_ancestor.assert_called_once_with(tmp_path, "origin/release", "HEAD")
+
+
 def test_run_sync_command_skips_merge_when_base_is_ancestor(tmp_path: Path) -> None:
     """base branch が取り込み済みなら merge commit を作らない。"""
     ready = _make_ready_execution()
@@ -103,7 +140,7 @@ def test_run_sync_command_skips_merge_when_base_is_ancestor(tmp_path: Path) -> N
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch("vv_ai.sync_command.merge_no_ff_no_commit") as merge,
@@ -143,7 +180,7 @@ def test_run_sync_command_resolves_conflict_with_ai_before_merge_commit(
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=False),
         patch(
@@ -186,7 +223,7 @@ def test_run_sync_command_stops_when_conflict_remains(tmp_path: Path) -> None:
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=False),
         patch(
@@ -224,7 +261,7 @@ def test_run_sync_command_stops_markerless_conflict_without_staging(
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=False),
         patch(
@@ -266,7 +303,7 @@ def test_run_sync_command_commits_consistency_fix_after_merge(
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=False),
         patch(
@@ -301,7 +338,7 @@ def test_run_sync_command_stops_when_ai_commits(tmp_path: Path) -> None:
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", side_effect=["sha0", "sha0", "sha1"]),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch(
@@ -328,7 +365,7 @@ def test_run_sync_command_stops_when_ai_stages_diff(tmp_path: Path) -> None:
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch(
@@ -369,7 +406,7 @@ def test_run_sync_command_final_prompt_includes_github_state(tmp_path: Path) -> 
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch("vv_ai.sync_command.execute_provider", side_effect=results) as provider,
@@ -409,7 +446,7 @@ def test_run_sync_command_continues_when_github_state_fetch_fails(
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch("vv_ai.sync_command.execute_provider", side_effect=results) as provider,
@@ -448,7 +485,7 @@ def test_run_sync_command_does_not_post_failed_final_comment(
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch("vv_ai.sync_command.execute_provider", side_effect=results),
@@ -483,7 +520,7 @@ def test_run_sync_command_comment_post_failure_does_not_fail_sync(
     with (
         patch("vv_ai.sync_command.fetch_and_checkout_branch"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch("vv_ai.sync_command.execute_provider", side_effect=results),
@@ -512,7 +549,7 @@ def test_run_sync_command_fork_push_failure_posts_patch_and_fails(
     with (
         patch("vv_ai.sync_command.checkout_fork_pr") as checkout,
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch(
@@ -549,7 +586,7 @@ def test_run_sync_command_fork_push_failure_posts_allow_edits_notice(
     with (
         patch("vv_ai.sync_command.checkout_fork_pr"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch(
@@ -587,7 +624,7 @@ def test_run_sync_command_does_not_mark_allow_edits_notice_when_post_fails(
     with (
         patch("vv_ai.sync_command.checkout_fork_pr"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch(
@@ -625,7 +662,7 @@ def test_run_sync_command_keeps_restored_allow_edits_notice_state(
     with (
         patch("vv_ai.sync_command.checkout_fork_pr"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch(
@@ -664,7 +701,7 @@ def test_run_sync_command_keeps_restored_allow_edits_notice_state_on_ai_failure(
     with (
         patch("vv_ai.sync_command.checkout_fork_pr"),
         patch("vv_ai.sync_command.ensure_worktree_clean"),
-        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.fetch_remote_branch"),
         patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
         patch("vv_ai.sync_command.is_ancestor", return_value=True),
         patch(
@@ -765,6 +802,18 @@ def test_fetch_and_checkout_branch_creates_local_branch_from_fetch_head(
 
     assert _run_git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feature"
     assert (repo / "feature.txt").read_text(encoding="utf-8") == "feature\n"
+
+
+def test_fetch_remote_branch_creates_remote_tracking_branch(
+    tmp_path: Path,
+) -> None:
+    """fetch_remote_branch は shallow な default checkout から base branch ref を作る。"""
+    repo = _init_single_branch_clone_with_feature_remote(tmp_path)
+
+    fetch_remote_branch(repo, "origin", "release")
+
+    assert _run_git(repo, "rev-parse", "--verify", "origin/release").strip() != ""
+    assert _run_git(repo, "show", "origin/release:release.txt") == "release\n"
 
 
 def _make_ready_execution() -> ReadyExecution:
@@ -913,6 +962,12 @@ def _init_single_branch_clone_with_feature_remote(tmp_path: Path) -> Path:
     _run_git(source, "add", "feature.txt")
     _run_git(source, "commit", "-m", "feature")
     _run_git(source, "push", "origin", "feature")
+    _run_git(source, "checkout", "main")
+    _run_git(source, "checkout", "-b", "release")
+    _write(source, "release.txt", "release\n")
+    _run_git(source, "add", "release.txt")
+    _run_git(source, "commit", "-m", "release")
+    _run_git(source, "push", "origin", "release")
     _run_command(
         tmp_path,
         "git",
