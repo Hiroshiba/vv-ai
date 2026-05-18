@@ -24,6 +24,9 @@ class MergeAttempt:
     stderr: str
 
 
+_MERGE_BASE_DEEPEN_DEPTHS = (32, 128, 512, 2048, 8192)
+
+
 def run_git_command(repo_root: Path, *args: str) -> str:
     """Git コマンドを実行して標準出力を返す。"""
     command = ["git", *args]
@@ -91,6 +94,55 @@ def ensure_worktree_clean(repo_root: Path) -> None:
     status = run_git_command(repo_root, "status", "--porcelain").strip()
     if status != "":
         raise GitOpsError("ワーキングツリーに未コミットの変更があります")
+
+
+def has_merge_base(repo_root: Path, left_ref: str, right_ref: str) -> bool:
+    """left_ref と right_ref の共通祖先が存在するか返す。"""
+    result = _run_git_command_result(repo_root, "merge-base", left_ref, right_ref)
+    if result.returncode == 0:
+        return result.stdout.strip() != ""
+    if result.returncode == 1:
+        return False
+    stderr = result.stderr.strip()
+    detail = f": {stderr}" if stderr else ""
+    raise GitOpsError("共通祖先の判定に失敗しました" + detail)
+
+
+def is_shallow_repository(repo_root: Path) -> bool:
+    """repository が shallow clone か返す。"""
+    result = run_git_command(repo_root, "rev-parse", "--is-shallow-repository").strip()
+    if result == "true":
+        return True
+    if result == "false":
+        return False
+    raise GitOpsError("shallow repository の判定結果が不正です")
+
+
+def ensure_merge_base_available(
+    repo_root: Path,
+    remote: str,
+    pull_number: int,
+    base_branch_name: str,
+    base_ref: str,
+) -> None:
+    """HEAD と base_ref の共通祖先を判定できる履歴を取得する。"""
+    if has_merge_base(repo_root, "HEAD", base_ref):
+        return
+    if not is_shallow_repository(repo_root):
+        raise GitOpsError("PR branch と base branch の共通祖先が見つかりません")
+
+    for depth in _MERGE_BASE_DEEPEN_DEPTHS:
+        _fetch_pull_request_merge_base_history(
+            repo_root,
+            remote,
+            pull_number,
+            base_branch_name,
+            depth,
+        )
+        if has_merge_base(repo_root, "HEAD", base_ref):
+            return
+
+    raise GitOpsError("PR branch と base branch の共通祖先を取得できませんでした")
 
 
 def is_ancestor(repo_root: Path, ancestor_ref: str, descendant_ref: str) -> bool:
@@ -257,6 +309,27 @@ def fetch_remote_branch(repo_root: Path, remote: str, branch_name: str) -> None:
         "fetch",
         remote,
         f"+refs/heads/{branch_name}:refs/remotes/{remote}/{branch_name}",
+    )
+
+
+def _fetch_pull_request_merge_base_history(
+    repo_root: Path,
+    remote: str,
+    pull_number: int,
+    base_branch_name: str,
+    depth: int,
+) -> None:
+    """Pull Request と base branch の履歴を指定 commit 数だけ深く fetch する。"""
+    run_git_command(
+        repo_root,
+        "fetch",
+        f"--deepen={depth}",
+        remote,
+        (
+            f"+refs/pull/{pull_number}/head:"
+            f"refs/remotes/{remote}/pull/{pull_number}/head"
+        ),
+        f"+refs/heads/{base_branch_name}:refs/remotes/{remote}/{base_branch_name}",
     )
 
 

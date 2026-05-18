@@ -13,6 +13,7 @@ from vv_ai.execution import ExecutionResult, ExecutionStatus
 from vv_ai.git_ops import (
     GitOpsError,
     commit_merge_no_edit,
+    ensure_merge_base_available,
     ensure_worktree_clean,
     fetch_and_checkout_branch,
     fetch_remote_branch,
@@ -165,6 +166,21 @@ def test_fetch_remote_branch_force_updates_remote_tracking_ref(
     assert _run_git(clone, "rev-parse", "origin/feature").strip() != feature_sha
 
 
+def test_ensure_merge_base_available_rejects_missing_common_ancestor(
+    tmp_path: Path,
+) -> None:
+    """ensure_merge_base_available は共通祖先がない履歴を拒否する。"""
+    repo = _init_repo(tmp_path)
+    _run_git(repo, "checkout", "--orphan", "unrelated")
+    _run_git(repo, "rm", "-rf", ".")
+    _write(repo, "unrelated.txt", "unrelated\n")
+    _run_git(repo, "add", "unrelated.txt")
+    _run_git(repo, "commit", "-m", "unrelated")
+
+    with pytest.raises(GitOpsError, match="共通祖先"):
+        ensure_merge_base_available(repo, "origin", 1, "main", "main")
+
+
 def test_merge_no_ff_no_commit_can_commit_successful_merge(tmp_path: Path) -> None:
     """merge_no_ff_no_commit は成功した merge を commit できる状態にする。"""
     repo = _init_repo(tmp_path)
@@ -258,6 +274,47 @@ def test_run_sync_command_skips_push_when_base_is_ancestor(tmp_path: Path) -> No
     assert github_client.comments == [("org/repo", 1, "sync 完了")]
 
 
+def test_run_sync_command_deepens_history_before_merge_from_shallow_clone(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は shallow clone で merge 前に共通祖先を取得する。"""
+    source = _init_repo_at(tmp_path / "source")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "feature.txt", "feature\n")
+    _run_git(source, "add", "feature.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "update-ref", "refs/pull/1/head", "feature")
+    _run_git(source, "checkout", "main")
+    _write(source, "main.txt", "main\n")
+    _run_git(source, "add", "main.txt")
+    _run_git(source, "commit", "-m", "main advance")
+    clone = _clone_main_only(tmp_path, source, "sync-shallow-merge")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+
+    with (
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            side_effect=[
+                _make_execution_result("success", "整合性確認完了"),
+                _make_execution_result("success", "BODY:\nsync 完了"),
+            ],
+        ),
+        patch("vv_ai.sync_command.push_branch") as push_branch,
+    ):
+        result = run_sync_command(
+            clone,
+            ready_execution,
+            github_client,
+            {"GITHUB_TOKEN": "token"},
+            0.0,
+        )
+
+    assert result.status == "success"
+    assert len(_run_git(clone, "rev-list", "--parents", "-n", "1", "HEAD").split()) == 3
+    push_branch.assert_called_once_with(clone, "feature", "token")
+
+
 def test_run_sync_command_pushes_after_merge_commit(tmp_path: Path) -> None:
     """run_sync_command は merge commit 作成後に head branch を push する。"""
     source = _init_repo_at(tmp_path / "source")
@@ -293,6 +350,56 @@ def test_run_sync_command_pushes_after_merge_commit(tmp_path: Path) -> None:
 
     assert result.status == "success"
     push_branch.assert_called_once_with(clone, "feature", "token")
+
+
+def test_run_sync_command_ensures_merge_base_for_fork_pr(tmp_path: Path) -> None:
+    """run_sync_command は fork PR でも共通祖先を確認する。"""
+    source = _init_repo_at(tmp_path / "source")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "feature.txt", "feature\n")
+    _run_git(source, "add", "feature.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "checkout", "main")
+    _write(source, "main.txt", "main\n")
+    _run_git(source, "add", "main.txt")
+    _run_git(source, "commit", "-m", "main advance")
+    clone = _clone_all_branches(tmp_path, source, "sync-fork-merge-base")
+    github_client = _make_github_client(is_cross_repository=True)
+    ready_execution = _make_ready_execution()
+
+    def checkout_fork_pr_mock(
+        repo_root: Path,
+        repository_full_name: str,
+        number: int,
+    ) -> None:
+        """fork PR checkout の代わりに feature branch を checkout する。"""
+        _run_git(repo_root, "checkout", "-B", "feature", "origin/feature")
+
+    with (
+        patch(
+            "vv_ai.sync_command.checkout_fork_pr",
+            side_effect=checkout_fork_pr_mock,
+        ),
+        patch("vv_ai.sync_command.ensure_merge_base_available") as ensure_merge_base,
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            side_effect=[
+                _make_execution_result("success", "整合性確認完了"),
+                _make_execution_result("success", "BODY:\nsync 完了"),
+            ],
+        ),
+        patch("vv_ai.sync_command.try_push_current_branch", return_value=True),
+    ):
+        result = run_sync_command(
+            clone,
+            ready_execution,
+            github_client,
+            {"GITHUB_TOKEN": "token"},
+            0.0,
+        )
+
+    assert result.status == "success"
+    ensure_merge_base.assert_called_once_with(clone, "origin", 1, "main", "origin/main")
 
 
 def test_run_sync_command_passes_consistency_result_to_final_prompt_when_session_is_new(
