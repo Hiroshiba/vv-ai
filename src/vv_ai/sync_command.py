@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -28,7 +29,12 @@ from vv_ai.git_ops import (
     run_git_command,
     try_push_current_branch,
 )
-from vv_ai.github import GitHubClient, GitHubPullRequest, GitHubPullRequestSyncState
+from vv_ai.github import (
+    GitHubClient,
+    GitHubClientError,
+    GitHubPullRequest,
+    GitHubPullRequestSyncState,
+)
 from vv_ai.github_comment import (
     build_allow_edits_notice,
     mark_allow_edits_notice_posted,
@@ -455,7 +461,14 @@ def _get_sync_state_if_pushed(
     """push 後に取得できる GitHub 状態を返す。"""
     if not pushed:
         return None
-    return github_client.get_pull_request_sync_state(pr.repository_full_name, pr.number)
+    try:
+        return github_client.get_pull_request_sync_state(
+            pr.repository_full_name,
+            pr.number,
+        )
+    except GitHubClientError as exc:
+        print(f"Pull Request sync 状態取得に失敗しました: {exc}", file=sys.stderr)
+        return None
 
 
 def _build_conflict_prompt(pr: GitHubPullRequest, unmerged_files: list[str]) -> str:

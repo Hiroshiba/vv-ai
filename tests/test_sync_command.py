@@ -390,6 +390,48 @@ def test_run_sync_command_final_prompt_includes_github_state(tmp_path: Path) -> 
     assert "CLEAN" in final_prompt
 
 
+def test_run_sync_command_continues_when_github_state_fetch_fails(
+    tmp_path: Path,
+) -> None:
+    """push 後の GitHub 状態取得に失敗しても sync は継続する。"""
+    ready = _make_ready_execution()
+    pr = _make_pull_request(False, True)
+    github_client = _make_github_client(pr)
+    github_client.get_pull_request_sync_state.side_effect = GitHubClientError(
+        "一時エラー"
+    )
+    results = [
+        _make_execution_result("success", "修正不要", "s1"),
+        _make_execution_result("success", "コメント本文", "s2"),
+    ]
+
+    with (
+        patch("vv_ai.sync_command.fetch_and_checkout_branch"),
+        patch("vv_ai.sync_command.ensure_worktree_clean"),
+        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
+        patch("vv_ai.sync_command.is_ancestor", return_value=True),
+        patch("vv_ai.sync_command.execute_provider", side_effect=results) as provider,
+        patch(
+            "vv_ai.sync_command._validate_provider_did_not_take_over_git",
+            return_value=None,
+        ),
+        patch("vv_ai.sync_command.list_changed_files", return_value=[]),
+        patch("vv_ai.sync_command.commit_all_changes", return_value=False),
+        patch("vv_ai.sync_command.push_branch"),
+    ):
+        result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
+
+    final_prompt = provider.call_args_list[1].args[4]
+    assert result.status == "success"
+    assert "GitHub 状態: 取得なし" in final_prompt
+    github_client.create_issue_comment.assert_called_once_with(
+        "org/repo",
+        5,
+        "コメント本文",
+    )
+
+
 def test_run_sync_command_does_not_post_failed_final_comment(
     tmp_path: Path,
 ) -> None:
