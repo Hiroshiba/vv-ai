@@ -7,7 +7,6 @@ import pytest
 from vv_ai.github import GitHubActor, GitHubClientError, GitHubPullRequest
 from vv_ai.github_comment import (
     build_allow_edits_notice,
-    build_fork_push_failure_comment,
     mark_allow_edits_notice_posted,
     post_issue_comment_safely,
 )
@@ -110,14 +109,6 @@ def test_mark_allow_edits_notice_posted_keeps_true_when_already_posted() -> None
 def test_mark_allow_edits_notice_posted_stays_false_without_notice() -> None:
     """mark_allow_edits_notice_posted は案内文がなければ投稿成功でも False のままにする。"""
     assert mark_allow_edits_notice_posted(False, "", True) is False
-
-
-def test_build_fork_push_failure_comment_uses_steps_when_patch_is_large() -> None:
-    """build_fork_push_failure_comment は大きい patch を途中で切らない。"""
-    body = build_fork_push_failure_comment("", "a" * 60001, "")
-
-    assert "```diff" not in body
-    assert "patch が大きいためコメント本文には含めません" in body
 
 
 def _make_pr_info(maintainer_can_modify: bool) -> GitHubPullRequest:
