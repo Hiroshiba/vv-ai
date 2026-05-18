@@ -403,6 +403,78 @@ def test_get_pull_request_sync_state_rejects_invalid_payload(
         client.get_pull_request_sync_state("org/repo", 34)
 
 
+def test_list_repository_artifacts_by_prefix_filters_and_sorts() -> None:
+    """list_repository_artifacts_by_prefix は prefix 一致 artifact を新しい順で返す。"""
+    client = GitHubClient(
+        lambda args: json.dumps(
+            [
+                {
+                    "artifacts": [
+                        {
+                            "id": 1,
+                            "name": "vv-ai-session__target__codex__main__old",
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "archive_download_url": "https://example.test/1",
+                        },
+                        {
+                            "id": 3,
+                            "name": "vv-ai-session__target__codex__main__same-newer-id",
+                            "created_at": "2026-01-02T00:00:00Z",
+                            "archive_download_url": "https://example.test/3",
+                        },
+                        {
+                            "id": 2,
+                            "name": "vv-ai-session__target__codex__main__same-older-id",
+                            "created_at": "2026-01-02T00:00:00Z",
+                            "archive_download_url": "https://example.test/2",
+                        },
+                        {
+                            "id": 4,
+                            "name": "vv-ai-report__target__codex__main__new",
+                            "created_at": "2026-01-03T00:00:00Z",
+                            "archive_download_url": "https://example.test/4",
+                        },
+                    ]
+                }
+            ]
+        ),
+        lambda args: b"",
+    )
+
+    artifacts = client.list_repository_artifacts_by_prefix(
+        "org/repo",
+        "vv-ai-session__target__codex__main__",
+    )
+
+    assert [artifact.id for artifact in artifacts] == [3, 2, 1]
+
+
+def test_list_repository_artifacts_by_prefix_returns_empty() -> None:
+    """list_repository_artifacts_by_prefix は一致なしなら空 list を返す。"""
+    client = GitHubClient(
+        lambda args: json.dumps(
+            [
+                {
+                    "artifacts": [
+                        {
+                            "id": 1,
+                            "name": "vv-ai-report__target__codex__main__old",
+                            "created_at": "2026-01-01T00:00:00Z",
+                            "archive_download_url": "https://example.test/1",
+                        }
+                    ]
+                }
+            ]
+        ),
+        lambda args: b"",
+    )
+
+    artifacts = client.list_repository_artifacts_by_prefix(
+        "org/repo",
+        "vv-ai-session__target__codex__main__",
+    )
+
+    assert artifacts == []
 def test_build_github_client_with_token_uses_gh_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
