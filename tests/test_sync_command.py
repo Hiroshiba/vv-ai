@@ -33,12 +33,12 @@ def test_ensure_worktree_clean_rejects_dirty_worktree(tmp_path: Path) -> None:
 def test_list_changed_and_staged_files_detects_worktree_state(tmp_path: Path) -> None:
     """list_changed_files と list_staged_files は変更状態を返す。"""
     repo = _init_repo(tmp_path)
-    _write(repo, "tracked.txt", "変更\n")
-    _write(repo, "untracked.txt", "追加\n")
-    _run_git(repo, "add", "tracked.txt")
+    _write(repo, "変更.txt", "変更\n")
+    _write(repo, "未追跡.txt", "追加\n")
+    _run_git(repo, "add", "変更.txt")
 
-    assert list_changed_files(repo) == ["tracked.txt", "untracked.txt"]
-    assert list_staged_files(repo) == ["tracked.txt"]
+    assert list_changed_files(repo) == ["変更.txt", "未追跡.txt"]
+    assert list_staged_files(repo) == ["変更.txt"]
 
 
 def test_merge_no_ff_no_commit_can_commit_successful_merge(tmp_path: Path) -> None:
@@ -66,21 +66,25 @@ def test_merge_no_ff_no_commit_can_commit_successful_merge(tmp_path: Path) -> No
 def test_merge_no_ff_no_commit_returns_conflict_files(tmp_path: Path) -> None:
     """merge_no_ff_no_commit は conflict を構造化して返す。"""
     repo = _init_repo(tmp_path)
+    conflict_path = "日本語.txt"
+    _write(repo, conflict_path, "base\n")
+    _run_git(repo, "add", conflict_path)
+    _run_git(repo, "commit", "-m", "日本語ファイル追加")
     _run_git(repo, "checkout", "-b", "incoming")
-    _write(repo, "file.txt", "incoming\n")
-    _run_git(repo, "add", "file.txt")
+    _write(repo, conflict_path, "incoming\n")
+    _run_git(repo, "add", conflict_path)
     _run_git(repo, "commit", "-m", "incoming")
     _run_git(repo, "checkout", "main")
-    _write(repo, "file.txt", "main\n")
-    _run_git(repo, "add", "file.txt")
+    _write(repo, conflict_path, "main\n")
+    _run_git(repo, "add", conflict_path)
     _run_git(repo, "commit", "-m", "main")
 
     attempt = merge_no_ff_no_commit(repo, "incoming")
 
     assert attempt.succeeded is False
-    assert attempt.unmerged_files == ["file.txt"]
-    assert list_unmerged_files(repo) == ["file.txt"]
-    assert list_conflict_marker_files(repo, ["file.txt"]) == ["file.txt"]
+    assert attempt.unmerged_files == [conflict_path]
+    assert list_unmerged_files(repo) == [conflict_path]
+    assert list_conflict_marker_files(repo, [conflict_path]) == [conflict_path]
 
 
 def test_list_conflict_marker_files_ignores_resolved_content(tmp_path: Path) -> None:

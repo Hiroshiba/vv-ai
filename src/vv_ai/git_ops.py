@@ -144,8 +144,8 @@ def merge_no_ff_no_commit(repo_root: Path, base_ref: str) -> MergeAttempt:
 
 def list_unmerged_files(repo_root: Path) -> list[str]:
     """未解消 conflict のファイル一覧を返す。"""
-    return _split_git_path_lines(
-        run_git_command(repo_root, "diff", "--name-only", "--diff-filter=U")
+    return _split_git_path_nul(
+        run_git_command(repo_root, "diff", "--name-only", "--diff-filter=U", "-z")
     )
 
 
@@ -154,18 +154,17 @@ def list_changed_files(repo_root: Path) -> list[str]:
     status = run_git_command(
         repo_root,
         "status",
-        "--porcelain",
+        "--porcelain=v1",
+        "-z",
         "--untracked-files=all",
     )
-    return sorted(
-        {_parse_porcelain_path(line) for line in status.splitlines() if line != ""}
-    )
+    return sorted(_parse_porcelain_z_paths(status))
 
 
 def list_staged_files(repo_root: Path) -> list[str]:
     """staged diff を持つファイル一覧を返す。"""
-    return _split_git_path_lines(
-        run_git_command(repo_root, "diff", "--cached", "--name-only")
+    return _split_git_path_nul(
+        run_git_command(repo_root, "diff", "--cached", "--name-only", "-z")
     )
 
 
@@ -328,18 +327,29 @@ def generate_implement_branch_name(issue_id: str) -> str:
     return f"vv-ai/issue-{issue_id}-{suffix}"
 
 
-def _split_git_path_lines(output: str) -> list[str]:
-    """Git が出力した path 行を一覧へ変換する。"""
-    return [line for line in output.splitlines() if line != ""]
+def _split_git_path_nul(output: str) -> list[str]:
+    """NUL 区切りの Git path 出力を一覧へ変換する。"""
+    return [path for path in output.split("\0") if path != ""]
 
 
-def _parse_porcelain_path(line: str) -> str:
-    """porcelain status の行から path を返す。"""
-    path = line[3:]
-    separator = " -> "
-    if separator in path:
-        return path.split(separator, maxsplit=1)[1]
-    return path
+def _parse_porcelain_z_paths(output: str) -> set[str]:
+    """NUL 区切りの porcelain status から path 一覧を返す。"""
+    records = _split_git_path_nul(output)
+    paths: set[str] = set()
+    index = 0
+    while index < len(records):
+        record = records[index]
+        if len(record) < 4:
+            raise GitOpsError("git status の出力形式が不正です")
+        status = record[:2]
+        paths.add(record[3:])
+        if "R" in status or "C" in status:
+            if index + 1 >= len(records):
+                raise GitOpsError("git status の rename 出力形式が不正です")
+            index += 2
+        else:
+            index += 1
+    return paths
 
 
 def _has_conflict_markers(file_path: Path) -> bool:
