@@ -29,7 +29,11 @@ from vv_ai.git_ops import (
     try_push_current_branch,
 )
 from vv_ai.github import GitHubClient, GitHubPullRequest, GitHubPullRequestSyncState
-from vv_ai.github_comment import build_allow_edits_notice, post_issue_comment_safely
+from vv_ai.github_comment import (
+    build_allow_edits_notice,
+    mark_allow_edits_notice_posted,
+    post_issue_comment_safely,
+)
 from vv_ai.metrics_artifact import (
     ClaudeProviderMetrics,
     CodexProviderMetrics,
@@ -376,7 +380,7 @@ def _push_or_comment_patch(
         return True, False
     if try_push_current_branch(repo_root, env.get("GITHUB_TOKEN")):
         return True, False
-    body = _build_fork_push_failure_body(
+    body, notice = _build_fork_push_failure_body(
         repo_root,
         ready_execution,
         execution_result,
@@ -390,6 +394,8 @@ def _push_or_comment_patch(
         body,
         "fork push 失敗コメント投稿",
     )
+    if posted:
+        mark_allow_edits_notice_posted(execution_result, notice)
     return False, posted
 
 
@@ -399,33 +405,45 @@ def _build_fork_push_failure_body(
     execution_result: ExecutionResult,
     pr: GitHubPullRequest,
     initial_head_sha: str,
-) -> str:
+) -> tuple[str, str]:
     """fork PR へ push できなかった場合のコメント本文を返す。"""
     notice = build_allow_edits_notice(ready_execution, execution_result, pr)
     try:
         patch = generate_diff_patch(repo_root, initial_head_sha)
     except GitOpsError as exc:
         return (
-            "fork リポジトリへの push に失敗し、patch 生成にも失敗しました。"
-            f"\n\n{exc}"
-            f"{notice}"
+            (
+                "fork リポジトリへの push に失敗し、patch 生成にも失敗しました。"
+                f"\n\n{exc}"
+                f"{notice}"
+            ),
+            notice,
         )
     if patch.strip() == "":
         return (
-            "fork リポジトリへの push に失敗しました。ローカル差分は空です。"
-            f"{notice}"
+            (
+                "fork リポジトリへの push に失敗しました。ローカル差分は空です。"
+                f"{notice}"
+            ),
+            notice,
         )
     if len(patch) > _PATCH_COMMENT_LIMIT:
         return (
-            "fork リポジトリへの push に失敗しました。\n\n"
-            "patch が大きいためコメントには含めません。"
-            "メンテナーが push できる環境で sync を再実行してください。"
-            f"{notice}"
+            (
+                "fork リポジトリへの push に失敗しました。\n\n"
+                "patch が大きいためコメントには含めません。"
+                "メンテナーが push できる環境で sync を再実行してください。"
+                f"{notice}"
+            ),
+            notice,
         )
     return (
-        "fork リポジトリへの push に失敗したため、変更内容を patch として提示します。\n\n"
-        f"```diff\n{patch}\n```"
-        f"{notice}"
+        (
+            "fork リポジトリへの push に失敗したため、変更内容を patch として提示します。\n\n"
+            f"```diff\n{patch}\n```"
+            f"{notice}"
+        ),
+        notice,
     )
 
 

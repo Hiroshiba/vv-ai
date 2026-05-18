@@ -38,13 +38,21 @@ def build_allow_edits_notice(
         return ""
     if notice_already_posted:
         return ""
-    execution_result.allow_edits_notice_posted = True
     return (
         "\n\n---\n"
         '**Note**: この PR で "Allow edits from maintainers" を有効にすると、'
         "次回以降 vv-ai が直接修正をプッシュできるようになります。"
         "PR の右サイドバー下部にあるチェックボックスから設定できます。"
     )
+
+
+def mark_allow_edits_notice_posted(
+    execution_result: ExecutionResult,
+    notice: str,
+) -> None:
+    """allow edits 案内を実際に投稿できた場合だけ投稿済みとして記録する。"""
+    if notice != "":
+        execution_result.allow_edits_notice_posted = True
 
 
 def _get_allow_edits_notice_posted(ready_execution: ReadyExecution) -> bool:

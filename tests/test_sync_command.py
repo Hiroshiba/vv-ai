@@ -532,6 +532,43 @@ def test_run_sync_command_fork_push_failure_posts_allow_edits_notice(
     assert "Allow edits from maintainers" in body
 
 
+def test_run_sync_command_does_not_mark_allow_edits_notice_when_post_fails(
+    tmp_path: Path,
+) -> None:
+    """allow edits 案内コメントの投稿に失敗した場合は案内済みにしない。"""
+    ready = _make_ready_execution()
+    pr = _make_pull_request(True, False)
+    github_client = _make_github_client(pr)
+    github_client.create_issue_comment.side_effect = GitHubClientError("一時エラー")
+
+    with (
+        patch("vv_ai.sync_command.checkout_fork_pr"),
+        patch("vv_ai.sync_command.ensure_worktree_clean"),
+        patch("vv_ai.sync_command.fetch_remote"),
+        patch("vv_ai.sync_command.get_head_sha", return_value="sha0"),
+        patch("vv_ai.sync_command.is_ancestor", return_value=True),
+        patch(
+            "vv_ai.sync_command.execute_provider",
+            return_value=_make_execution_result("success", "修正不要", "s1"),
+        ),
+        patch(
+            "vv_ai.sync_command._validate_provider_did_not_take_over_git",
+            return_value=None,
+        ),
+        patch("vv_ai.sync_command.list_changed_files", return_value=[]),
+        patch("vv_ai.sync_command.list_staged_files", return_value=[]),
+        patch("vv_ai.sync_command.list_conflict_marker_files", return_value=[]),
+        patch("vv_ai.sync_command.commit_all_changes", return_value=False),
+        patch("vv_ai.sync_command.try_push_current_branch", return_value=False),
+        patch("vv_ai.sync_command.generate_diff_patch", return_value="diff --git a/a b/a"),
+    ):
+        result = run_sync_command(tmp_path, ready, github_client, {}, 0.1)
+
+    assert result.status == "failure"
+    assert result.allow_edits_notice_posted is False
+    github_client.create_issue_comment.assert_called_once()
+
+
 def test_run_sync_command_keeps_restored_allow_edits_notice_state(
     tmp_path: Path,
 ) -> None:

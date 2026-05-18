@@ -31,7 +31,11 @@ from vv_ai.github import (
     GitHubReactionContent,
     build_github_client,
 )
-from vv_ai.github_comment import build_allow_edits_notice, post_issue_comment_safely
+from vv_ai.github_comment import (
+    build_allow_edits_notice,
+    mark_allow_edits_notice_posted,
+    post_issue_comment_safely,
+)
 from vv_ai.preflight import ReadyExecution
 from vv_ai.prompt import build_provider_prompt
 from vv_ai.provider_execution import execute_provider
@@ -557,6 +561,7 @@ def _post_fork_patch_fallback(
     )
     if not posted:
         return
+    mark_allow_edits_notice_posted(execution_result, notice)
     print("fork PR への push に失敗したため、patch をコメントで投稿しました。")
 
 
