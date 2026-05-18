@@ -29,7 +29,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `breakdown`    | task-breakdown スキルでタスク分割し、サブ Issue を作成する   | ✅        | —      |
 | `implement`    | 実装して PR 作成、または既存 PR に追コミット                 | ✅        | ✅     |
 | `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
-| `sync`         | PR を同期する                                                | —        | ✅     |
+| `sync`         | PR ブランチをベースブランチに同期する                       | —        | ✅     |
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
 | `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
 
@@ -69,7 +69,6 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 - Issue の `implement` 後の `next` はエラー終了
 - PR の履歴なし `next` は `review`
 - PR では `review` と `implement` を交互に実行
-- PR の `next` は `sync` を履歴として扱わず、`review` と `implement` だけで解決する
 
 ---
 
