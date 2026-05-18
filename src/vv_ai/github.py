@@ -913,34 +913,6 @@ def _build_comment(raw_comment: object) -> GitHubComment:
     return _validate_model(GitHubComment, payload, "コメント")
 
 
-def _build_issue_labeled_event_list(
-    raw_events: list[object],
-) -> list[GitHubIssueLabeledEvent]:
-    """timeline event 配列 JSON を labeled event model 配列へ変換する。"""
-    events: list[GitHubIssueLabeledEvent] = []
-    for raw_event in raw_events:
-        if not isinstance(raw_event, dict):
-            raise GitHubClientError("timeline event 要素の JSON 形式が不正です")
-        if raw_event.get("event") != "labeled":
-            continue
-        events.append(_build_issue_labeled_event(raw_event))
-    return events
-
-
-def _build_issue_labeled_event(
-    raw_event: dict[str, object],
-) -> GitHubIssueLabeledEvent:
-    """labeled event JSON を model へ変換する。"""
-    label = _require_mapping(raw_event.get("label"), "label")
-    payload = {
-        "id": raw_event.get("id"),
-        "label_name": label.get("name"),
-        "actor": _build_rest_user(raw_event.get("actor")),
-        "created_at": raw_event.get("created_at"),
-    }
-    return _validate_model(GitHubIssueLabeledEvent, payload, "labeled event")
-
-
 def _build_issue_timeline_event_list(
     raw_events: list[object],
 ) -> list[GitHubIssueTimelineEvent]:
