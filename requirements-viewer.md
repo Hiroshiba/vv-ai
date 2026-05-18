@@ -76,7 +76,7 @@ Static Web Application / Internal Tool / Analytics Viewer
 - run 一覧の基本フィルタ
   - 期間
   - provider
-  - command（`reply` / `plan` / `implement` / `review` / `issue`）
+  - command（`reply` / `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `address` / `review` / `sync` / `issue` / `next`）
   - 失敗イベント有無
   - テキスト検索
 - run 詳細ページ / パネルで以下を表示
@@ -333,7 +333,7 @@ artifact 名は `vv-ai-session__...`, `vv-ai-metrics__...`, `vv-ai-report__...` 
 
 ## NOTES & INSIGHTS
 - `.github/workflows/vv-ai.yml` では `issue_comment` と `workflow_dispatch` の両方で `vv-ai` workflow が起動する。
-- `workflow_dispatch` の command 入力は `reply / plan / implement / review / issue`。
+- `workflow_dispatch` の command 入力は `reply / confirm / requirements / arch / detail / breakdown / implement / address / review / sync / issue / next`。
 - workflow は session artifact を最大 2 件、metrics artifact を 1 件、report artifact を 1 件アップロードする設計。
 - session artifact には `meta.json`, `git-diff.patch`, `git-staged.patch`, `git-status.txt`, `untracked`, `provider-session` が含まれる。
 - metrics artifact は `summary`, `usage`, `behavior`, `tools`, `steps`, `provider_specific` を持つ。
