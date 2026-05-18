@@ -32,7 +32,7 @@ from vv_ai.git_ops import (
     stage_paths,
     try_push_current_branch,
 )
-from vv_ai.github import GitHubClient, GitHubClientError, GitHubPullRequestSyncState
+from vv_ai.github import GitHubClient, GitHubClientError
 from vv_ai.github_comment import (
     post_fork_push_failure_comment,
     post_issue_comment_safely,
@@ -63,23 +63,6 @@ class ConflictFileSnapshot:
     had_marker: bool
 
 
-@dataclass(frozen=True)
-class SyncExecutionFacts:
-    """sync 実行で確定した事実。"""
-
-    repository_full_name: str
-    number: int
-    head_ref_name: str
-    base_ref_name: str
-    is_cross_repository: bool
-    conflict_occurred: bool
-    conflict_resolved_by_ai: bool
-    merge_commit_created: bool
-    consistency_commit_created: bool
-    push_needed: bool
-    push_succeeded: bool
-
-
 @dataclass
 class SyncRuntimeState:
     """sync 実行中に集約する状態。"""
@@ -88,12 +71,10 @@ class SyncRuntimeState:
     allow_edits_notice_posted: bool = False
     conflict_occurred: bool = False
     conflict_resolved_by_ai: bool = False
-    conflict_result_text: str | None = None
     merge_commit_created: bool = False
     consistency_commit_created: bool = False
     push_needed: bool = False
     push_succeeded: bool = False
-    github_state_text: str | None = None
 
 
 def run_sync_command(
@@ -184,19 +165,10 @@ def run_sync_command(
                 runtime.push_needed or runtime.consistency_commit_created
             )
 
-        facts = SyncExecutionFacts(
-            repository_full_name=target.repository_full_name,
-            number=target.number,
-            head_ref_name=pr_info.head_ref_name,
-            base_ref_name=pr_info.base_ref_name,
-            is_cross_repository=pr_info.is_cross_repository,
-            conflict_occurred=runtime.conflict_occurred,
-            conflict_resolved_by_ai=runtime.conflict_resolved_by_ai,
-            merge_commit_created=runtime.merge_commit_created,
-            consistency_commit_created=runtime.consistency_commit_created,
-            push_needed=runtime.push_needed,
-            push_succeeded=False,
-        )
+        comment_body = _extract_comment_body(consistency_result.response_text)
+        if comment_body == "":
+            return _build_sync_result("failure", runtime, "最終コメント本文が空です")
+
         if not command.dry_run and runtime.push_needed:
             if pr_info.is_cross_repository:
                 if not try_push_current_branch(repo_root, env.get("GITHUB_TOKEN")):
@@ -218,47 +190,7 @@ def run_sync_command(
             else:
                 push_branch(repo_root, pr_info.head_ref_name, env.get("GITHUB_TOKEN"))
             runtime.push_succeeded = True
-            facts = _replace_push_succeeded(facts, True)
 
-        if not command.dry_run:
-            runtime.github_state_text = _fetch_github_state_text(
-                github_client,
-                target.repository_full_name,
-                target.number,
-            )
-
-        head_sha_before_comment = get_head_sha(repo_root)
-        comment_result = _run_provider_step(
-            repo_root,
-            ready_execution,
-            env,
-            preflight_duration_seconds,
-            _build_final_comment_prompt(
-                facts,
-                runtime.github_state_text,
-                _resolve_explicit_runtime_text(
-                    ready_execution,
-                    runtime.conflict_result_text,
-                ),
-                _resolve_explicit_provider_result(
-                    ready_execution,
-                    consistency_result,
-                ),
-            ),
-            runtime,
-        )
-        if comment_result.status != "success":
-            return _build_sync_result("failure", runtime, "最終コメント生成 AI が失敗しました")
-        if get_head_sha(repo_root) != head_sha_before_comment:
-            return _build_sync_result("failure", runtime, "最終コメント生成 AI が commit しました")
-        if len(list_staged_files(repo_root)) > 0:
-            return _build_sync_result("failure", runtime, "最終コメント生成 AI が stage しました")
-        if len(list_changed_files(repo_root)) > 0:
-            return _build_sync_result("failure", runtime, "最終コメント生成 AI がファイルを変更しました")
-
-        comment_body = _parse_final_comment_body(comment_result.response_text)
-        if comment_body == "":
-            return _build_sync_result("failure", runtime, "最終コメント本文が空です")
         if not command.dry_run:
             post_issue_comment_safely(
                 github_client,
@@ -336,6 +268,7 @@ def _merge_base_branch(
     )
     if len(stage_targets) == 0:
         raise SyncCommandError("AI による conflict file の変更がありません")
+    _resume_provider_session_after_conflict(ready_execution, conflict_result)
     stage_paths(repo_root, stage_targets)
     remaining_unmerged = list_unmerged_files(repo_root)
     if len(remaining_unmerged) > 0:
@@ -344,7 +277,6 @@ def _merge_base_branch(
         )
     commit_merge_no_edit(repo_root)
     runtime.conflict_resolved_by_ai = True
-    runtime.conflict_result_text = _get_provider_response_text(conflict_result)
     runtime.merge_commit_created = True
     runtime.push_needed = True
 
@@ -372,6 +304,20 @@ def _run_provider_step(
     if ready_execution.resolved_session is not None:
         ready_execution.resolved_session.state_ref = result.state_ref
     return result
+
+
+def _resume_provider_session_after_conflict(
+    ready_execution: ReadyExecution,
+    conflict_result: ExecutionResult,
+) -> None:
+    """conflict 解消後の次 provider 実行で同じ session を継続する。"""
+    session = ready_execution.resolved_session
+    if session is None:
+        raise SyncCommandError("provider session を継続できません")
+    if conflict_result.state_ref.provider_session_id is None:
+        raise SyncCommandError("provider session ID を取得できませんでした")
+    session.state_ref = conflict_result.state_ref
+    session.restore_strategy = "inherit"
 
 
 def _snapshot_conflict_files(
@@ -439,127 +385,23 @@ def _build_consistency_prompt(head_ref_name: str, base_ref_name: str) -> str:
         "sync コマンドの整合性確認を行ってください。\n"
         "必要最小限の修正だけをファイルへ反映してください。\n"
         "commit と stage は行わないでください。\n\n"
+        "最後に GitHub PR へ投稿する本文を出力してください。\n"
+        "出力には BODY: 行を必ず含め、その次の行から投稿本文だけを書いてください。\n"
+        "push 結果や push 後の GitHub PR 状態は本文に含めないでください。\n\n"
         f"head branch: {head_ref_name}\n"
         f"base branch: {base_ref_name}"
     )
 
 
-def _build_final_comment_prompt(
-    facts: SyncExecutionFacts,
-    github_state_text: str | None,
-    conflict_result_text: str | None,
-    consistency_result_text: str | None,
-) -> str:
-    """最終コメント生成 prompt を返す。"""
-    state_text = (
-        github_state_text if github_state_text is not None else "取得できませんでした"
-    )
-    conflict_block = (
-        ""
-        if conflict_result_text is None
-        else f"\nconflict 解消 AI の出力:\n{conflict_result_text}"
-    )
-    consistency_block = (
-        ""
-        if consistency_result_text is None
-        else f"\n整合性確認 AI の出力:\n{consistency_result_text}"
-    )
-    return (
-        "sync コマンドの最終コメント本文を作成してください。\n"
-        "1行目は BODY: とし、2行目以降に GitHub PR へ投稿する本文だけを書いてください。\n"
-        "ファイル変更、commit、stage は行わないでください。\n\n"
-        f"repository: {facts.repository_full_name}\n"
-        f"pull request: #{facts.number}\n"
-        f"head branch: {facts.head_ref_name}\n"
-        f"base branch: {facts.base_ref_name}\n"
-        f"fork PR: {facts.is_cross_repository}\n"
-        f"conflict occurred: {facts.conflict_occurred}\n"
-        f"conflict resolved by AI: {facts.conflict_resolved_by_ai}\n"
-        f"merge commit created: {facts.merge_commit_created}\n"
-        f"consistency commit created: {facts.consistency_commit_created}\n"
-        f"push needed: {facts.push_needed}\n"
-        f"push succeeded: {facts.push_succeeded}\n"
-        f"GitHub state: {state_text}"
-        f"{conflict_block}"
-        f"{consistency_block}"
-    )
-
-
-def _resolve_explicit_provider_result(
-    ready_execution: ReadyExecution,
-    provider_result: ExecutionResult,
-) -> str | None:
-    """provider session が継続されない場合だけ provider 結果を返す。"""
-    if _continues_provider_session(ready_execution):
-        return None
-    return _get_provider_response_text(provider_result)
-
-
-def _resolve_explicit_runtime_text(
-    ready_execution: ReadyExecution,
-    text: str | None,
-) -> str | None:
-    """provider session が継続されない場合だけ runtime text を返す。"""
-    if _continues_provider_session(ready_execution):
-        return None
-    return text
-
-
-def _get_provider_response_text(provider_result: ExecutionResult) -> str:
-    """provider result の応答本文を prompt 用に返す。"""
-    if provider_result.response_text is None:
-        return "応答本文なし"
-    return provider_result.response_text
-
-
-def _continues_provider_session(ready_execution: ReadyExecution) -> bool:
-    """次の provider 実行が直前の provider session を継続するか返す。"""
-    session = ready_execution.resolved_session
-    if session is None:
-        return False
-    if session.restore_strategy == "new":
-        return False
-    state_ref = session.state_ref
-    if state_ref is None:
-        return False
-    return state_ref.provider_session_id is not None
-
-
-def _parse_final_comment_body(response_text: str | None) -> str:
-    """最終コメント AI の出力から本文を返す。"""
+def _extract_comment_body(response_text: str | None) -> str:
+    """provider 出力から GitHub PR 投稿本文を返す。"""
     if response_text is None:
         return ""
     lines = response_text.split("\n")
-    if len(lines) > 0 and lines[0].strip() == "BODY:":
-        return "\n".join(lines[1:]).strip()
-    return response_text.strip()
-
-
-def _fetch_github_state_text(
-    github_client: GitHubClient,
-    repository_full_name: str,
-    number: int,
-) -> str | None:
-    """GitHub PR 状態を取得して prompt 用文字列へ整形する。"""
-    try:
-        state = github_client.get_pull_request_sync_state(repository_full_name, number)
-    except GitHubClientError as exc:
-        print(f"sync 状態取得に失敗しました: {exc}", file=sys.stderr)
-        return None
-    return _format_github_sync_state(state)
-
-
-def _format_github_sync_state(state: GitHubPullRequestSyncState) -> str:
-    """GitHub PR 状態を短い文字列へ整形する。"""
-    checks = state.status_check_summary
-    return (
-        f"mergeable={state.mergeable}, "
-        f"merge_state_status={state.merge_state_status}, "
-        f"checks success={checks.success_count}, "
-        f"failure={checks.failure_count}, "
-        f"pending={checks.pending_count}, "
-        f"unknown={checks.unknown_count}"
-    )
+    for index, line in enumerate(lines):
+        if line.strip() == "BODY:":
+            return "\n".join(lines[index + 1 :]).strip()
+    return ""
 
 
 def _generate_push_failure_patch(repo_root: Path, base_sha: str) -> str:
@@ -569,26 +411,6 @@ def _generate_push_failure_patch(repo_root: Path, base_sha: str) -> str:
     except GitOpsError as exc:
         print(f"patch 生成に失敗しました: {exc}", file=sys.stderr)
         return ""
-
-
-def _replace_push_succeeded(
-    facts: SyncExecutionFacts,
-    push_succeeded: bool,
-) -> SyncExecutionFacts:
-    """push 結果だけを差し替えた SyncExecutionFacts を返す。"""
-    return SyncExecutionFacts(
-        repository_full_name=facts.repository_full_name,
-        number=facts.number,
-        head_ref_name=facts.head_ref_name,
-        base_ref_name=facts.base_ref_name,
-        is_cross_repository=facts.is_cross_repository,
-        conflict_occurred=facts.conflict_occurred,
-        conflict_resolved_by_ai=facts.conflict_resolved_by_ai,
-        merge_commit_created=facts.merge_commit_created,
-        consistency_commit_created=facts.consistency_commit_created,
-        push_needed=facts.push_needed,
-        push_succeeded=push_succeeded,
-    )
 
 
 def _build_sync_result(
