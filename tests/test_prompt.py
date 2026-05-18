@@ -181,8 +181,8 @@ class TestBreakdownPrompt:
         prompt = _build_breakdown_prompt()
 
         assert (
-            "各タスクの本文には、breakdown 対象 Issue が親 Issue であることを"
-            "読者が辿れる言及を含めてください。"
+            "各タスクの本文には、親 Issue である breakdown 対象 Issue へ"
+            "GitHub 上で辿れる参照を含めてください。"
             in prompt
         )
 
