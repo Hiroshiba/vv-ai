@@ -368,6 +368,7 @@ def test_pr履歴ではsyncを無視する() -> None:
     result = _resolve_github(
         _make_target("pr", "github"),
         _make_comments(["sync"]),
+        [],
         None,
         None,
     )

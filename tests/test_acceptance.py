@@ -330,6 +330,93 @@ class TestImplementPRDryRun:
         mock_gh.create_issue_comment.assert_not_called()
 
 
+class TestSyncDryRun:
+    """sync コマンド dry-run のシナリオ。"""
+
+    def test_sync_pr_enters_sync_workflow(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "sync",
+            "--target-url", "https://github.com/org/repo/pull/5",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#5", "codex")
+        result = _make_execution_result("success", "sync 完了")
+        mock_gh = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            run_sync = stack.enter_context(
+                patch("vv_ai.command_handler.run_sync_command", return_value=result)
+            )
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        run_sync.assert_called_once()
+        execute_provider.assert_not_called()
+
+    def test_sync_issue_exits_two(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "sync",
+            "--target-url", "https://github.com/org/repo/issues/5",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+
+        with (
+            patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
+            patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}),
+        ):
+            exit_code = main(argv)
+
+        assert exit_code == 2
+
+    def test_implement_and_review_do_not_enter_sync_workflow(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        result = _make_execution_result("success", "実行完了")
+        mock_gh = MagicMock()
+        mock_gh.get_pull_request.return_value = _make_github_pr(
+            "org/repo",
+            5,
+            "feature-branch",
+        )
+
+        for command in ("implement", "review"):
+            argv = [
+                "--command", command,
+                "--target-url", "https://github.com/org/repo/pull/5",
+                "--provider", "codex",
+                "--session_mode", "new",
+                "--dry-run",
+            ]
+            session = _make_resolved_session("github", "org/repo#5", "codex")
+            with contextlib.ExitStack() as stack:
+                _enter_common_patches(stack, tmp_path, session, result, mock_gh)
+                run_sync = stack.enter_context(
+                    patch("vv_ai.command_handler.run_sync_command")
+                )
+                stack.enter_context(
+                    patch("vv_ai.command_handler.fetch_and_checkout_branch")
+                )
+                exit_code = main(argv)
+
+            assert exit_code == 0
+            run_sync.assert_not_called()
+
+
 class TestReviewDryRun:
     """review コマンド dry-run のシナリオ。"""
 

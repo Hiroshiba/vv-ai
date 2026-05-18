@@ -36,6 +36,7 @@ from vv_ai.prompt import build_provider_prompt
 from vv_ai.provider_execution import execute_provider
 from vv_ai.resolve import ResolvedTarget
 from vv_ai.session import SessionStateRef, TargetContextState
+from vv_ai.sync_command import run_sync_command
 from vv_ai.target_context import (
     build_target_context,
     empty_target_context_state,
@@ -110,6 +111,19 @@ def run_command(
     primary_error: BaseException | None = None
     try:
         try:
+            if command.command == "sync":
+                if github_client is None:
+                    raise RuntimeError("`sync` コマンドは GitHub PR を対象に指定してください")
+                execution_result = run_sync_command(
+                    repo_root,
+                    ready_execution,
+                    github_client,
+                    env,
+                    preflight_duration_seconds,
+                )
+                finalize_status = execution_result.status
+                return execution_result, None
+
             if (
                 command.command == "implement"
                 and target is not None
