@@ -96,8 +96,6 @@ _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
 
 _ADDRESS_TASK_DESCRIPTION: str = (
     "address-review スキルを使って、この PR のレビュー指摘に対応してください。"
-    "レビュー指摘を鵜呑みにせず、ローカルコードで検証して必要な修正だけを行ってください。"
-    "GitHub review thread の解決済み化や個別返信は行わないでください。"
     "ファイル変更のみ行ってください。git の操作は不要です。"
     "終了後にワーキングツリーの全変更が git add -A でコミットされます。"
     "GitHub 実行時は、あなたの最終出力の本文が対象 PR にコメントとして投稿されます。"
@@ -109,8 +107,6 @@ _ADDRESS_TASK_DESCRIPTION: str = (
     "2行目: BODY:\n"
     "3行目以降: Markdown の PR コメント本文\n"
     "\n"
-    "address-review スキルに結果報告の形式指定がある場合でも、最終出力では必ず上記の形式を優先してください。"
-    "スキルの結果報告は BODY に含めてください。"
     "コミットメッセージと本文以外の余計な出力は含めないでください。"
 )
 

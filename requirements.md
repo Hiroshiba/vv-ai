@@ -27,7 +27,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `arch`       | basic-design スキルで基本設計を行いコメントで返す            | ✅        | ✅     |
 | `detail`       | detailed-design スキルで詳細設計を行いコメントで返す         | ✅        | ✅     |
 | `breakdown`    | task-breakdown スキルでタスク分割し、サブ Issue を作成する   | ✅        | —      |
-| `implement`    | Issue を実装して PR 作成、または PR に明示された追加実装を追コミット | ✅        | ✅     |
+| `implement`    | 実装して PR 作成、または既存 PR に追コミット                       | ✅        | ✅     |
 | `address`      | PR のレビュー指摘に対応して追コミット                         | —        | ✅     |
 | `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
 | `sync`         | PR ブランチをベースブランチに同期する                       | —        | ✅     |

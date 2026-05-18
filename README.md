@@ -199,7 +199,7 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --command reply --t
 
 | 引数 | 説明 |
 | --- | --- |
-| `--command` | `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `address` / `review` / `sync` / `issue` / `next` / `reply` |
+| `--command` | `confirm` / `requirements` / `arch` / `detail` / `breakdown` / `implement` / `address` / `review` / `issue` / `next` / `reply` |
 | `--instruction` | 自然言語の指示本文 |
 | `--target-url` | 対象の Issue / PR URL またはローカルパス |
 | `--target-type` | `issue` または `pr` |
