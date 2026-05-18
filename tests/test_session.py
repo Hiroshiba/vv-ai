@@ -18,7 +18,7 @@ from vv_ai.session import (
     _build_manifest_from_restored_artifact,
     _resolve_restore_state,
 )
-from vv_ai.session_artifact import (
+from vv_ai.artifacts.session import (
     RestoredSessionArtifact,
     SessionArtifactError,
     SessionArtifactMeta,

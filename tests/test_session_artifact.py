@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from vv_ai.artifact_crypto import (
+from vv_ai.artifacts.crypto import (
     ArtifactCryptoError,
     resolve_age_public_key,
     resolve_age_secret_key,
 )
-from vv_ai.metrics_artifact import build_metrics_artifact_name
-from vv_ai.report_artifact import (
+from vv_ai.artifacts.metrics import build_metrics_artifact_name
+from vv_ai.artifacts.report import (
     ReportSections,
     build_report_artifact_name,
     render_report_markdown,
@@ -28,14 +28,14 @@ from vv_ai.session import (
     SessionStateRef,
     TargetContextState,
 )
-from vv_ai.session_artifact import (
+from vv_ai.artifacts.session import (
     SessionArtifactError,
     SessionArtifactMeta,
     build_session_artifact_name,
     build_session_artifact_prefix,
     load_session_artifact_meta,
 )
-from vv_ai.session_store import (
+from vv_ai.artifacts.store import (
     build_session_manifest_filename,
     list_session_manifests,
     load_latest_session_manifest,

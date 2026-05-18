@@ -6,7 +6,7 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-from vv_ai.execution import ExecutionResult, ExecutionStatus
+from vv_ai.executions.result import ExecutionResult, ExecutionStatus
 from vv_ai.git_ops import (
     GitOpsError,
     checkout_fork_pr,

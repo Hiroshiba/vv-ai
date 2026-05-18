@@ -15,8 +15,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict
 
-from vv_ai.execution import ExecutionResult
-from vv_ai.metrics_artifact import (
+from vv_ai.executions.result import ExecutionResult
+from vv_ai.artifacts.metrics import (
     ClaudeProviderMetrics,
     CodexProviderMetrics,
     MetricsBehavior,
@@ -30,7 +30,7 @@ from vv_ai.provider_asset_deploy import (
     deploy_claude_provider_assets,
     deploy_codex_provider_assets,
 )
-from vv_ai.report_artifact import ReportSections
+from vv_ai.artifacts.report import ReportSections
 from vv_ai.session import SessionStateRef
 
 _CODEX_OPENAI_API_KEY_ENV = "VV_OPENAI_API_KEY"
