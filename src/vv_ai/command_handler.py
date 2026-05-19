@@ -31,8 +31,9 @@ from vv_ai.backends.github.models import (
     GitHubPullRequest,
     GitHubReactionContent,
 )
+from vv_ai.next_decision import parse_next_decision_response
 from vv_ai.preflight import ReadyExecution
-from vv_ai.prompt import build_provider_prompt
+from vv_ai.prompt import build_next_decision_prompt, build_provider_prompt
 from vv_ai.provider_execution import execute_provider
 from vv_ai.resolve import ResolvedTarget
 from vv_ai.session import SessionStateRef, TargetContextState
@@ -72,16 +73,7 @@ def run_command(
     command = ready_execution.command
     target = command.target
 
-    if command.command == "review" and (target is None or target.kind != "pr"):
-        raise RuntimeError("`review` コマンドは PR を対象に指定してください")
-
-    if command.command == "address" and (target is None or target.kind != "pr"):
-        raise RuntimeError("`address` コマンドは PR を対象に指定してください")
-
-    if command.command == "breakdown" and (
-        target is None or target.kind != "issue" or target.backend != "github"
-    ):
-        raise RuntimeError("`breakdown` コマンドは GitHub Issue を対象に指定してください")
+    _validate_command_target(command.command, target)
 
     github_client = (
         build_github_client()
@@ -115,6 +107,22 @@ def run_command(
     primary_error: BaseException | None = None
     try:
         try:
+            decision_result = _resolve_next_decision_command(
+                repo_root,
+                ready_execution,
+                github_client,
+                env,
+                preflight_duration_seconds,
+            )
+            if decision_result is not None:
+                execution_result = decision_result
+                finalize_status = execution_result.status
+                return execution_result, None
+
+            command = ready_execution.command
+            target = command.target
+            _validate_command_target(command.command, target)
+
             if command.command == "sync":
                 if github_client is None:
                     raise RuntimeError("`sync` コマンドには GitHub target が必要です")
@@ -271,6 +279,78 @@ def run_command(
 
     assert execution_result is not None
     return execution_result, created_pr
+
+
+def _validate_command_target(command_name: str, target: ResolvedTarget | None) -> None:
+    if command_name == "review" and (target is None or target.kind != "pr"):
+        raise RuntimeError("`review` コマンドは PR を対象に指定してください")
+    if command_name == "address" and (target is None or target.kind != "pr"):
+        raise RuntimeError("`address` コマンドは PR を対象に指定してください")
+    if command_name == "breakdown" and (
+        target is None or target.kind != "issue" or target.backend != "github"
+    ):
+        raise RuntimeError("`breakdown` コマンドは GitHub Issue を対象に指定してください")
+    if command_name == "next" and (target is None or target.kind != "issue"):
+        raise RuntimeError("AI 判断が必要な `next` コマンドは Issue を対象に指定してください")
+
+
+def _resolve_next_decision_command(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    github_client: GitHubClient | None,
+    env: Mapping[str, str],
+    preflight_duration_seconds: float,
+) -> ExecutionResult | None:
+    command = ready_execution.command
+    if command.command != "next":
+        return None
+
+    target = command.target
+    if target is None or target.kind != "issue":
+        raise RuntimeError("AI 判断が必要な `next` コマンドは Issue を対象に指定してください")
+
+    target_context = build_target_context(
+        github_client,
+        target,
+        command.comment_id,
+        _get_target_context_state(ready_execution),
+        None,
+    )
+    provider_prompt = build_next_decision_prompt(
+        ready_execution,
+        target_context.prompt_block,
+    )
+    decision_result = execute_provider(
+        repo_root,
+        ready_execution,
+        env,
+        preflight_duration_seconds,
+        provider_prompt,
+    )
+    if decision_result.status != "success":
+        return decision_result.model_copy(
+            update={
+                "state_ref": merge_target_context_state(
+                    decision_result.state_ref,
+                    target_context.state,
+                )
+            }
+        )
+
+    decision_command = parse_next_decision_response(decision_result.response_text)
+    _remember_next_decision_state(ready_execution, decision_result)
+    ready_execution.command = command.model_copy(update={"command": decision_command})
+    return None
+
+
+def _remember_next_decision_state(
+    ready_execution: ReadyExecution,
+    decision_result: ExecutionResult,
+) -> None:
+    session = ready_execution.resolved_session
+    if session is None:
+        return
+    session.state_ref = decision_result.state_ref
 
 
 def _is_github_target(target: ResolvedTarget | None) -> bool:

@@ -15,6 +15,7 @@ flowchart TD
   requirements(["要件定義"])
   arch(["基本設計"])
   detail(["詳細設計"])
+  next_decision{"分割判断"}
   breakdown(["タスク分割"])
   subissues[["サブ Issue 群"]]
   implement_issue(["実装して PR 作成"])
@@ -28,7 +29,10 @@ flowchart TD
   intent -- "requirements" --> requirements
   requirements -- "arch" --> arch
   arch -- "detail" --> detail
+  detail -- "next" --> next_decision
   detail -- "breakdown" --> breakdown
+  next_decision -- "breakdown" --> breakdown
+  next_decision -- "implement" --> implement_issue
   breakdown --> subissues
   subissues -- "implement" --> implement_issue
   implement_issue --> pr
@@ -40,7 +44,7 @@ flowchart TD
 
   class issue,subissues,pr,merged githubObject
   class intent,requirements,arch,detail,breakdown,implement_issue,review,address aiStep
-  class review_result decision
+  class next_decision,review_result decision
 
   classDef githubObject fill:#e8f3ff,stroke:#2f6f9f,stroke-width:2px
   classDef aiStep fill:#edf7ed,stroke:#3c7a3c,stroke-width:2px
@@ -137,6 +141,7 @@ Issue / PR で使えるコマンド:
 
 `issue` は要望を短く整理して Issue を作成します。
 `requirements` は作成済みの Issue や PR に対して要件を整理します。
+`next` は履歴から次の工程へ進みます。通常 Issue の `detail` 後だけは、AI が `breakdown` か `implement` を判断します。
 
 Issue でのみ使えるコマンド:
 

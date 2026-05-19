@@ -220,7 +220,7 @@ def test_githubサブissueの履歴なしnextはimplementに解決される() ->
     assert result.command == "implement"
 
 
-def test_issueの設計工程を履歴から再生する() -> None:
+def test_issueのdetail後のnextはAI判断対象として残る() -> None:
     target = _make_target("issue", "github")
 
     result = _resolve_github(
@@ -231,7 +231,19 @@ def test_issueの設計工程を履歴から再生する() -> None:
         None,
     )
 
-    assert result.command == "breakdown"
+    assert result.command == "next"
+
+
+def test_過去nextがAI判断対象なら履歴を更新しない() -> None:
+    result = _resolve_github(
+        _make_target("issue", "github"),
+        _make_comments(["confirm", "requirements", "arch", "detail", "next", "confirm"]),
+        [],
+        None,
+        None,
+    )
+
+    assert result.command == "requirements"
 
 
 def test_issueのbreakdown後のnextは失敗する() -> None:

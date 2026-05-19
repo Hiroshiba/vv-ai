@@ -25,6 +25,10 @@ class NextResolutionError(Exception):
     """`next` コマンドの解決に失敗したことを表す例外。"""
 
 
+class NextAiDecisionRequired(NextResolutionError):
+    """`next` コマンドの解決に AI 判断が必要であることを表す例外。"""
+
+
 class NextHistoryEntry(BaseModel):
     """`next` 解決に使う過去コマンド履歴を表す。"""
 
@@ -49,7 +53,10 @@ def resolve_next_command(
     github_client = _build_history_github_client(target)
     is_sub_issue = _resolve_is_sub_issue(target, github_client)
     history = _load_history(repo_root, command, target, config, github_client)
-    resolved_command = _resolve_next_from_history(history, target, is_sub_issue)
+    try:
+        resolved_command = _resolve_next_from_history(history, target, is_sub_issue)
+    except NextAiDecisionRequired:
+        return command
     return command.model_copy(update={"command": resolved_command})
 
 
@@ -312,7 +319,9 @@ def _resolve_issue_next_command(
     if last_command == "arch":
         return "detail"
     if last_command == "detail":
-        return "breakdown"
+        raise NextAiDecisionRequired(
+            "Issue の detail 後の `next` には AI 判断が必要です"
+        )
     if last_command == "breakdown":
         raise NextResolutionError("Issue の breakdown 後に進めるコマンドがありません")
     if last_command == "implement":

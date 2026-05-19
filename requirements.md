@@ -32,7 +32,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
 | `sync`         | PR ブランチをベースブランチに同期する                       | —        | ✅     |
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
-| `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
+| `next`         | 履歴と必要時の AI 判断で次の既存工程を実行するショートカット | ✅        | ✅     |
 
 `sync` は PR 専用コマンドとして実行する。PR head branch を checkout し、`origin/<base>` との共通祖先を判定できる履歴を取得して取り込み状況を確認する。base branch がすでに HEAD の祖先なら merge commit は作らない。取り込みが必要なら `--no-ff --no-commit` で merge し、conflict がなければ wrapper が merge commit を作成する。
 
@@ -73,10 +73,11 @@ push 成功後または push 不要時、GitHub PR 状態を取得して最終�
 
 ### next の解決
 
-- `next` は専用の AI タスクではなく、履歴から次の既存コマンドへ解決するショートカット
+- `next` は原則として履歴から次の既存コマンドへ解決するショートカット
 - 通常 Issue の履歴なし `next` は `confirm`
 - サブ Issue の履歴なし `next` は `implement`
-- Issue では `confirm` → `requirements` → `arch` → `detail` → `breakdown` の順に進む
+- Issue では `confirm` → `requirements` → `arch` → `detail` の順に進む
+- 通常 Issue の `detail` 後の `next` は AI が `breakdown` または `implement` を判断する
 - 親 Issue の `breakdown` 後の `next` はエラー終了
 - Issue の `implement` 後の `next` はエラー終了
 - PR の履歴なし `next` は `review`
@@ -753,7 +754,7 @@ provider_priority:
 ## SUCCESS METRICS
 
 - プロトタイプとして 1 リポジトリで安定動作すること
-- Codex / Claude Code の両方で基本フロー（confirm → requirements → arch → detail → breakdown → implement → review → address）が回ること
+- Codex / Claude Code の両方で基本フロー（confirm → requirements → arch → detail → breakdown または implement → review → address）が回ること
 - セッション継続が機能し、文脈を引き継いだ作業ができること
 - fork PR でも安全に動作すること（API キー漏洩なし）
 - per-run の metrics / report が確実に保存されること
