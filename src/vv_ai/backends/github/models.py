@@ -62,7 +62,7 @@ class GitHubIssueLabeledEvent(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: int
+    id: int | None
     label_name: str
     actor: GitHubActor
     created_at: str
@@ -73,7 +73,7 @@ class GitHubIssueTimelineEvent(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: int
+    id: int | None
     event: GitHubIssueTimelineEventName
     actor: GitHubActor
     created_at: str

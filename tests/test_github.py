@@ -177,7 +177,6 @@ def test_list_issue_labeled_events_builds_models() -> None:
                     [
                         {
                             "__typename": "LabeledEvent",
-                            "databaseId": 101,
                             "label": {"name": "vv-ai:requirements"},
                             "actor": {"login": "Hiroshiba"},
                             "createdAt": "2026-05-17T16:00:00Z",
@@ -195,7 +194,6 @@ def test_list_issue_labeled_events_builds_models() -> None:
                     [
                         {
                             "__typename": "LabeledEvent",
-                            "databaseId": 103,
                             "label": {"name": "bug"},
                             "actor": {"login": "other-user"},
                             "createdAt": "2026-05-17T16:02:00Z",
@@ -229,17 +227,21 @@ def test_list_issue_labeled_events_builds_models() -> None:
     assert "... on Issue" in query
     assert "... on PullRequest" in query
     assert "issueOrPullRequest(number: $number) {\n      timelineItems" not in query
+    assert "... on IssueComment {\n      databaseId" in query
+    assert "... on LabeledEvent {\n      databaseId" not in query
+    assert "... on SubIssueAddedEvent {\n      databaseId" not in query
+    assert "... on CrossReferencedEvent {\n      databaseId" not in query
     assert "ISSUE_COMMENT" in query
     assert "LABELED_EVENT" in query
     assert "SUB_ISSUE_ADDED_EVENT" in query
     assert "CROSS_REFERENCED_EVENT" in query
     assert "willCloseTarget" not in query
     assert len(events) == 2
-    assert events[0].id == 101
+    assert events[0].id is None
     assert events[0].label_name == "vv-ai:requirements"
     assert events[0].actor.login == "Hiroshiba"
     assert events[0].created_at == "2026-05-17T16:00:00Z"
-    assert events[1].id == 103
+    assert events[1].id is None
     assert events[1].label_name == "bug"
 
 
@@ -259,7 +261,6 @@ def test_list_issue_timeline_events_builds_graphql_models() -> None:
                         },
                         {
                             "__typename": "LabeledEvent",
-                            "databaseId": 202,
                             "label": {"name": "vv-ai:next"},
                             "actor": {"login": "Hiroshiba"},
                             "createdAt": "2026-05-17T16:01:00Z",
@@ -270,7 +271,6 @@ def test_list_issue_timeline_events_builds_graphql_models() -> None:
                     [
                         {
                             "__typename": "SubIssueAddedEvent",
-                            "databaseId": 203,
                             "actor": {"login": "Hiroshiba"},
                             "createdAt": "2026-05-17T16:02:00Z",
                             "subIssue": {
@@ -280,7 +280,6 @@ def test_list_issue_timeline_events_builds_graphql_models() -> None:
                         },
                         {
                             "__typename": "CrossReferencedEvent",
-                            "databaseId": 204,
                             "actor": {"login": "other-user"},
                             "createdAt": "2026-05-17T16:03:00Z",
                             "source": {
@@ -325,7 +324,6 @@ def test_list_issue_timeline_events_builds_issue_cross_reference_source() -> Non
                     [
                         {
                             "__typename": "CrossReferencedEvent",
-                            "databaseId": 301,
                             "actor": {"login": "Hiroshiba"},
                             "createdAt": "2026-05-17T16:00:00Z",
                             "source": {
@@ -365,6 +363,7 @@ def test_list_issue_timeline_events_query_uses_issue_or_pull_request() -> None:
     assert "... on Issue" in captured_args[6]
     assert "... on PullRequest" in captured_args[6]
     assert "issueOrPullRequest(number: $number) {\n      timelineItems" not in captured_args[6]
+    assert "... on LabeledEvent {\n      databaseId" not in captured_args[6]
     assert "number=123" in captured_args
     assert "repos/org/repo/issues/123/timeline" not in captured_args
 
@@ -378,7 +377,6 @@ def test_list_issue_timeline_events_rejects_invalid_source() -> None:
                     [
                         {
                             "__typename": "CrossReferencedEvent",
-                            "databaseId": 301,
                             "actor": {"login": "Hiroshiba"},
                             "createdAt": "2026-05-17T16:00:00Z",
                             "source": {
@@ -412,7 +410,6 @@ def test_list_issue_timeline_events_rejects_invalid_page() -> None:
                 [
                     {
                         "__typename": "LabeledEvent",
-                        "databaseId": 101,
                         "actor": {"login": "Hiroshiba"},
                         "createdAt": "2026-05-17T16:00:00Z",
                     }
@@ -425,7 +422,6 @@ def test_list_issue_timeline_events_rejects_invalid_page() -> None:
                 [
                     {
                         "__typename": "LabeledEvent",
-                        "databaseId": 101,
                         "label": {"name": "vv-ai:next"},
                         "createdAt": "2026-05-17T16:00:00Z",
                     }
@@ -454,7 +450,6 @@ def test_list_issue_timeline_events_rejects_invalid_event(
                 [
                     {
                         "__typename": "LabeledEvent",
-                        "databaseId": 101,
                         "actor": {"login": "Hiroshiba"},
                         "createdAt": "2026-05-17T16:00:00Z",
                     }
@@ -467,7 +462,6 @@ def test_list_issue_timeline_events_rejects_invalid_event(
                 [
                     {
                         "__typename": "LabeledEvent",
-                        "databaseId": 101,
                         "label": {"name": "vv-ai:next"},
                         "createdAt": "2026-05-17T16:00:00Z",
                     }

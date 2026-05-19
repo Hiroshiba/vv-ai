@@ -241,7 +241,6 @@ timelineItems(
       body
     }
     ... on LabeledEvent {
-      databaseId
       actor {
         login
       }
@@ -251,7 +250,6 @@ timelineItems(
       }
     }
     ... on SubIssueAddedEvent {
-      databaseId
       actor {
         login
       }
@@ -264,7 +262,6 @@ timelineItems(
       }
     }
     ... on CrossReferencedEvent {
-      databaseId
       actor {
         login
       }

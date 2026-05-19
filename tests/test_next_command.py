@@ -89,6 +89,7 @@ def _make_comment(
         created_at=created_at,
         body=body,
         label_name=None,
+        comment_database_id=comment_id,
     )
 
 

@@ -359,7 +359,7 @@ def _build_issue_commented_timeline_event(
     raw_event: dict[str, object],
 ) -> GitHubIssueTimelineEvent:
     """IssueComment JSON を next 履歴用 model へ変換する。"""
-    database_id = raw_event.get("databaseId")
+    database_id = _require_int(raw_event.get("databaseId"), "IssueComment.databaseId")
     payload = {
         "id": database_id,
         "event": "commented",
@@ -381,7 +381,7 @@ def _build_issue_labeled_timeline_event(
     """LabeledEvent JSON を next 履歴用 model へ変換する。"""
     label = _require_mapping(raw_event.get("label"), "label")
     payload = {
-        "id": raw_event.get("databaseId"),
+        "id": None,
         "event": "labeled",
         "actor": _build_actor(raw_event.get("actor")),
         "created_at": raw_event.get("createdAt"),
@@ -402,7 +402,7 @@ def _build_sub_issue_added_timeline_event(
     sub_issue = _require_mapping(raw_event.get("subIssue"), "subIssue")
     repository = _require_mapping(sub_issue.get("repository"), "subIssue.repository")
     payload = {
-        "id": raw_event.get("databaseId"),
+        "id": None,
         "event": "sub_issue_added",
         "actor": _build_actor(raw_event.get("actor")),
         "created_at": raw_event.get("createdAt"),
@@ -430,7 +430,7 @@ def _build_cross_referenced_timeline_event(
         raise GitHubClientError(f"未対応の cross reference source です: {source_type}")
     repository = _require_mapping(source.get("repository"), "source.repository")
     payload = {
-        "id": raw_event.get("databaseId"),
+        "id": None,
         "event": "cross_referenced",
         "actor": _build_actor(raw_event.get("actor")),
         "created_at": raw_event.get("createdAt"),
@@ -463,6 +463,13 @@ def _build_actor(raw_actor: object) -> GitHubActor:
         {"login": raw_actor.get("login")},
         "author",
     )
+
+
+def _require_int(value: object, field_name: str) -> int:
+    """整数項目を返す。"""
+    if type(value) is not int:
+        raise GitHubClientError(f"{field_name} が不正です")
+    return value
 
 
 def _build_rest_user(raw_user: object) -> GitHubActor:
