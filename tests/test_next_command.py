@@ -9,6 +9,7 @@ import pytest
 
 from vv_ai.config import VVAIConfig
 from vv_ai.backends.github.models import GitHubActor, GitHubIssueTimelineEvent
+from vv_ai.next_decision import format_next_decision_history_comment
 from vv_ai.next_command import NextResolutionError, resolve_next_command
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 
@@ -101,6 +102,19 @@ def _make_comments(commands: list[str]) -> list[GitHubIssueTimelineEvent]:
         )
         for index, command in enumerate(commands, start=1)
     ]
+
+
+def _make_next_decision_comment(
+    comment_id: int,
+    command: str,
+    created_at: str,
+) -> GitHubIssueTimelineEvent:
+    return _make_comment(
+        comment_id,
+        format_next_decision_history_comment(command),
+        "vv-ai-public-read-github-app[bot]",
+        created_at,
+    )
 
 
 def _make_label_event(
@@ -241,6 +255,66 @@ def test_過去nextがAI判断対象なら履歴を更新しない() -> None:
         [],
         None,
         None,
+    )
+
+    assert result.command == "requirements"
+
+
+def test_過去nextのbreakdown判断結果は履歴として再生される() -> None:
+    target = _make_target("issue", "github")
+
+    with pytest.raises(NextResolutionError, match="breakdown 後"):
+        _resolve_github_timeline(
+            target,
+            [
+                *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
+                _make_next_decision_comment(
+                    100,
+                    "breakdown",
+                    "2026-05-15T00:06:00Z",
+                ),
+            ],
+            None,
+            _make_next_command(target, None),
+        )
+
+
+def test_過去nextのimplement判断結果は履歴として再生される() -> None:
+    target = _make_target("issue", "github")
+
+    with pytest.raises(NextResolutionError, match="implement 後"):
+        _resolve_github_timeline(
+            target,
+            [
+                *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
+                _make_next_decision_comment(
+                    100,
+                    "implement",
+                    "2026-05-15T00:06:00Z",
+                ),
+            ],
+            None,
+            _make_next_command(target, None),
+        )
+
+
+def test_humanのnext判断履歴コメントは無視される() -> None:
+    target = _make_target("issue", "github")
+
+    result = _resolve_github_timeline(
+        target,
+        [
+            *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
+            _make_comment(
+                100,
+                format_next_decision_history_comment("breakdown"),
+                "Hiroshiba",
+                "2026-05-15T00:06:00Z",
+            ),
+            _make_comment(101, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:07:00Z"),
+        ],
+        None,
+        _make_next_command(target, None),
     )
 
     assert result.command == "requirements"

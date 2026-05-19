@@ -141,7 +141,7 @@ Issue / PR で使えるコマンド:
 
 `issue` は要望を短く整理して Issue を作成します。
 `requirements` は作成済みの Issue や PR に対して要件を整理します。
-`next` は履歴から次の工程へ進みます。通常 Issue の `detail` 後だけは、AI が `breakdown` か `implement` を判断します。
+`next` は履歴から次の工程へ進みます。通常 Issue の `detail` 後だけは、AI が `breakdown` か `implement` を判断し、判断結果を次回以降の履歴再生に使います。
 
 Issue でのみ使えるコマンド:
 

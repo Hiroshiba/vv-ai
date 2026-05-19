@@ -78,6 +78,7 @@ push 成功後または push 不要時、GitHub PR 状態を取得して最終�
 - サブ Issue の履歴なし `next` は `implement`
 - Issue では `confirm` → `requirements` → `arch` → `detail` の順に進む
 - 通常 Issue の `detail` 後の `next` は AI が `breakdown` または `implement` を判断する
+- AI 判断付き `next` の選択結果は履歴保存コメントとして残し、後続の `next` 履歴再生で選択済みコマンドとして扱う
 - 親 Issue の `breakdown` 後の `next` はエラー終了
 - Issue の `implement` 後の `next` はエラー終了
 - PR の履歴なし `next` は `review`

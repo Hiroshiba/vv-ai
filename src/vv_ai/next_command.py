@@ -16,6 +16,7 @@ from vv_ai.input import (
     parse_comment_invocation,
     parse_label_invocation,
 )
+from vv_ai.next_decision import NextDecisionError, parse_next_decision_history_marker
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 
 HistorySource = Literal["comment", "label"]
@@ -189,6 +190,17 @@ def _build_github_history_entry(
     config: VVAIConfig,
     timeline_event: GitHubIssueTimelineEvent,
 ) -> NextHistoryEntry | None:
+    bot_decision_command = _parse_bot_next_decision_history_command(timeline_event)
+    if bot_decision_command is not None:
+        if _should_ignore_command(target, bot_decision_command):
+            return None
+        return NextHistoryEntry(
+            command=bot_decision_command,
+            created_at=timeline_event.created_at,
+            id=timeline_event.id,
+            source="comment",
+        )
+
     if timeline_event.actor.login not in config.allowed_users:
         return None
     command = _parse_timeline_history_command(timeline_event)
@@ -202,6 +214,21 @@ def _build_github_history_entry(
         id=timeline_event.id,
         source="comment" if timeline_event.event == "commented" else "label",
     )
+
+
+def _parse_bot_next_decision_history_command(
+    timeline_event: GitHubIssueTimelineEvent,
+) -> CommandName | None:
+    if timeline_event.event != "commented":
+        return None
+    if not timeline_event.actor.login.endswith("[bot]"):
+        return None
+    if timeline_event.body is None:
+        return None
+    try:
+        return parse_next_decision_history_marker(timeline_event.body)
+    except NextDecisionError as exc:
+        raise NextResolutionError("AI 判断済み `next` 履歴の解析に失敗しました") from exc
 
 
 def _load_local_history(repo_root: Path, target: ResolvedTarget) -> list[NextHistoryEntry]:

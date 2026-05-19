@@ -31,7 +31,11 @@ from vv_ai.backends.github.models import (
     GitHubPullRequest,
     GitHubReactionContent,
 )
-from vv_ai.next_decision import parse_next_decision_response
+from vv_ai.next_decision import (
+    NextDecisionCommand,
+    format_next_decision_history_comment,
+    parse_next_decision_response,
+)
 from vv_ai.preflight import ReadyExecution
 from vv_ai.prompt import build_next_decision_prompt, build_provider_prompt
 from vv_ai.provider_execution import execute_provider
@@ -104,9 +108,11 @@ def run_command(
     execution_result: ExecutionResult | None = None
     created_pr: GitHubPullRequest | None = None
     finalize_status: ExecutionStatus = "failure"
+    next_decision_command: NextDecisionCommand | None = None
     primary_error: BaseException | None = None
     try:
         try:
+            requires_next_decision = command.command == "next"
             decision_result = _resolve_next_decision_command(
                 repo_root,
                 ready_execution,
@@ -121,6 +127,10 @@ def run_command(
 
             command = ready_execution.command
             target = command.target
+            if requires_next_decision and (
+                command.command == "breakdown" or command.command == "implement"
+            ):
+                next_decision_command = command.command
             _validate_command_target(command.command, target)
 
             if command.command == "sync":
@@ -234,6 +244,12 @@ def run_command(
                 env,
             )
             assert execution_result is not None
+            _post_next_decision_history_comment(
+                ready_execution,
+                execution_result,
+                github_client,
+                next_decision_command,
+            )
             finalize_status = execution_result.status
         except BaseException as exc:
             primary_error = exc
@@ -294,6 +310,31 @@ def _validate_command_target(command_name: str, target: ResolvedTarget | None) -
         raise RuntimeError("AI 判断が必要な `next` コマンドは Issue を対象に指定してください")
 
 
+def _post_next_decision_history_comment(
+    ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
+    github_client: GitHubClient | None,
+    command: NextDecisionCommand | None,
+) -> None:
+    if command is None:
+        return
+    if execution_result.status != "success":
+        return
+
+    target = ready_execution.command.target
+    if ready_execution.command.dry_run or github_client is None or not _is_github_target(target):
+        return
+
+    assert target is not None
+    assert target.repository_full_name is not None
+    assert target.number is not None
+    github_client.create_issue_comment(
+        target.repository_full_name,
+        target.number,
+        format_next_decision_history_comment(command),
+    )
+
+
 def _resolve_next_decision_command(
     repo_root: Path,
     ready_execution: ReadyExecution,
@@ -327,15 +368,16 @@ def _resolve_next_decision_command(
         preflight_duration_seconds,
         provider_prompt,
     )
+    decision_result = decision_result.model_copy(
+        update={
+            "state_ref": merge_target_context_state(
+                decision_result.state_ref,
+                target_context.state,
+            )
+        }
+    )
     if decision_result.status != "success":
-        return decision_result.model_copy(
-            update={
-                "state_ref": merge_target_context_state(
-                    decision_result.state_ref,
-                    target_context.state,
-                )
-            }
-        )
+        return decision_result
 
     decision_command = parse_next_decision_response(decision_result.response_text)
     _remember_next_decision_state(ready_execution, decision_result)
