@@ -715,7 +715,7 @@ class TestResolveRawInput:
         resolved = resolve_raw_input(raw)
         assert resolved.repo == "explicit/repo"
 
-    def test_issue_repo_empty_string_does_not_fallback(self) -> None:
+    def test_issue_repo_empty_string_raises(self) -> None:
         raw = RawInput(
             event_name="local",
             command="issue",
@@ -723,8 +723,19 @@ class TestResolveRawInput:
             repo="",
             repository_full_name="fallback/repo",
         )
-        resolved = resolve_raw_input(raw)
-        assert resolved.repo == ""
+        with pytest.raises(ResolutionError, match="repo"):
+            resolve_raw_input(raw)
+
+    def test_issue_repo_blank_string_raises(self) -> None:
+        raw = RawInput(
+            event_name="local",
+            command="issue",
+            instruction="バグ報告",
+            repo="   ",
+            repository_full_name="fallback/repo",
+        )
+        with pytest.raises(ResolutionError, match="repo"):
+            resolve_raw_input(raw)
 
     def test_breakdown_requires_target(self) -> None:
         raw = RawInput(event_name="local", command="breakdown")

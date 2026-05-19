@@ -189,5 +189,7 @@ def _resolve_repo(command: CommandName, raw_input: RawInput) -> str | None:
     if command != "issue":
         return raw_input.repo
     if raw_input.repo is not None:
+        if raw_input.repo.strip() == "":
+            raise ResolutionError("`repo` は空文字にできません")
         return raw_input.repo
     return raw_input.repository_full_name
