@@ -248,6 +248,18 @@ def test_issueのdetail後のnextはAI判断対象として残る() -> None:
     assert result.command == "next"
 
 
+def test_githubサブissueのdetail後nextはimplementに解決される() -> None:
+    result = _resolve_github(
+        _make_target("issue", "github"),
+        _make_comments(["confirm", "requirements", "arch", "detail"]),
+        [],
+        10,
+        None,
+    )
+
+    assert result.command == "implement"
+
+
 def test_過去nextがAI判断対象なら履歴を更新しない() -> None:
     result = _resolve_github(
         _make_target("issue", "github"),

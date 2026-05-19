@@ -346,6 +346,8 @@ def _resolve_issue_next_command(
     if last_command == "arch":
         return "detail"
     if last_command == "detail":
+        if is_sub_issue:
+            return "implement"
         raise NextAiDecisionRequired(
             "Issue の detail 後の `next` には AI 判断が必要です"
         )
