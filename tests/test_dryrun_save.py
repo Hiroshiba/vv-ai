@@ -259,14 +259,45 @@ class TestDryRunSuppression:
 
         github_client.create_issue_comment.assert_not_called()
 
-    def test_non_dryrun_posts_response_comment(self) -> None:
-        ready = _make_ready_execution(command=_make_command(command="arch", dry_run=False))
+    @pytest.mark.parametrize(
+        ("command", "heading"),
+        [
+            ("confirm", "## 要望確認"),
+            ("requirements", "## 要件定義"),
+            ("arch", "## 基本設計"),
+            ("detail", "## 詳細設計"),
+            ("review", "## レビュー"),
+        ],
+    )
+    def test_non_dryrun_posts_response_comment_with_heading(
+        self,
+        command: str,
+        heading: str,
+    ) -> None:
+        ready = _make_ready_execution(command=_make_command(command=command, dry_run=False))
         result = _make_execution_result("success", response_text="計画です")
         github_client = MagicMock()
 
         _post_response_comment(ready, result, github_client)
 
-        github_client.create_issue_comment.assert_called_once()
+        github_client.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            f"{heading}\n\n計画です",
+        )
+
+    def test_non_dryrun_posts_reply_response_comment_without_heading(self) -> None:
+        ready = _make_ready_execution(command=_make_command(command="reply", dry_run=False))
+        result = _make_execution_result("success", response_text="返答です")
+        github_client = MagicMock()
+
+        _post_response_comment(ready, result, github_client)
+
+        github_client.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "返答です",
+        )
 
 
 class TestImplementResponseComment:

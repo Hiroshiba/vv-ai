@@ -755,6 +755,11 @@ class TestLabelEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+        mock_gh.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "## 要望確認\n\n確認しました",
+        )
         mock_gh.remove_issue_label.assert_called_once_with(
             "org/repo",
             1,
@@ -778,6 +783,11 @@ class TestLabelEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+        mock_gh.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "## 要望確認\n\n確認しました",
+        )
         mock_gh.remove_issue_label.assert_called_once_with(
             "org/repo",
             1,
@@ -802,6 +812,11 @@ class TestLabelEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+        mock_gh.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "## レビュー\n\nレビューしました",
+        )
         mock_gh.remove_issue_label.assert_called_once_with(
             "org/repo",
             1,
@@ -831,6 +846,11 @@ class TestLabelEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+        mock_gh.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "## レビュー\n\nレビューしました",
+        )
         mock_gh.remove_issue_label.assert_called_once_with(
             "org/repo",
             1,
