@@ -34,6 +34,16 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
 | `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
 
+`confirm`、`requirements`、`arch`、`detail`、`review` の結果コメントは、本文の先頭に工程見出しを付ける。
+
+| コマンド | 工程見出し |
+| --- | --- |
+| `confirm` | `## 要望確認` |
+| `requirements` | `## 要件定義` |
+| `arch` | `## 基本設計` |
+| `detail` | `## 詳細設計` |
+| `review` | `## レビュー` |
+
 `sync` は PR 専用コマンドとして実行し、公開用の同期コマンドは分けない。PR head branch を checkout し、`origin/<base>` との共通祖先を判定できる履歴を取得して取り込み状況を確認する。base branch がすでに HEAD の祖先なら merge commit は作らない。取り込みが必要なら `--no-ff --no-commit` で merge し、conflict がなければ wrapper が merge commit を作成する。
 
 conflict がある場合、AI には conflict file の解消だけを依頼する。AI が commit や stage を行った場合、想定外の staged diff がある場合、conflict marker が残った場合、未解消 conflict が残った場合は失敗する。wrapper は AI が解消した conflict file だけを stage し、merge commit を作成する。conflict 解消と整合性確認は別の provider 実行にし、conflict ありの sync は provider 実行 2 回とする。

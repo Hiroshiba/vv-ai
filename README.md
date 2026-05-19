@@ -155,6 +155,8 @@ PR でのみ使えるコマンド:
 
 対象の Issue または PR のタイトル、description、コメントも AI に渡します。
 
+`confirm`、`requirements`、`arch`、`detail`、`review` の結果コメントは、先頭に `## 要望確認` のような工程見出しを付けます。
+
 ### ラベル起動
 
 Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動します。

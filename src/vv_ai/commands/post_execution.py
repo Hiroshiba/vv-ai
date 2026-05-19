@@ -28,10 +28,18 @@ from vv_ai.git.operations import (
     push_branch,
     try_push_current_branch,
 )
-from vv_ai.workflow.preflight import ReadyExecution
+from vv_ai.inputs.models import CommandName
 from vv_ai.inputs.resolve import ResolvedTarget
+from vv_ai.workflow.preflight import ReadyExecution
 
 _PR_CHANGE_COMMANDS = frozenset({"implement", "address"})
+_RESPONSE_COMMENT_HEADINGS: dict[CommandName, str] = {
+    "confirm": "## 要望確認",
+    "requirements": "## 要件定義",
+    "arch": "## 基本設計",
+    "detail": "## 詳細設計",
+    "review": "## レビュー",
+}
 
 
 def handle_post_execution(
@@ -386,9 +394,10 @@ def _post_response_comment(
     if response_text is None:
         return
 
+    comment_body = _format_response_comment_body(command.command, response_text)
     target = command.target
     if command.dry_run or github_client is None or not _is_github_target(target):
-        print(response_text)
+        print(comment_body)
         return
 
     assert target is not None
@@ -398,7 +407,15 @@ def _post_response_comment(
         github_client.create_issue_comment(
             target.repository_full_name,
             target.number,
-            response_text,
+            comment_body,
         )
     except GitHubClientError as exc:
         print(f"コメント投稿に失敗しました: {exc}", file=sys.stderr)
+
+
+def _format_response_comment_body(command_name: CommandName, response_text: str) -> str:
+    """対象コマンドの応答本文に工程見出しを付ける。"""
+    if command_name not in _RESPONSE_COMMENT_HEADINGS:
+        return response_text
+    heading = _RESPONSE_COMMENT_HEADINGS[command_name]
+    return f"{heading}\n\n{response_text}"
