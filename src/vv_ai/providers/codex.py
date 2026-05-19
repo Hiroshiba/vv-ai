@@ -21,7 +21,12 @@ from vv_ai.artifacts.metrics import (
 from vv_ai.artifacts.report import ReportSections
 from vv_ai.executions.result import ExecutionResult
 from vv_ai.workflow.preflight import ReadyExecution
-from vv_ai.providers.assets import ProviderAssetDeployError, deploy_codex_provider_assets
+from vv_ai.providers.assets import (
+    ProviderAssetDeployError,
+    copy_codex_provider_assets_to_work_dir,
+    deploy_codex_provider_assets,
+    sync_codex_provider_assets_from_work_dir,
+)
 from vv_ai.providers.environment import build_codex_env, resolve_codex_home_from_env
 from vv_ai.providers.runner import ProviderExecutionError
 from vv_ai.providers.sessions import deploy_codex_session_dir, resolve_codex_session_dir
@@ -36,6 +41,7 @@ _CODEX_WEB_SEARCH_DISABLE_OPTIONS = (
     "--disable",
     "web_search_cached",
 )
+_CODEX_WORK_DIR_RELATIVE_PATH = Path(".vv-ai/codex-work")
 
 
 class _CodexOutput(BaseModel):
@@ -63,7 +69,6 @@ def execute_codex(
         output_file = Path(f.name)
 
     try:
-        command = _build_codex_command(ready_execution, output_file, provider_prompt)
         codex_env = build_codex_env(env, skip_api_key_check)
         codex_home = resolve_codex_home_from_env(codex_env)
 
@@ -71,6 +76,16 @@ def execute_codex(
         if session is not None and session.restored_provider_session_path is not None:
             deploy_codex_session_dir(session.restored_provider_session_path, codex_home)
         _deploy_codex_assets_before_execution(env, codex_home)
+        work_dir = _prepare_codex_work_dir(repo_root)
+        codex_provider_prompt = _build_codex_provider_prompt(
+            provider_prompt,
+            _CODEX_WORK_DIR_RELATIVE_PATH,
+        )
+        command = _build_codex_command(
+            ready_execution,
+            output_file,
+            codex_provider_prompt,
+        )
 
         execution_started_at = time.perf_counter()
         proc = subprocess.run(
@@ -90,6 +105,7 @@ def execute_codex(
                 + (f": {stderr}" if stderr else "")
             )
 
+        _sync_codex_work_dir(repo_root, work_dir)
         file_content = output_file.read_text()
         result_text = file_content if file_content else proc.stdout
         codex_output = _parse_codex_jsonl(proc.stdout, result_text)
@@ -163,6 +179,54 @@ def _deploy_codex_assets_before_execution(
         raise ProviderExecutionError(
             f"Codex provider asset の配置に失敗しました: {exc}"
         ) from exc
+
+
+def _resolve_codex_work_dir(repo_root: Path) -> Path:
+    """Codex 用 provider asset の作業用ディレクトリを返す。"""
+    return repo_root / _CODEX_WORK_DIR_RELATIVE_PATH
+
+
+def _prepare_codex_work_dir(repo_root: Path) -> Path:
+    """Codex 用 provider asset の作業用ディレクトリを準備する。"""
+    work_dir = _resolve_codex_work_dir(repo_root)
+    try:
+        copy_codex_provider_assets_to_work_dir(repo_root, work_dir)
+    except ProviderAssetDeployError as exc:
+        raise ProviderExecutionError(
+            f"Codex provider asset 作業用ディレクトリの準備に失敗しました: {exc}"
+        ) from exc
+    return work_dir
+
+
+def _sync_codex_work_dir(repo_root: Path, work_dir: Path) -> None:
+    """Codex 用 provider asset の作業用ディレクトリを .codex へ同期する。"""
+    try:
+        sync_codex_provider_assets_from_work_dir(repo_root, work_dir)
+    except ProviderAssetDeployError as exc:
+        raise ProviderExecutionError(
+            f"Codex provider asset 作業用ディレクトリの同期に失敗しました: {exc}"
+        ) from exc
+
+
+def _build_codex_provider_prompt(provider_prompt: str, work_dir: Path) -> str:
+    """Codex provider 固有の作業用ディレクトリ指示を追加する。"""
+    work_dir_text = work_dir.as_posix()
+    return "\n\n".join(
+        [
+            provider_prompt,
+            "\n".join(
+                [
+                    "Codex provider asset の編集指示",
+                    "",
+                    "- `.codex/` は直接編集しないでください。",
+                    "- Codex 用 provider asset を変更する場合は "
+                    f"`{work_dir_text}/AGENTS.md`、`{work_dir_text}/skills/`、"
+                    f"`{work_dir_text}/agents/` を編集してください。",
+                    f"- 実行後に vv-ai が `{work_dir_text}/` から `.codex/` へ同期します。",
+                ]
+            ),
+        ]
+    )
 
 
 def _parse_codex_jsonl(jsonl_stdout: str, result_text: str) -> _CodexOutput:

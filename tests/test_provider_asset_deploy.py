@@ -11,9 +11,11 @@ from vv_ai.backends.github.models import GitHubTree, GitHubTreeEntry
 from vv_ai.providers.assets import (
     ProviderAssetFile,
     ProviderAssetDeployError,
-    resolve_vv_ai_commit_id,
+    copy_codex_provider_assets_to_work_dir,
     deploy_claude_provider_assets,
     deploy_codex_provider_assets,
+    resolve_vv_ai_commit_id,
+    sync_codex_provider_assets_from_work_dir,
 )
 
 _REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[1]
@@ -334,6 +336,148 @@ def test_deploy_root_instruction_appends_same_content(
     assert result.appended_files == 1
     assert result.overwritten_files == 0
     assert "追記しました" in capsys.readouterr().err
+
+
+def test_copy_codex_provider_assets_to_work_dir_copies_allowed_assets(
+    tmp_path: Path,
+) -> None:
+    """Codex の許可済み provider asset だけを作業用ディレクトリへコピーする。"""
+    codex_root = tmp_path / ".codex"
+    (codex_root / "skills" / "a").mkdir(parents=True)
+    (codex_root / "agents").mkdir()
+    (codex_root / "commands").mkdir()
+    (codex_root / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (codex_root / "skills" / "a" / "SKILL.md").write_text(
+        "skill", encoding="utf-8"
+    )
+    (codex_root / "agents" / "a.md").write_text("agent", encoding="utf-8")
+    (codex_root / "unknown.md").write_text("unknown", encoding="utf-8")
+    (codex_root / "commands" / "a.md").write_text("command", encoding="utf-8")
+
+    work_root = tmp_path / ".vv-ai" / "codex-work"
+    result = copy_codex_provider_assets_to_work_dir(tmp_path, work_root)
+
+    assert result.copied_files == 3
+    assert (work_root / "AGENTS.md").read_text(encoding="utf-8") == "agents"
+    assert (
+        work_root / "skills" / "a" / "SKILL.md"
+    ).read_text(encoding="utf-8") == "skill"
+    assert (work_root / "agents" / "a.md").read_text(encoding="utf-8") == "agent"
+    assert not (work_root / "unknown.md").exists()
+    assert not (work_root / "commands" / "a.md").exists()
+
+
+def test_copy_codex_provider_assets_to_work_dir_recreates_work_dir(
+    tmp_path: Path,
+) -> None:
+    """Codex 作業用ディレクトリは毎回作り直す。"""
+    codex_root = tmp_path / ".codex"
+    codex_root.mkdir()
+    (codex_root / "AGENTS.md").write_text("agents", encoding="utf-8")
+    work_root = tmp_path / ".vv-ai" / "codex-work"
+    work_root.mkdir(parents=True)
+    (work_root / "stale.txt").write_text("stale", encoding="utf-8")
+
+    copy_codex_provider_assets_to_work_dir(tmp_path, work_root)
+
+    assert (work_root / "AGENTS.md").is_file()
+    assert not (work_root / "stale.txt").exists()
+
+
+def test_copy_codex_provider_assets_to_work_dir_rejects_symlink(
+    tmp_path: Path,
+) -> None:
+    """Codex provider asset 内の symlink はコピーしない。"""
+    codex_root = tmp_path / ".codex"
+    (codex_root / "skills").mkdir(parents=True)
+    (codex_root / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (tmp_path / "target.md").write_text("target", encoding="utf-8")
+    (codex_root / "skills" / "link.md").symlink_to(tmp_path / "target.md")
+
+    with pytest.raises(ProviderAssetDeployError, match="symlink"):
+        copy_codex_provider_assets_to_work_dir(
+            tmp_path,
+            tmp_path / ".vv-ai" / "codex-work",
+        )
+
+
+def test_sync_codex_provider_assets_from_work_dir_updates_allowed_assets(
+    tmp_path: Path,
+) -> None:
+    """Codex 作業用ディレクトリから許可済み provider asset だけを同期する。"""
+    codex_root = tmp_path / ".codex"
+    (codex_root / "skills" / "old").mkdir(parents=True)
+    (codex_root / "AGENTS.md").write_text("old agents", encoding="utf-8")
+    (codex_root / "skills" / "old" / "SKILL.md").write_text(
+        "old skill", encoding="utf-8"
+    )
+    (codex_root / "keep.md").write_text("keep", encoding="utf-8")
+    work_root = tmp_path / ".vv-ai" / "codex-work"
+    (work_root / "skills" / "new").mkdir(parents=True)
+    (work_root / "AGENTS.md").write_text("new agents", encoding="utf-8")
+    (work_root / "skills" / "new" / "SKILL.md").write_text(
+        "new skill", encoding="utf-8"
+    )
+
+    sync_codex_provider_assets_from_work_dir(tmp_path, work_root)
+
+    assert (codex_root / "AGENTS.md").read_text(encoding="utf-8") == "new agents"
+    assert not (codex_root / "skills" / "old" / "SKILL.md").exists()
+    assert (
+        codex_root / "skills" / "new" / "SKILL.md"
+    ).read_text(encoding="utf-8") == "new skill"
+    assert (codex_root / "keep.md").read_text(encoding="utf-8") == "keep"
+
+
+def test_sync_codex_provider_assets_from_work_dir_ignores_disallowed_assets(
+    tmp_path: Path,
+) -> None:
+    """Codex 作業用ディレクトリの対象外ファイルは .codex へ同期しない。"""
+    codex_root = tmp_path / ".codex"
+    codex_root.mkdir()
+    work_root = tmp_path / ".vv-ai" / "codex-work"
+    (work_root / "commands").mkdir(parents=True)
+    (work_root / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (work_root / "unknown.md").write_text("unknown", encoding="utf-8")
+    (work_root / "commands" / "a.md").write_text("command", encoding="utf-8")
+
+    sync_codex_provider_assets_from_work_dir(tmp_path, work_root)
+
+    assert (codex_root / "AGENTS.md").is_file()
+    assert not (codex_root / "unknown.md").exists()
+    assert not (codex_root / "commands" / "a.md").exists()
+
+
+def test_sync_codex_provider_assets_from_work_dir_removes_missing_allowed_directory(
+    tmp_path: Path,
+) -> None:
+    """Codex 作業用ディレクトリに無い許可済みディレクトリは .codex から消す。"""
+    codex_root = tmp_path / ".codex"
+    (codex_root / "agents").mkdir(parents=True)
+    (codex_root / "agents" / "a.md").write_text("agent", encoding="utf-8")
+    work_root = tmp_path / ".vv-ai" / "codex-work"
+    work_root.mkdir(parents=True)
+    (work_root / "AGENTS.md").write_text("agents", encoding="utf-8")
+
+    sync_codex_provider_assets_from_work_dir(tmp_path, work_root)
+
+    assert not (codex_root / "agents").exists()
+
+
+def test_sync_codex_provider_assets_from_work_dir_rejects_symlink(
+    tmp_path: Path,
+) -> None:
+    """Codex 作業用ディレクトリ内の symlink は同期しない。"""
+    codex_root = tmp_path / ".codex"
+    codex_root.mkdir()
+    work_root = tmp_path / ".vv-ai" / "codex-work"
+    (work_root / "skills").mkdir(parents=True)
+    (work_root / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (tmp_path / "target.md").write_text("target", encoding="utf-8")
+    (work_root / "skills" / "link.md").symlink_to(tmp_path / "target.md")
+
+    with pytest.raises(ProviderAssetDeployError, match="symlink"):
+        sync_codex_provider_assets_from_work_dir(tmp_path, work_root)
 
 
 def test_deploy_claude_provider_assets_writes_skill(
