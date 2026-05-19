@@ -23,6 +23,10 @@ _VV_AI_REPOSITORY = "Hiroshiba/vv-ai"
 _READONLY_TOKEN_ENV = "VV_GH_READONLY_TOKEN"
 _FALLBACK_TOKEN_ENVS = ("GH_TOKEN", "GITHUB_TOKEN")
 
+# provider asset のコピー対象を決める allowlist。
+# AI 実行環境へ渡してよい必要最小限の path だけを追加する。
+# ここはセキュリティ境界なので、必要性と安全性を確認してから変更する。
+# ここに含めた path は provider home への配置と Codex 作業用 mirror の同期に使う。
 _PROVIDER_ROOTS: dict[ProviderName, str] = {
     "codex": ".codex",
     "claude": ".claude",
