@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from vv_ai.cli import _run_ready_execution
-from vv_ai.command_handler import (
+from vv_ai.commands.post_execution import (
     _handle_implement_issue_post_execution,
     _handle_pr_change_post_execution,
     _handle_issue_post_execution,
@@ -174,7 +174,7 @@ class TestDryRunSuppression:
         result = _make_execution_result("success")
         github_client = MagicMock()
 
-        with patch("vv_ai.command_handler.push_branch") as mock_push:
+        with patch("vv_ai.commands.post_execution.push_branch") as mock_push:
             _handle_implement_issue_post_execution(
                 Path("/dummy"), ready, result, github_client, "vv-ai/issue-1-abc123", None, {}
             )
@@ -196,7 +196,7 @@ class TestDryRunSuppression:
         result = _make_execution_result("success")
         github_client = MagicMock()
 
-        with patch("vv_ai.command_handler.push_branch") as mock_push:
+        with patch("vv_ai.commands.post_execution.push_branch") as mock_push:
             _handle_pr_change_post_execution(
                 Path("/dummy"), ready, result, github_client, "feature-branch", None, None, {}
             )
@@ -217,7 +217,7 @@ class TestDryRunSuppression:
         result = _make_execution_result("success")
         github_client = MagicMock()
 
-        with patch("vv_ai.command_handler.push_branch") as mock_push:
+        with patch("vv_ai.commands.post_execution.push_branch") as mock_push:
             _handle_pr_change_post_execution(
                 Path("/dummy"), ready, result, github_client, "feature-branch", None, None, {}
             )
@@ -287,10 +287,10 @@ class TestImplementResponseComment:
 
         with (
             patch(
-                "vv_ai.command_handler.commit_all_changes", return_value=True
+                "vv_ai.commands.post_execution.commit_all_changes", return_value=True
             ) as mock_commit,
-            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
-            patch("vv_ai.command_handler.push_branch"),
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=True),
+            patch("vv_ai.commands.post_execution.push_branch"),
         ):
             _handle_implement_issue_post_execution(
                 Path("/dummy"),
@@ -323,9 +323,9 @@ class TestImplementResponseComment:
         github_client.get_default_branch.return_value = "main"
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
-            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
-            patch("vv_ai.command_handler.push_branch") as mock_push,
+            patch("vv_ai.commands.post_execution.commit_all_changes", return_value=True),
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=True),
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
             pytest.raises(
                 RuntimeError,
                 match="AI からの PR タイトル、コミットメッセージ、本文がありません",
@@ -353,9 +353,9 @@ class TestImplementResponseComment:
         github_client.get_default_branch.return_value = "main"
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
-            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
-            patch("vv_ai.command_handler.push_branch") as mock_push,
+            patch("vv_ai.commands.post_execution.commit_all_changes", return_value=True),
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=True),
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
             pytest.raises(RuntimeError, match="1行目は `TITLE: <タイトル>`"),
         ):
             _handle_implement_issue_post_execution(
@@ -383,9 +383,9 @@ class TestImplementResponseComment:
         github_client.get_default_branch.return_value = "main"
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
-            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
-            patch("vv_ai.command_handler.push_branch") as mock_push,
+            patch("vv_ai.commands.post_execution.commit_all_changes", return_value=True),
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=True),
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
             pytest.raises(RuntimeError, match="3行目は `BODY:`"),
         ):
             _handle_implement_issue_post_execution(
@@ -413,9 +413,9 @@ class TestImplementResponseComment:
         github_client.get_default_branch.return_value = "main"
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes") as mock_commit,
-            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
-            patch("vv_ai.command_handler.push_branch") as mock_push,
+            patch("vv_ai.commands.post_execution.commit_all_changes") as mock_commit,
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=True),
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
             pytest.raises(
                 RuntimeError,
                 match="2行目は `COMMIT_MESSAGE: <コミットメッセージ>`",
@@ -447,9 +447,9 @@ class TestImplementResponseComment:
         github_client.get_default_branch.return_value = "main"
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes") as mock_commit,
-            patch("vv_ai.command_handler.has_commits_ahead", return_value=True),
-            patch("vv_ai.command_handler.push_branch") as mock_push,
+            patch("vv_ai.commands.post_execution.commit_all_changes") as mock_commit,
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=True),
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
             pytest.raises(RuntimeError, match="COMMIT_MESSAGE が空です"),
         ):
             _handle_implement_issue_post_execution(
@@ -488,9 +488,9 @@ class TestImplementResponseComment:
 
         with (
             patch(
-                "vv_ai.command_handler.commit_all_changes", return_value=True
+                "vv_ai.commands.post_execution.commit_all_changes", return_value=True
             ) as mock_commit,
-            patch("vv_ai.command_handler.push_branch"),
+            patch("vv_ai.commands.post_execution.push_branch"),
         ):
             _handle_pr_change_post_execution(
                 Path("/dummy"),
@@ -530,9 +530,9 @@ class TestImplementResponseComment:
 
         with (
             patch(
-                "vv_ai.command_handler.commit_all_changes", return_value=True
+                "vv_ai.commands.post_execution.commit_all_changes", return_value=True
             ) as mock_commit,
-            patch("vv_ai.command_handler.push_branch"),
+            patch("vv_ai.commands.post_execution.push_branch"),
         ):
             _handle_pr_change_post_execution(
                 Path("/dummy"),
@@ -571,9 +571,9 @@ class TestImplementResponseComment:
         github_client = MagicMock()
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes", return_value=True),
-            patch("vv_ai.command_handler.try_push_current_branch", return_value=False),
-            patch("vv_ai.command_handler.generate_patch", return_value="diff --git a/a b/a"),
+            patch("vv_ai.commands.post_execution.commit_all_changes", return_value=True),
+            patch("vv_ai.commands.post_execution.try_push_current_branch", return_value=False),
+            patch("vv_ai.commands.post_execution.generate_patch", return_value="diff --git a/a b/a"),
         ):
             _handle_pr_change_post_execution(
                 Path("/dummy"),
@@ -610,8 +610,8 @@ class TestImplementResponseComment:
         github_client = MagicMock()
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes") as mock_commit,
-            patch("vv_ai.command_handler.push_branch") as mock_push,
+            patch("vv_ai.commands.post_execution.commit_all_changes") as mock_commit,
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
             pytest.raises(
                 RuntimeError,
                 match="1行目は `COMMIT_MESSAGE: <コミットメッセージ>`",
@@ -653,8 +653,8 @@ class TestImplementResponseComment:
         github_client = MagicMock()
 
         with (
-            patch("vv_ai.command_handler.commit_all_changes") as mock_commit,
-            patch("vv_ai.command_handler.push_branch") as mock_push,
+            patch("vv_ai.commands.post_execution.commit_all_changes") as mock_commit,
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
             pytest.raises(RuntimeError, match="COMMIT_MESSAGE が空です"),
         ):
             _handle_pr_change_post_execution(
@@ -694,9 +694,9 @@ class TestImplementResponseComment:
 
         with (
             patch(
-                "vv_ai.command_handler.commit_all_changes", return_value=True
+                "vv_ai.commands.post_execution.commit_all_changes", return_value=True
             ) as mock_commit,
-            patch("vv_ai.command_handler.push_branch"),
+            patch("vv_ai.commands.post_execution.push_branch"),
         ):
             _handle_pr_change_post_execution(
                 Path("/dummy"),

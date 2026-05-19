@@ -105,9 +105,9 @@ class TestGitHubTargetDryRun:
         with (
             patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
             patch("vv_ai.cli.resolve_session", return_value=session),
-            patch("vv_ai.command_handler.execute_provider", return_value=result) as mock_provider,
+            patch("vv_ai.commands.runner.execute_provider", return_value=result) as mock_provider,
             patch("vv_ai.cli.save_execution_artifacts", return_value=MagicMock(spec=SavedExecutionArtifacts)) as mock_save,
-            patch("vv_ai.command_handler.build_github_client", return_value=github_client),
+            patch("vv_ai.commands.runner.build_github_client", return_value=github_client),
             patch.dict("os.environ", env_patch),
         ):
             exit_code = main(argv)
@@ -146,7 +146,7 @@ class TestLocalTargetDryRun:
         with (
             patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
             patch("vv_ai.cli.resolve_session", return_value=session),
-            patch("vv_ai.command_handler.execute_provider", return_value=result) as mock_provider,
+            patch("vv_ai.commands.runner.execute_provider", return_value=result) as mock_provider,
             patch("vv_ai.cli.save_execution_artifacts", return_value=MagicMock(spec=SavedExecutionArtifacts)),
             patch.dict("os.environ", env_patch),
         ):
@@ -211,9 +211,9 @@ class TestInputErrors:
         with (
             patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
             patch("vv_ai.cli.resolve_session", return_value=session),
-            patch("vv_ai.command_handler.execute_provider", return_value=result) as mock_provider,
+            patch("vv_ai.commands.runner.execute_provider", return_value=result) as mock_provider,
             patch("vv_ai.cli.save_execution_artifacts", return_value=MagicMock(spec=SavedExecutionArtifacts)),
-            patch("vv_ai.command_handler.build_github_client", return_value=github_client),
+            patch("vv_ai.commands.runner.build_github_client", return_value=github_client),
             patch.dict("os.environ", env_patch),
         ):
             exit_code = main(argv)
@@ -243,9 +243,9 @@ class TestProviderFailure:
         with (
             patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
             patch("vv_ai.cli.resolve_session", return_value=session),
-            patch("vv_ai.command_handler.execute_provider", side_effect=RuntimeError("provider crashed")),
+            patch("vv_ai.commands.runner.execute_provider", side_effect=RuntimeError("provider crashed")),
             patch("vv_ai.cli.save_execution_artifacts", return_value=MagicMock(spec=SavedExecutionArtifacts)) as mock_save,
-            patch("vv_ai.command_handler.build_github_client", return_value=MagicMock()),
+            patch("vv_ai.commands.runner.build_github_client", return_value=MagicMock()),
             patch.dict("os.environ", env_patch),
         ):
             exit_code = main(argv)
