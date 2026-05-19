@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -53,15 +52,6 @@ from vv_ai.sessions.models import SessionStateRef
 
 class SyncCommandError(RuntimeError):
     """sync コマンドの実行条件違反や同期失敗を表す例外。"""
-
-
-@dataclass(frozen=True)
-class ConflictFileSnapshot:
-    """conflict file の AI 実行前状態。"""
-
-    exists: bool
-    content_hash: str | None
-    had_marker: bool
 
 
 @dataclass
@@ -215,7 +205,6 @@ def _merge_base_branch(
 
     conflict_files = attempt.unmerged_files
     conflict_file_set = set(conflict_files)
-    snapshots = _snapshot_conflict_files(repo_root, conflict_files)
     head_sha_before_ai = get_head_sha(repo_root)
     staged_signature_before_ai = get_staged_diff_signature(repo_root)
     changed_files_before_ai = set(list_changed_files(repo_root))
@@ -252,15 +241,8 @@ def _merge_base_branch(
             "conflict marker が残っています: " + ", ".join(marker_files)
         )
 
-    stage_targets = _resolve_conflict_stage_targets(
-        repo_root,
-        conflict_files,
-        snapshots,
-    )
-    if len(stage_targets) == 0:
-        raise SyncCommandError("AI による conflict file の変更がありません")
     _resume_provider_session_after_conflict(ready_execution, conflict_result)
-    stage_paths(repo_root, stage_targets)
+    stage_paths(repo_root, conflict_files)
     remaining_unmerged = list_unmerged_files(repo_root)
     if len(remaining_unmerged) > 0:
         raise SyncCommandError(
@@ -309,61 +291,14 @@ def _resume_provider_session_after_conflict(
     session.restore_strategy = "inherit"
 
 
-def _snapshot_conflict_files(
-    repo_root: Path,
-    conflict_files: list[str],
-) -> dict[str, ConflictFileSnapshot]:
-    """conflict file の存在状態と内容 hash を取得する。"""
-    marker_files = set(list_conflict_marker_files(repo_root, conflict_files))
-    snapshots: dict[str, ConflictFileSnapshot] = {}
-    for path in conflict_files:
-        file_path = repo_root / path
-        exists = file_path.exists()
-        snapshots[path] = ConflictFileSnapshot(
-            exists=exists,
-            content_hash=(
-                _hash_file(file_path) if exists and file_path.is_file() else None
-            ),
-            had_marker=path in marker_files,
-        )
-    return snapshots
-
-
-def _resolve_conflict_stage_targets(
-    repo_root: Path,
-    conflict_files: list[str],
-    snapshots: dict[str, ConflictFileSnapshot],
-) -> list[str]:
-    """AI 後の conflict file から wrapper が stage する path を返す。"""
-    stage_targets: list[str] = []
-    marker_files = set(list_conflict_marker_files(repo_root, conflict_files))
-    for path in conflict_files:
-        snapshot = snapshots[path]
-        if snapshot.had_marker:
-            if path not in marker_files:
-                stage_targets.append(path)
-            continue
-        file_path = repo_root / path
-        exists = file_path.exists()
-        content_hash = _hash_file(file_path) if exists and file_path.is_file() else None
-        if snapshot.exists != exists or snapshot.content_hash != content_hash:
-            stage_targets.append(path)
-    return stage_targets
-
-
-def _hash_file(path: Path) -> str:
-    """ファイル内容の SHA-256 を返す。"""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _build_conflict_prompt(conflict_files: list[str]) -> str:
     """conflict 解消専用 prompt を返す。"""
     files = "\n".join(f"- {path}" for path in conflict_files)
     return (
-        "sync コマンドの conflict 解消だけを行ってください。\n"
+        "conflict の解消だけを行ってください。\n"
         "対象ファイル以外は変更しないでください。\n"
         "commit と stage は行わないでください。\n"
-        "conflict marker を解消し、内容の整合性を保ってください。\n\n"
+        "対象ファイルを merge 後に残すべき状態へ整えてください。\n\n"
         f"対象ファイル:\n{files}"
     )
 
