@@ -7,7 +7,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from vv_ai.backends.github.client import GitHubClient, build_github_client
-from vv_ai.backends.github.comments import post_fork_push_failure_comment
+from vv_ai.backends.github.comments import (
+    post_fork_push_failure_comment,
+    post_issue_comment_safely,
+)
 from vv_ai.backends.github.models import (
     GitHubClientError,
     GitHubIssue,
@@ -129,6 +132,13 @@ def _handle_implement_issue_post_execution(
     commits_ahead_ref = fork_base_ref if fork_base_ref is not None else base_branch
     ahead = has_commits_ahead(repo_root, commits_ahead_ref)
     if not ahead:
+        post_issue_comment_safely(
+            github_client,
+            target.repository_full_name,
+            target.number,
+            pr_body,
+            "implement 変更なしコメント投稿",
+        )
         print("変更コミットがないため push と PR 作成をスキップします")
         return None
 

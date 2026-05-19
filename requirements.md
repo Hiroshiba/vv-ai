@@ -490,6 +490,7 @@ provider_priority:
 - ブランチ名: `vv-ai/issue-<番号>-<6〜8桁ランダム英数字>`
 - PR タイトル / commit message / description は AI の最終出力から決定
 - 複数回実行しても毎回新規（既存 PR への自動更新はしない。既存 PR で作業させたい場合はコメントで追加指示）
+- 変更コミットがない場合は push と PR 作成を行わず、AI の最終出力の本文を対象 Issue にコメント投稿
 
 ### PR 起点
 
