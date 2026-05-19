@@ -6,10 +6,11 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from vv_ai.cli import main
-from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
-from vv_ai.github import GitHubActor, GitHubIssue, RepoInfo
-from vv_ai.metrics_artifact import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
-from vv_ai.report_artifact import ReportSections
+from vv_ai.artifacts.execution import SavedExecutionArtifacts
+from vv_ai.executions.result import ExecutionResult, ExecutionStatus
+from vv_ai.backends.github.models import GitHubActor, GitHubIssue, RepoInfo
+from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
+from vv_ai.artifacts.report import ReportSections
 from vv_ai.resolve import BackendName
 from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
 

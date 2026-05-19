@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from vv_ai.artifact_crypto import (
+from vv_ai.artifacts.crypto import (
     ArtifactCryptoError,
     decrypt_file_text,
     encrypt_file,

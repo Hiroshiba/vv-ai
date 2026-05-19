@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from vv_ai.github import GitHubActor, GitHubClientError, GitHubPullRequest
-from vv_ai.github_comment import (
+from vv_ai.backends.github.comments import (
     build_allow_edits_notice,
     mark_allow_edits_notice_posted,
     post_issue_comment_safely,
 )
+from vv_ai.backends.github.models import GitHubActor, GitHubClientError, GitHubPullRequest
 
 
 class FakeGitHubClient:

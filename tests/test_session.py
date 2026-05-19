@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from vv_ai.github import GitHubArtifact
+from vv_ai.backends.github.models import GitHubArtifact
 from vv_ai.provider import ProviderSpec, ResolvedProvider
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 from vv_ai.session import (
@@ -18,7 +18,7 @@ from vv_ai.session import (
     _build_manifest_from_restored_artifact,
     _resolve_restore_state,
 )
-from vv_ai.session_artifact import (
+from vv_ai.artifacts.session import (
     RestoredSessionArtifact,
     SessionArtifactError,
     SessionArtifactMeta,

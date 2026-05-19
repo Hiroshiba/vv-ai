@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from vv_ai.execution import ExecutionResult, ExecutionStatus
+from vv_ai.executions.result import ExecutionResult, ExecutionStatus
 from vv_ai.git_ops import (
     GitOpsError,
     checkout_fork_pr,
@@ -32,12 +32,13 @@ from vv_ai.git_ops import (
     stage_paths,
     try_push_current_branch,
 )
-from vv_ai.github import GitHubClient, GitHubClientError
-from vv_ai.github_comment import (
+from vv_ai.backends.github.client import GitHubClient
+from vv_ai.backends.github.comments import (
     post_fork_push_failure_comment,
     post_issue_comment_safely,
 )
-from vv_ai.metrics_artifact import (
+from vv_ai.backends.github.models import GitHubClientError
+from vv_ai.artifacts.metrics import (
     MetricsBehavior,
     MetricsUsage,
     ProviderSpecificMetrics,
@@ -46,7 +47,7 @@ from vv_ai.metrics_artifact import (
 )
 from vv_ai.preflight import ReadyExecution
 from vv_ai.provider_execution import execute_provider
-from vv_ai.report_artifact import ReportSections
+from vv_ai.artifacts.report import ReportSections
 from vv_ai.session import SessionStateRef
 
 

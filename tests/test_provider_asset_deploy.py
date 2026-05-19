@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from vv_ai.github import GitHubTree, GitHubTreeEntry
+from vv_ai.backends.github.models import GitHubTree, GitHubTreeEntry
 from vv_ai.provider_asset_deploy import (
     ProviderAssetFile,
     ProviderAssetDeployError,

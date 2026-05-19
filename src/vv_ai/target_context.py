@@ -6,8 +6,8 @@ from hashlib import sha256
 
 from pydantic import BaseModel, ConfigDict
 
-from vv_ai.github import (
-    GitHubClient,
+from vv_ai.backends.github.client import GitHubClient
+from vv_ai.backends.github.models import (
     GitHubClientError,
     GitHubComment,
     GitHubIssue,

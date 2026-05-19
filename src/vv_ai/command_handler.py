@@ -6,7 +6,7 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-from vv_ai.execution import ExecutionResult, ExecutionStatus
+from vv_ai.executions.result import ExecutionResult, ExecutionStatus
 from vv_ai.git_ops import (
     GitOpsError,
     checkout_fork_pr,
@@ -23,15 +23,14 @@ from vv_ai.git_ops import (
     setup_upstream_remote,
     try_push_current_branch,
 )
-from vv_ai.github import (
-    GitHubClient,
+from vv_ai.backends.github.client import GitHubClient, build_github_client
+from vv_ai.backends.github.comments import post_fork_push_failure_comment
+from vv_ai.backends.github.models import (
     GitHubClientError,
     GitHubIssue,
     GitHubPullRequest,
     GitHubReactionContent,
-    build_github_client,
 )
-from vv_ai.github_comment import post_fork_push_failure_comment
 from vv_ai.preflight import ReadyExecution
 from vv_ai.prompt import build_provider_prompt
 from vv_ai.provider_execution import execute_provider

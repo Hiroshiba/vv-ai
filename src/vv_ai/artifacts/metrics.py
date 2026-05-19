@@ -11,7 +11,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 from pydantic import ValidationError
 
-from vv_ai.artifact_crypto import (
+from vv_ai.artifacts.crypto import (
     ArtifactCryptoError,
     decrypt_file_text,
     encrypt_file,

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from vv_ai.artifact_crypto import (
+from vv_ai.artifacts.crypto import (
     ArtifactCryptoError,
     decrypt_directory,
     encrypt_directory,
@@ -26,7 +26,7 @@ from vv_ai.session import (
     SessionStateRef,
     TargetContextState,
 )
-from vv_ai.session_store import load_latest_session_manifest, save_session_manifest
+from vv_ai.artifacts.store import load_latest_session_manifest, save_session_manifest
 
 _SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
