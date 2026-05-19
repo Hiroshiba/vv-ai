@@ -95,6 +95,7 @@ def _build_tree(payload: dict[str, object]) -> GitHubTree:
                 {
                     "path": raw_entry.get("path"),
                     "type": raw_entry.get("type"),
+                    "mode": raw_entry.get("mode"),
                     "sha": raw_entry.get("sha"),
                 },
                 "git tree entry",
