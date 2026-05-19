@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vv_ai.command_handler import run_command
+from vv_ai.commands.runner import run_command
 from vv_ai.cli import main
 from vv_ai.config import VVAIConfig
 from vv_ai.artifacts.execution import SavedExecutionArtifacts
@@ -23,11 +23,11 @@ from vv_ai.backends.github.models import (
     RepoInfo,
 )
 from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
-from vv_ai.preflight import ReadyExecution
-from vv_ai.provider import ResolvedProvider, get_provider_spec
+from vv_ai.workflow.preflight import ReadyExecution
+from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
 from vv_ai.artifacts.report import ReportSections
-from vv_ai.resolve import BackendName, ResolvedCommand, ResolvedTarget
-from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
+from vv_ai.inputs.resolve import BackendName, ResolvedCommand, ResolvedTarget
+from vv_ai.sessions.models import ResolvedSession, SessionKey, SessionStateRef
 
 
 def _write_config(tmp_path: Path) -> None:
@@ -209,7 +209,7 @@ def _enter_common_patches(
     stack.enter_context(patch("vv_ai.cli.find_repo_root", return_value=tmp_path))
     stack.enter_context(patch("vv_ai.cli.resolve_session", return_value=session))
     execute_provider = stack.enter_context(
-        patch("vv_ai.command_handler.execute_provider", return_value=result)
+        patch("vv_ai.commands.runner.execute_provider", return_value=result)
     )
     stack.enter_context(
         patch(
@@ -218,7 +218,7 @@ def _enter_common_patches(
         )
     )
     stack.enter_context(
-        patch("vv_ai.command_handler.build_github_client", return_value=github_client)
+        patch("vv_ai.commands.runner.build_github_client", return_value=github_client)
     )
     stack.enter_context(patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}))
     if isinstance(github_client, MagicMock):
@@ -244,7 +244,7 @@ def _enter_next_patches(
         patch("vv_ai.cli.resolve_session", return_value=session)
     )
     execute_provider = stack.enter_context(
-        patch("vv_ai.command_handler.execute_provider", return_value=result)
+        patch("vv_ai.commands.runner.execute_provider", return_value=result)
     )
     stack.enter_context(
         patch(
@@ -253,10 +253,10 @@ def _enter_next_patches(
         )
     )
     stack.enter_context(
-        patch("vv_ai.command_handler.build_github_client", return_value=github_client)
+        patch("vv_ai.commands.runner.build_github_client", return_value=github_client)
     )
     stack.enter_context(
-        patch("vv_ai.next_command.build_github_client", return_value=github_client)
+        patch("vv_ai.commands.next.build_github_client", return_value=github_client)
     )
     stack.enter_context(patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}))
     github_client.get_repo_info.return_value = RepoInfo(
@@ -290,7 +290,7 @@ class TestImplementIssueDryRun:
         with contextlib.ExitStack() as stack:
             _enter_common_patches(stack, tmp_path, session, result, mock_gh)
             mock_branch = stack.enter_context(
-                patch("vv_ai.command_handler.create_and_checkout_branch")
+                patch("vv_ai.commands.runner.create_and_checkout_branch")
             )
             exit_code = main(argv)
 
@@ -321,7 +321,7 @@ class TestImplementPRDryRun:
         with contextlib.ExitStack() as stack:
             _enter_common_patches(stack, tmp_path, session, result, github_client=mock_gh)
             mock_checkout = stack.enter_context(
-                patch("vv_ai.command_handler.fetch_and_checkout_branch")
+                patch("vv_ai.commands.runner.fetch_and_checkout_branch")
             )
             exit_code = main(argv)
 
@@ -398,7 +398,7 @@ class TestAddressDryRun:
         with contextlib.ExitStack() as stack:
             _enter_common_patches(stack, tmp_path, session, result, mock_gh)
             mock_checkout = stack.enter_context(
-                patch("vv_ai.command_handler.fetch_and_checkout_branch")
+                patch("vv_ai.commands.runner.fetch_and_checkout_branch")
             )
             exit_code = main(argv)
 
@@ -561,7 +561,7 @@ class TestNextDryRun:
                 _make_github_timeline_comment(1000, "@vv-ai review"),
             ]
             mock_checkout = stack.enter_context(
-                patch("vv_ai.command_handler.fetch_and_checkout_branch")
+                patch("vv_ai.commands.runner.fetch_and_checkout_branch")
             )
             exit_code = main(argv)
 
@@ -957,6 +957,11 @@ class TestLabelEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+        mock_gh.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "## 要望確認\n\n確認しました",
+        )
         mock_gh.remove_issue_label.assert_called_once_with(
             "org/repo",
             1,
@@ -980,6 +985,11 @@ class TestLabelEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+        mock_gh.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "## 要望確認\n\n確認しました",
+        )
         mock_gh.remove_issue_label.assert_called_once_with(
             "org/repo",
             1,
@@ -1004,6 +1014,11 @@ class TestLabelEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+        mock_gh.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "## レビュー\n\nレビューしました",
+        )
         mock_gh.remove_issue_label.assert_called_once_with(
             "org/repo",
             1,
@@ -1033,6 +1048,11 @@ class TestLabelEvent:
             exit_code = main(argv)
 
         assert exit_code == 0
+        mock_gh.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "## レビュー\n\nレビューしました",
+        )
         mock_gh.remove_issue_label.assert_called_once_with(
             "org/repo",
             1,
@@ -1118,15 +1138,15 @@ class TestLabelEvent:
         with contextlib.ExitStack() as stack:
             _enter_common_patches(stack, tmp_path, session, result, mock_gh)
             stack.enter_context(
-                patch("vv_ai.command_handler.create_and_checkout_branch")
+                patch("vv_ai.commands.runner.create_and_checkout_branch")
             )
             stack.enter_context(
-                patch("vv_ai.command_handler.commit_all_changes", return_value=True)
+                patch("vv_ai.commands.post_execution.commit_all_changes", return_value=True)
             )
             stack.enter_context(
-                patch("vv_ai.command_handler.has_commits_ahead", return_value=True)
+                patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=True)
             )
-            stack.enter_context(patch("vv_ai.command_handler.push_branch"))
+            stack.enter_context(patch("vv_ai.commands.post_execution.push_branch"))
             fork_session = stack.enter_context(patch("vv_ai.cli._fork_session_for_pr"))
             exit_code = main(argv)
 
@@ -1219,8 +1239,8 @@ class TestLabelEvent:
         mock_gh.list_issue_comments.return_value = []
 
         with (
-            patch("vv_ai.command_handler.build_github_client", return_value=mock_gh),
-            patch("vv_ai.command_handler.execute_provider", return_value=result),
+            patch("vv_ai.commands.runner.build_github_client", return_value=mock_gh),
+            patch("vv_ai.commands.runner.execute_provider", return_value=result),
         ):
             run_command(tmp_path, ready_execution, {}, 0.0)
 

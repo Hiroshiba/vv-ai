@@ -13,7 +13,7 @@ from tools.create_vv_ai_labels import (
     _resolve_repository_full_name,
     _sync_labels,
 )
-from vv_ai.input import _LABEL_COMMANDS
+from vv_ai.inputs.models import _LABEL_COMMANDS
 
 
 def test_label_names_match_label_invocation() -> None:

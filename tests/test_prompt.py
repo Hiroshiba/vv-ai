@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Literal
 
 from vv_ai.config import VVAIConfig
-from vv_ai.preflight import ReadyExecution
-from vv_ai.prompt import build_next_decision_prompt, build_provider_prompt
-from vv_ai.provider import ProviderSpec, ResolvedProvider
-from vv_ai.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.workflow.preflight import ReadyExecution
+from vv_ai.prompts.build import build_next_decision_prompt, build_provider_prompt
+from vv_ai.providers.selection import ProviderSpec, ResolvedProvider
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
 
 def _make_provider() -> ResolvedProvider:
@@ -217,6 +217,14 @@ class TestImplementPrompt:
         prompt = _build_prompt("issue", "implement")
 
         assert "2行目: COMMIT_MESSAGE: <コミットメッセージ>" in prompt
+
+    def test_issue_prompt_mentions_no_change_comment(self) -> None:
+        prompt = _build_prompt("issue", "implement")
+
+        assert (
+            "変更コミットがない場合、BODY は対象 Issue へのコメントとして投稿されます。"
+            in prompt
+        )
 
     def test_issue_prompt_mentions_conventional_commit_message(self) -> None:
         prompt = _build_prompt("issue", "implement")

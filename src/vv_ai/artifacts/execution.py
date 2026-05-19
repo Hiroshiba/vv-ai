@@ -24,7 +24,7 @@ from vv_ai.artifacts.session import (
     save_session_artifact,
 )
 from vv_ai.executions.result import ExecutionResult
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 
 
 class ExecutionArtifactError(Exception):

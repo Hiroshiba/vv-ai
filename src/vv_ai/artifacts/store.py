@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from vv_ai.session import SavedSessionManifest, SessionKey, SessionStateRef
+from vv_ai.sessions.models import SavedSessionManifest, SessionKey, SessionStateRef
 
 _FILENAME_SAFE_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 

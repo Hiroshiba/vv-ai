@@ -10,7 +10,7 @@ import pytest
 
 from vv_ai.config import VVAIConfig
 from vv_ai.executions.result import ExecutionResult, ExecutionStatus
-from vv_ai.git_ops import (
+from vv_ai.git.operations import (
     GitOpsError,
     commit_merge_no_edit,
     ensure_merge_base_available,
@@ -32,12 +32,12 @@ from vv_ai.backends.github.models import (
     GitHubPullRequest,
 )
 from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
-from vv_ai.preflight import ReadyExecution
-from vv_ai.provider import ResolvedProvider, get_provider_spec
+from vv_ai.workflow.preflight import ReadyExecution
+from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
 from vv_ai.artifacts.report import ReportSections
-from vv_ai.resolve import ResolvedCommand, ResolvedTarget
-from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
-from vv_ai.sync_command import SyncCommandError, run_sync_command
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.sessions.models import ResolvedSession, SessionKey, SessionStateRef
+from vv_ai.commands.sync import SyncCommandError, run_sync_command
 
 
 def test_ensure_worktree_clean_rejects_dirty_worktree(tmp_path: Path) -> None:
@@ -255,13 +255,13 @@ def test_run_sync_command_skips_push_when_base_is_ancestor(tmp_path: Path) -> No
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=[
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
         ) as execute_provider,
-        patch("vv_ai.sync_command.push_branch") as push_branch,
-        patch("vv_ai.sync_command.try_push_current_branch") as try_push_current_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.try_push_current_branch") as try_push_current_branch,
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
@@ -292,12 +292,12 @@ def test_run_sync_command_deepens_history_before_merge_from_shallow_clone(
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=[
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
         ) as execute_provider,
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(
             clone,
@@ -330,12 +330,12 @@ def test_run_sync_command_pushes_after_merge_commit(tmp_path: Path) -> None:
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=[
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
         ) as execute_provider,
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(
             clone,
@@ -375,17 +375,17 @@ def test_run_sync_command_ensures_merge_base_for_fork_pr(tmp_path: Path) -> None
 
     with (
         patch(
-            "vv_ai.sync_command.checkout_fork_pr",
+            "vv_ai.commands.sync.checkout_fork_pr",
             side_effect=checkout_fork_pr_mock,
         ),
-        patch("vv_ai.sync_command.ensure_merge_base_available") as ensure_merge_base,
+        patch("vv_ai.commands.sync.ensure_merge_base_available") as ensure_merge_base,
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=[
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
         ),
-        patch("vv_ai.sync_command.try_push_current_branch", return_value=True),
+        patch("vv_ai.commands.sync.try_push_current_branch", return_value=True),
     ):
         result = run_sync_command(
             clone,
@@ -424,7 +424,7 @@ def test_run_sync_command_requests_comment_body_in_consistency_prompt(
         prompts.append(provider_prompt)
         return _make_execution_result("success", "BODY:\nsync 完了")
 
-    with patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock):
+    with patch("vv_ai.commands.sync.execute_provider", side_effect=execute_provider_mock):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
     assert result.status == "success"
@@ -479,8 +479,8 @@ def test_run_sync_command_resumes_consistency_provider_after_conflict(
         )
 
     with (
-        patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock),
-        patch("vv_ai.sync_command.push_branch"),
+        patch("vv_ai.commands.sync.execute_provider", side_effect=execute_provider_mock),
+        patch("vv_ai.commands.sync.push_branch"),
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
@@ -488,6 +488,151 @@ def test_run_sync_command_resumes_consistency_provider_after_conflict(
     assert len(prompts) == 2
     assert session_refs[1] == ("conflict-session", "inherit")
     assert github_client.comments == [("org/repo", 1, "sync 完了")]
+
+
+def test_run_sync_command_conflict_prompt_uses_merge_result_responsibility(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は conflict 解消 prompt で merge 後状態を依頼する。"""
+    source = _make_conflict_source(tmp_path)
+    clone = _clone_all_branches(tmp_path, source, "sync-conflict-prompt")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+    prompts: list[str] = []
+
+    def execute_provider_mock(
+        repo_root: Path,
+        ready_execution: ReadyExecution,
+        env: object,
+        preflight_duration_seconds: float,
+        provider_prompt: str,
+    ) -> ExecutionResult:
+        prompts.append(provider_prompt)
+        if len(prompts) == 1:
+            _write(repo_root, "file.txt", "resolved\n")
+            return _make_execution_result_with_provider_session_id(
+                "success",
+                "conflict を解消しました",
+                "conflict-session",
+            )
+        return _make_execution_result_with_provider_session_id(
+            "success",
+            "BODY:\nsync 完了",
+            "consistency-session",
+        )
+
+    with (
+        patch("vv_ai.commands.sync.execute_provider", side_effect=execute_provider_mock),
+        patch("vv_ai.commands.sync.push_branch"),
+    ):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "success"
+    assert len(prompts) == 2
+    conflict_prompt = prompts[0]
+    assert "conflict の解消だけを行ってください" in conflict_prompt
+    assert "対象ファイルを merge 後に残すべき状態へ整えてください" in conflict_prompt
+    assert "sync コマンドの" not in conflict_prompt
+    assert "conflict marker" not in conflict_prompt
+    assert "UD" not in conflict_prompt
+
+
+def test_run_sync_command_resolves_delete_modify_conflict_without_content_change(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は marker なし conflict の no-op 解消を stage する。"""
+    source = _make_delete_modify_conflict_source(tmp_path)
+    clone = _clone_all_branches(tmp_path, source, "sync-delete-modify-noop")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+    provider_calls = 0
+
+    def execute_provider_mock(
+        repo_root: Path,
+        ready_execution: ReadyExecution,
+        env: object,
+        preflight_duration_seconds: float,
+        provider_prompt: str,
+    ) -> ExecutionResult:
+        nonlocal provider_calls
+        provider_calls += 1
+        if provider_calls == 1:
+            return _resolve_delete_modify_conflict_without_change(
+                repo_root,
+                ready_execution,
+                env,
+                preflight_duration_seconds,
+                provider_prompt,
+            )
+        return _make_execution_result_with_provider_session_id(
+            "success",
+            "BODY:\nsync 完了",
+            "consistency-session",
+        )
+
+    with (
+        patch(
+            "vv_ai.commands.sync.execute_provider",
+            side_effect=execute_provider_mock,
+        ) as execute_provider,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
+    ):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "success"
+    assert execute_provider.call_count == 2
+    push_branch.assert_called_once()
+    assert (clone / "file.txt").read_text(encoding="utf-8") == "feature\n"
+    assert list_unmerged_files(clone) == []
+
+
+def test_run_sync_command_resolves_delete_modify_conflict_by_deleting_file(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は marker なし conflict の削除解消を stage する。"""
+    source = _make_delete_modify_conflict_source(tmp_path)
+    clone = _clone_all_branches(tmp_path, source, "sync-delete-modify-delete")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+    provider_calls = 0
+
+    def execute_provider_mock(
+        repo_root: Path,
+        ready_execution: ReadyExecution,
+        env: object,
+        preflight_duration_seconds: float,
+        provider_prompt: str,
+    ) -> ExecutionResult:
+        nonlocal provider_calls
+        provider_calls += 1
+        if provider_calls == 1:
+            return _resolve_delete_modify_conflict_by_deleting_file(
+                repo_root,
+                ready_execution,
+                env,
+                preflight_duration_seconds,
+                provider_prompt,
+            )
+        return _make_execution_result_with_provider_session_id(
+            "success",
+            "BODY:\nsync 完了",
+            "consistency-session",
+        )
+
+    with (
+        patch(
+            "vv_ai.commands.sync.execute_provider",
+            side_effect=execute_provider_mock,
+        ) as execute_provider,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
+    ):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "success"
+    assert execute_provider.call_count == 2
+    push_branch.assert_called_once()
+    assert not (clone / "file.txt").exists()
+    assert list_unmerged_files(clone) == []
 
 
 def test_run_sync_command_rejects_missing_provider_session_id_after_conflict(
@@ -510,8 +655,8 @@ def test_run_sync_command_rejects_missing_provider_session_id_after_conflict(
         return _make_execution_result("success", "conflict を解消しました")
 
     with (
-        patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock),
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.execute_provider", side_effect=execute_provider_mock),
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
@@ -536,7 +681,7 @@ def test_run_sync_command_rejects_missing_body_in_consistency_output(
     ready_execution = _make_ready_execution()
 
     with patch(
-        "vv_ai.sync_command.execute_provider",
+        "vv_ai.commands.sync.execute_provider",
         return_value=_make_execution_result("success", "整合性確認完了"),
     ) as execute_provider:
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
@@ -571,7 +716,7 @@ def test_run_sync_command_rejects_consistency_marker_before_commit(
         _write(repo_root, "marker.txt", "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> main\n")
         return _make_execution_result("success", "整合性修正")
 
-    with patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock):
+    with patch("vv_ai.commands.sync.execute_provider", side_effect=execute_provider_mock):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
     assert result.status == "failure"
@@ -587,10 +732,10 @@ def test_run_sync_command_rejects_ai_staging_conflict_file(tmp_path: Path) -> No
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=_resolve_conflict_and_stage,
         ),
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
@@ -610,10 +755,10 @@ def test_run_sync_command_rejects_ai_changes_outside_conflict_files(
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=_resolve_conflict_and_change_other_file,
         ),
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
@@ -723,6 +868,51 @@ def _make_conflict_source(tmp_path: Path) -> Path:
     _run_git(source, "add", "file.txt")
     _run_git(source, "commit", "-m", "main")
     return source
+
+
+def _make_delete_modify_conflict_source(tmp_path: Path) -> Path:
+    """sync delete modify conflict テスト用 repository を作成する。"""
+    source = _init_repo_at(tmp_path / "source")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "file.txt", "feature\n")
+    _run_git(source, "add", "file.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "checkout", "main")
+    (source / "file.txt").unlink()
+    _run_git(source, "add", "file.txt")
+    _run_git(source, "commit", "-m", "main delete")
+    return source
+
+
+def _resolve_delete_modify_conflict_without_change(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    env: object,
+    preflight_duration_seconds: float,
+    provider_prompt: str,
+) -> ExecutionResult:
+    """delete modify conflict file を変更しない provider mock。"""
+    return _make_execution_result_with_provider_session_id(
+        "success",
+        "conflict を解消しました",
+        "conflict-session",
+    )
+
+
+def _resolve_delete_modify_conflict_by_deleting_file(
+    repo_root: Path,
+    ready_execution: ReadyExecution,
+    env: object,
+    preflight_duration_seconds: float,
+    provider_prompt: str,
+) -> ExecutionResult:
+    """delete modify conflict file を削除する provider mock。"""
+    (repo_root / "file.txt").unlink()
+    return _make_execution_result_with_provider_session_id(
+        "success",
+        "conflict を解消しました",
+        "conflict-session",
+    )
 
 
 def _resolve_conflict_and_stage(

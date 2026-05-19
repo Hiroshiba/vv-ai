@@ -10,14 +10,16 @@ from pydantic import BaseModel, ConfigDict
 from vv_ai.config import VVAIConfig
 from vv_ai.backends.github.client import GitHubClient, build_github_client
 from vv_ai.backends.github.models import GitHubIssueTimelineEvent
-from vv_ai.input import (
-    CommandName,
-    InputError,
+from vv_ai.inputs.build import (
     parse_comment_invocation,
     parse_label_invocation,
 )
 from vv_ai.next_decision import NextDecisionError, parse_next_decision_history_marker
-from vv_ai.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.inputs.models import (
+    CommandName,
+    InputError,
+)
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
 HistorySource = Literal["comment", "label"]
 

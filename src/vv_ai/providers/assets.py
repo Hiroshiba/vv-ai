@@ -10,13 +10,13 @@ from importlib import metadata
 from pathlib import Path
 from typing import Literal
 
-from vv_ai.config import ProviderName
 from vv_ai.backends.github.client import (
     GitHubClient,
     build_github_client,
     build_github_client_with_token,
 )
 from vv_ai.backends.github.models import GitHubClientError
+from vv_ai.config import ProviderName
 
 _VV_AI_REPOSITORY = "Hiroshiba/vv-ai"
 _READONLY_TOKEN_ENV = "VV_GH_READONLY_TOKEN"

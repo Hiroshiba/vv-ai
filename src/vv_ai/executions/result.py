@@ -15,7 +15,7 @@ from vv_ai.artifacts.metrics import (
     ToolMetric,
 )
 from vv_ai.artifacts.report import ReportSections
-from vv_ai.session import SessionStateRef
+from vv_ai.sessions.models import SessionStateRef
 
 ExecutionStatus = Literal["success", "failure", "cancelled"]
 

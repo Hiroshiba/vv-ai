@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from vv_ai.backends.github.models import GitHubActor, GitHubComment, GitHubIssue
-from vv_ai.resolve import ResolvedTarget
-from vv_ai.target_context import build_target_context, empty_target_context_state
+from vv_ai.inputs.resolve import ResolvedTarget
+from vv_ai.prompts.target_context import build_target_context, empty_target_context_state
 
 
 class _GitHubClient:

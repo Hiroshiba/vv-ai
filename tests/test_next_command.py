@@ -10,8 +10,8 @@ import pytest
 from vv_ai.config import VVAIConfig
 from vv_ai.backends.github.models import GitHubActor, GitHubIssueTimelineEvent
 from vv_ai.next_decision import format_next_decision_history_comment
-from vv_ai.next_command import NextResolutionError, resolve_next_command
-from vv_ai.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.commands.next import NextResolutionError, resolve_next_command
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
 
 def _make_config() -> VVAIConfig:
@@ -210,7 +210,7 @@ def _resolve_github_timeline(
     github_client = MagicMock()
     github_client.list_issue_timeline_events.return_value = timeline_events
     github_client.get_issue_parent_number.return_value = parent_number
-    with patch("vv_ai.next_command.build_github_client", return_value=github_client):
+    with patch("vv_ai.commands.next.build_github_client", return_value=github_client):
         return resolve_next_command(Path("/dummy"), command, _make_config())
 
 

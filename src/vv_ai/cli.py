@@ -26,29 +26,30 @@ from vv_ai.artifacts.execution import (
 )
 from vv_ai.executions.result import ExecutionResult
 from vv_ai.backends.github.models import GitHubPullRequest
-from vv_ai.input import CLIInput, InputError, build_raw_input_from_cli
+from vv_ai.inputs.build import build_raw_input_from_cli
+from vv_ai.inputs.models import CLIInput, InputError
 from vv_ai.artifacts.metrics import (
     MetricsBehavior,
     MetricsUsage,
     ProviderSpecificMetrics,
     StepMetric,
 )
-from vv_ai.next_command import NextResolutionError, resolve_next_command
-from vv_ai.preflight import (
+from vv_ai.commands.next import NextResolutionError, resolve_next_command
+from vv_ai.workflow.preflight import (
     PreflightError,
     ReadyExecution,
     SilentSkip,
     run_preflight,
 )
-from vv_ai.provider import ProviderResolutionError
-from vv_ai.command_handler import CommandCleanupError, run_command
-from vv_ai.session import SessionKey
+from vv_ai.providers.selection import ProviderResolutionError
+from vv_ai.commands.runner import CommandCleanupError, run_command
+from vv_ai.sessions.models import SessionKey, SessionStateRef
 from vv_ai.artifacts.session import SessionArtifactError, fork_session_artifact
 from vv_ai.artifacts.report import ReportSections
-from vv_ai.resolve import ResolutionError, resolve_raw_input
-from vv_ai.session import SessionResolutionError, SessionStateRef, resolve_session
-from vv_ai.target import TargetResolutionError, resolve_target
-from vv_ai.verify import VerifyResult, run_verify
+from vv_ai.inputs.resolve import ResolutionError, resolve_raw_input
+from vv_ai.sessions.resolve import SessionResolutionError, resolve_session
+from vv_ai.targets.resolve import TargetResolutionError, resolve_target
+from vv_ai.workflow.verify import VerifyResult, run_verify
 
 
 def build_parser() -> argparse.ArgumentParser:

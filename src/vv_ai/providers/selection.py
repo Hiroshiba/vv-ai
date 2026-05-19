@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from vv_ai.config import ProviderName, VVAIConfig
-from vv_ai.resolve import ResolvedCommand
+from vv_ai.inputs.resolve import ResolvedCommand
 
 ProviderSource = Literal["explicit", "config"]
 

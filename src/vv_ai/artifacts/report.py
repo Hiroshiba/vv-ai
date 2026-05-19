@@ -13,7 +13,7 @@ from vv_ai.artifacts.crypto import (
     decrypt_file_text,
     encrypt_file,
 )
-from vv_ai.session import ResolvedSession, SessionKey
+from vv_ai.sessions.models import ResolvedSession, SessionKey
 
 _SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
