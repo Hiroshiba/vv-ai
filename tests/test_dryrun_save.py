@@ -296,19 +296,12 @@ class TestDryRunSuppression:
         github_client.create_issue_comment.assert_not_called()
 
     @pytest.mark.parametrize(
-        ("command", "heading"),
-        [
-            ("confirm", "## 要望確認"),
-            ("requirements", "## 要件定義"),
-            ("arch", "## 基本設計"),
-            ("detail", "## 詳細設計"),
-            ("review", "## レビュー"),
-        ],
+        "command",
+        ["confirm", "requirements", "arch", "detail", "review"],
     )
-    def test_non_dryrun_posts_response_comment_with_heading(
+    def test_non_dryrun_posts_response_comment_without_modifying_body(
         self,
         command: str,
-        heading: str,
     ) -> None:
         ready = _make_ready_execution(command=_make_command(command=command, dry_run=False))
         result = _make_execution_result("success", response_text="計画です")
@@ -319,7 +312,7 @@ class TestDryRunSuppression:
         github_client.create_issue_comment.assert_called_once_with(
             "org/repo",
             1,
-            f"{heading}\n\n計画です",
+            "計画です",
         )
 
     def test_non_dryrun_posts_reply_response_comment_without_heading(self) -> None:

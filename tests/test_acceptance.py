@@ -468,7 +468,7 @@ class TestNextDryRun:
             "--dry-run",
         ]
         session = _make_resolved_session("github", "org/repo#1", "codex")
-        result = _make_execution_result("success", "確認しました")
+        result = _make_execution_result("success", "## 要望確認\n\n確認しました")
         mock_gh = MagicMock()
         mock_gh.get_issue_parent_number.return_value = None
 
@@ -504,7 +504,7 @@ class TestNextDryRun:
             "--dry-run",
         ]
         session = _make_resolved_session("github", "org/repo#5", "codex")
-        result = _make_execution_result("success", "レビューしました")
+        result = _make_execution_result("success", "## レビュー\n\nレビューしました")
         mock_gh = MagicMock()
         mock_gh.get_pull_request.return_value = _make_github_pr(
             "org/repo",
@@ -949,7 +949,7 @@ class TestLabelEvent:
         event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
         argv = ["--event", "issues", "--event-file", str(event_path)]
         session = _make_resolved_session("github", "org/repo#1", "codex")
-        result = _make_execution_result("success", "確認しました")
+        result = _make_execution_result("success", "## 要望確認\n\n確認しました")
         mock_gh = MagicMock()
 
         with contextlib.ExitStack() as stack:
@@ -973,7 +973,7 @@ class TestLabelEvent:
         event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:next")
         argv = ["--event", "issues", "--event-file", str(event_path)]
         session = _make_resolved_session("github", "org/repo#1", "codex")
-        result = _make_execution_result("success", "確認しました")
+        result = _make_execution_result("success", "## 要望確認\n\n確認しました")
         mock_gh = MagicMock()
         mock_gh.get_issue_parent_number.return_value = None
 
@@ -1001,7 +1001,7 @@ class TestLabelEvent:
         event_path = self._write_pull_request_labeled_event(tmp_path, "vv-ai:review")
         argv = ["--event", "pull_request", "--event-file", str(event_path)]
         session = _make_resolved_session("github", "org/repo#1", "codex")
-        result = _make_execution_result("success", "レビューしました")
+        result = _make_execution_result("success", "## レビュー\n\nレビューしました")
         mock_gh = MagicMock()
         mock_gh.get_pull_request.return_value = _make_github_pr(
             "org/repo",
@@ -1032,7 +1032,7 @@ class TestLabelEvent:
         event_path = self._write_pull_request_labeled_event(tmp_path, "vv-ai:next")
         argv = ["--event", "pull_request", "--event-file", str(event_path)]
         session = _make_resolved_session("github", "org/repo#1", "codex")
-        result = _make_execution_result("success", "レビューしました")
+        result = _make_execution_result("success", "## レビュー\n\nレビューしました")
         mock_gh = MagicMock()
         mock_gh.get_pull_request.return_value = _make_github_pr(
             "org/repo",
@@ -1090,7 +1090,7 @@ class TestLabelEvent:
         event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
         argv = ["--event", "issues", "--event-file", str(event_path)]
         session = _make_resolved_session("github", "org/repo#1", "codex")
-        result = _make_execution_result("success", "確認しました")
+        result = _make_execution_result("success", "## 要望確認\n\n確認しました")
         mock_gh = MagicMock()
         mock_gh.remove_issue_label.side_effect = RuntimeError("label 削除失敗")
 
@@ -1228,7 +1228,7 @@ class TestLabelEvent:
 
     def test_dry_run_does_not_remove_trigger_label(self, tmp_path: Path) -> None:
         ready_execution = _make_ready_execution_for_label(dry_run=True)
-        result = _make_execution_result("success", "確認しました")
+        result = _make_execution_result("success", "## 要望確認\n\n確認しました")
         mock_gh = MagicMock()
         mock_gh.get_repo_info.return_value = RepoInfo(
             is_fork=False,
