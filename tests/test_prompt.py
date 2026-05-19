@@ -6,7 +6,7 @@ from typing import Literal
 
 from vv_ai.config import VVAIConfig
 from vv_ai.workflow.preflight import ReadyExecution
-from vv_ai.prompts.build import build_provider_prompt
+from vv_ai.prompts.build import build_next_decision_prompt, build_provider_prompt
 from vv_ai.providers.selection import ProviderSpec, ResolvedProvider
 from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
@@ -109,6 +109,24 @@ def _make_requirements_ready_execution() -> ReadyExecution:
     )
 
 
+def _make_next_ready_execution() -> ReadyExecution:
+    """next 用の ReadyExecution を生成する。"""
+    return ReadyExecution(
+        command=ResolvedCommand(
+            event_name="issue_comment",
+            command="next",
+            instruction="次へ進めて",
+            has_target=True,
+            dry_run=False,
+            repository_full_name="org/repo",
+            target=_make_target("issue", 1),
+        ),
+        config=VVAIConfig(allowed_users=["Hiroshiba"]),
+        resolved_provider=_make_provider(),
+        workflow_id="test-run-1",
+    )
+
+
 def _build_prompt(
     kind: Literal["issue", "pr"],
     command: Literal["address", "implement"],
@@ -149,6 +167,14 @@ def _build_requirements_prompt() -> str:
         target_context_block="テストコンテキスト",
         implement_branch_name=None,
         worktree_ref=None,
+    )
+
+
+def _build_next_decision_prompt() -> str:
+    """next AI 判断用 prompt を生成する。"""
+    return build_next_decision_prompt(
+        ready_execution=_make_next_ready_execution(),
+        target_context_block="テストコンテキスト",
     )
 
 
@@ -325,3 +351,24 @@ class TestBreakdownPrompt:
         prompt = _build_breakdown_prompt()
 
         assert "表現はタスク本文に自然に合う形で構いません。" not in prompt
+
+
+class TestNextDecisionPrompt:
+    """next AI 判断 prompt を検証する。"""
+
+    def test_prompt_mentions_command_choices(self) -> None:
+        prompt = _build_next_decision_prompt()
+
+        assert "COMMAND: breakdown" in prompt
+        assert "COMMAND: implement" in prompt
+
+    def test_prompt_forbids_code_changes(self) -> None:
+        prompt = _build_next_decision_prompt()
+
+        assert "コード変更は行わないでください。" in prompt
+
+    def test_prompt_includes_context_and_instruction(self) -> None:
+        prompt = _build_next_decision_prompt()
+
+        assert "テストコンテキスト" in prompt
+        assert "次へ進めて" in prompt

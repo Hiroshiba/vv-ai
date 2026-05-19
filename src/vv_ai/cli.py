@@ -313,7 +313,6 @@ def _run_ready_execution(
     preflight_duration_seconds: float,
 ) -> int:
     """実行本体と artifact 保存を行う。"""
-    ready_message = _format_ready_message(ready_execution)
     execution_started_at = time.perf_counter()
     runtime_error: BaseException | None = None
     exit_code = 0
@@ -373,7 +372,7 @@ def _run_ready_execution(
             return 1
 
     if runtime_error is None:
-        print(ready_message)
+        print(_format_ready_message(ready_execution))
         return 0 if execution_result.status == "success" else 1
     if isinstance(runtime_error, KeyboardInterrupt):
         print("実行を中断しました", file=sys.stderr)

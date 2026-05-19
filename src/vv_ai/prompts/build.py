@@ -80,6 +80,19 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
     ),
 }
 
+_NEXT_DECISION_TASK_DESCRIPTION: str = (
+    "`next` で次に実行するコマンドを判断してください。\n"
+    "コード変更は行わないでください。\n"
+    "対象 Issue の内容、これまでのコメント、セッション内の文脈を見て、"
+    "タスク分割が必要なら `breakdown`、1 PR で実装できるなら `implement` を選んでください。\n"
+    "判断基準を固定ルール化せず、現在の文脈から判断してください。\n"
+    "出力は以下のどちらか 1 行だけにしてください:\n"
+    "COMMAND: breakdown\n"
+    "COMMAND: implement\n"
+    "\n"
+    "上記以外の余計な出力は含めないでください。"
+)
+
 _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
     "この PR の内容・コメントの指示に基づいて追加実装してください。"
     "ファイル変更のみ行ってください。git の操作は不要です。"
@@ -139,6 +152,34 @@ def build_provider_prompt(
         sections.append(_IMPLEMENT_PR_TASK_DESCRIPTION)
     elif command_name in _COMMAND_TASK_DESCRIPTION:
         sections.append(_COMMAND_TASK_DESCRIPTION[command_name])
+
+    instruction = ready_execution.command.instruction
+    if instruction is not None:
+        sections.append(f"指示:\n{instruction}")
+
+    if target_context_block is not None:
+        sections.append(f"対象の Issue / PR コンテキスト:\n{target_context_block}")
+
+    return "\n\n".join(sections)
+
+
+def build_next_decision_prompt(
+    ready_execution: ReadyExecution,
+    target_context_block: str | None,
+) -> str:
+    """`next` の AI 判断用プロンプト文字列を返す。"""
+    sections: list[str] = []
+
+    sections.append(_build_header(ready_execution, None, None))
+
+    if ready_execution.resolved_session is not None:
+        restore_manifest = ready_execution.resolved_session.restore_manifest
+        if restore_manifest is not None:
+            sections.append(
+                "前回のセッション状態と未コミット差分を暗号化バンドルから復元済みです。"
+            )
+
+    sections.append(_NEXT_DECISION_TASK_DESCRIPTION)
 
     instruction = ready_execution.command.instruction
     if instruction is not None:

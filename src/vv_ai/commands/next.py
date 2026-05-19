@@ -14,6 +14,7 @@ from vv_ai.inputs.build import (
     parse_comment_invocation,
     parse_label_invocation,
 )
+from vv_ai.next_decision import NextDecisionError, parse_next_decision_history_marker
 from vv_ai.inputs.models import (
     CommandName,
     InputError,
@@ -25,6 +26,10 @@ HistorySource = Literal["comment", "label"]
 
 class NextResolutionError(Exception):
     """`next` コマンドの解決に失敗したことを表す例外。"""
+
+
+class NextAiDecisionRequired(NextResolutionError):
+    """`next` コマンドの解決に AI 判断が必要であることを表す例外。"""
 
 
 class NextHistoryEntry(BaseModel):
@@ -51,7 +56,10 @@ def resolve_next_command(
     github_client = _build_history_github_client(target)
     is_sub_issue = _resolve_is_sub_issue(target, github_client)
     history = _load_history(repo_root, command, target, config, github_client)
-    resolved_command = _resolve_next_from_history(history, target, is_sub_issue)
+    try:
+        resolved_command = _resolve_next_from_history(history, target, is_sub_issue)
+    except NextAiDecisionRequired:
+        return command
     return command.model_copy(update={"command": resolved_command})
 
 
@@ -184,6 +192,17 @@ def _build_github_history_entry(
     config: VVAIConfig,
     timeline_event: GitHubIssueTimelineEvent,
 ) -> NextHistoryEntry | None:
+    bot_decision_command = _parse_bot_next_decision_history_command(timeline_event)
+    if bot_decision_command is not None:
+        if _should_ignore_command(target, bot_decision_command):
+            return None
+        return NextHistoryEntry(
+            command=bot_decision_command,
+            created_at=timeline_event.created_at,
+            id=timeline_event.id,
+            source="comment",
+        )
+
     if timeline_event.actor.login not in config.allowed_users:
         return None
     command = _parse_timeline_history_command(timeline_event)
@@ -197,6 +216,21 @@ def _build_github_history_entry(
         id=timeline_event.id,
         source="comment" if timeline_event.event == "commented" else "label",
     )
+
+
+def _parse_bot_next_decision_history_command(
+    timeline_event: GitHubIssueTimelineEvent,
+) -> CommandName | None:
+    if timeline_event.event != "commented":
+        return None
+    if not timeline_event.actor.login.endswith("[bot]"):
+        return None
+    if timeline_event.body is None:
+        return None
+    try:
+        return parse_next_decision_history_marker(timeline_event.body)
+    except NextDecisionError as exc:
+        raise NextResolutionError("AI 判断済み `next` 履歴の解析に失敗しました") from exc
 
 
 def _load_local_history(repo_root: Path, target: ResolvedTarget) -> list[NextHistoryEntry]:
@@ -314,7 +348,11 @@ def _resolve_issue_next_command(
     if last_command == "arch":
         return "detail"
     if last_command == "detail":
-        return "breakdown"
+        if is_sub_issue:
+            return "implement"
+        raise NextAiDecisionRequired(
+            "Issue の detail 後の `next` には AI 判断が必要です"
+        )
     if last_command == "breakdown":
         raise NextResolutionError("Issue の breakdown 後に進めるコマンドがありません")
     if last_command == "implement":

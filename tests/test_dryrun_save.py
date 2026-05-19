@@ -12,6 +12,7 @@ from vv_ai.commands.post_execution import (
     _handle_implement_issue_post_execution,
     _handle_pr_change_post_execution,
     _handle_issue_post_execution,
+    _post_next_decision_history_comment,
     _post_response_comment,
 )
 from vv_ai.config import VVAIConfig
@@ -173,6 +174,41 @@ def _make_github_pr(
     )
 
 
+def test_next判断履歴コメントを投稿する() -> None:
+    ready = _make_ready_execution(
+        command=_make_command(
+            command="breakdown",
+            dry_run=False,
+        )
+    )
+    result = _make_execution_result("success")
+    github_client = MagicMock()
+
+    _post_next_decision_history_comment(ready, result, github_client, "breakdown")
+
+    github_client.create_issue_comment.assert_called_once()
+    args = github_client.create_issue_comment.call_args.args
+    assert args[0] == "org/repo"
+    assert args[1] == 1
+    assert "vv-ai-next-decision" in args[2]
+    assert "command=breakdown" in args[2]
+
+
+def test_next判断履歴コメントは失敗時に投稿しない() -> None:
+    ready = _make_ready_execution(
+        command=_make_command(
+            command="implement",
+            dry_run=False,
+        )
+    )
+    result = _make_execution_result("failure")
+    github_client = MagicMock()
+
+    _post_next_decision_history_comment(ready, result, github_client, "implement")
+
+    github_client.create_issue_comment.assert_not_called()
+
+
 class TestDryRunSuppression:
     def test_dryrun_suppresses_implement_issue_push(self) -> None:
         ready = _make_ready_execution(command=_make_command(command="implement"))
@@ -259,14 +295,45 @@ class TestDryRunSuppression:
 
         github_client.create_issue_comment.assert_not_called()
 
-    def test_non_dryrun_posts_response_comment(self) -> None:
-        ready = _make_ready_execution(command=_make_command(command="arch", dry_run=False))
+    @pytest.mark.parametrize(
+        ("command", "heading"),
+        [
+            ("confirm", "## 要望確認"),
+            ("requirements", "## 要件定義"),
+            ("arch", "## 基本設計"),
+            ("detail", "## 詳細設計"),
+            ("review", "## レビュー"),
+        ],
+    )
+    def test_non_dryrun_posts_response_comment_with_heading(
+        self,
+        command: str,
+        heading: str,
+    ) -> None:
+        ready = _make_ready_execution(command=_make_command(command=command, dry_run=False))
         result = _make_execution_result("success", response_text="計画です")
         github_client = MagicMock()
 
         _post_response_comment(ready, result, github_client)
 
-        github_client.create_issue_comment.assert_called_once()
+        github_client.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            f"{heading}\n\n計画です",
+        )
+
+    def test_non_dryrun_posts_reply_response_comment_without_heading(self) -> None:
+        ready = _make_ready_execution(command=_make_command(command="reply", dry_run=False))
+        result = _make_execution_result("success", response_text="返答です")
+        github_client = MagicMock()
+
+        _post_response_comment(ready, result, github_client)
+
+        github_client.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "返答です",
+        )
 
 
 class TestImplementResponseComment:

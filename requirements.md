@@ -32,11 +32,13 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `review`       | PR をレビューし、指摘・改善提案をコメント                    | —        | ✅     |
 | `sync`         | PR ブランチをベースブランチに同期する                       | —        | ✅     |
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
-| `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
+| `next`         | 履歴と必要時の AI 判断で次の既存工程を実行するショートカット | ✅        | ✅     |
+
+AI が工程成果物をコメントとして返す結果コメントは、本文の先頭に内容種別を表す H2 見出しを付ける。任意返信や、実装・レビュー対応・同期など作業結果の連絡コメントには付けない。`next` は解決後の工程に従う。
 
 `sync` は PR 専用コマンドとして実行し、公開用の同期コマンドは分けない。PR head branch を checkout し、`origin/<base>` との共通祖先を判定できる履歴を取得して取り込み状況を確認する。base branch がすでに HEAD の祖先なら merge commit は作らない。取り込みが必要なら `--no-ff --no-commit` で merge し、conflict がなければ wrapper が merge commit を作成する。
 
-conflict がある場合、AI には conflict file の解消だけを依頼する。AI が commit や stage を行った場合、想定外の staged diff がある場合、conflict marker が残った場合、未解消 conflict が残った場合は失敗する。wrapper は AI が解消した conflict file だけを stage し、merge commit を作成する。conflict 解消と整合性確認は別の provider 実行にし、conflict ありの sync は provider 実行 2 回とする。
+conflict がある場合、AI には conflict file の解消だけを依頼する。AI が commit や stage を行った場合、想定外の staged diff がある場合、conflict marker が残った場合、未解消 conflict が残った場合は失敗する。wrapper は AI 実行後に conflict file だけを stage し、merge commit を作成する。marker がない conflict file は、内容または存在状態が不変でも stage 対象にする。conflict 解消と整合性確認は別の provider 実行にし、conflict ありの sync は provider 実行 2 回とする。
 
 merge commit 後または merge 不要判定後、AI に整合性確認、必要最小限の修正、最終コメント本文の作成を依頼する。conflict なしの sync は provider 実行 1 回とする。修正がある場合、wrapper が `chore: sync 整合性を修正する` で別 commit を作成する。merge commit も整合性修正 commit もない場合は push しない。
 
@@ -73,10 +75,12 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 
 ### next の解決
 
-- `next` は専用の AI タスクではなく、履歴から次の既存コマンドへ解決するショートカット
+- `next` は原則として履歴から次の既存コマンドへ解決するショートカット
 - 通常 Issue の履歴なし `next` は `confirm`
 - サブ Issue の履歴なし `next` は `implement`
-- Issue では `confirm` → `requirements` → `arch` → `detail` → `breakdown` の順に進む
+- Issue では `confirm` → `requirements` → `arch` → `detail` の順に進む
+- 通常 Issue の `detail` 後の `next` は AI が `breakdown` または `implement` を判断する
+- AI 判断付き `next` の選択結果は履歴保存コメントとして残し、後続の `next` 履歴再生で選択済みコマンドとして扱う
 - 親 Issue の `breakdown` 後の `next` はエラー終了
 - Issue の `implement` 後の `next` はエラー終了
 - PR の履歴なし `next` は `review`
@@ -754,7 +758,7 @@ provider_priority:
 ## SUCCESS METRICS
 
 - プロトタイプとして 1 リポジトリで安定動作すること
-- Codex / Claude Code の両方で基本フロー（confirm → requirements → arch → detail → breakdown → implement → review → address）が回ること
+- Codex / Claude Code の両方で基本フロー（confirm → requirements → arch → detail → breakdown または implement → review → address）が回ること
 - セッション継続が機能し、文脈を引き継いだ作業ができること
 - fork PR でも安全に動作すること（API キー漏洩なし）
 - per-run の metrics / report が確実に保存されること
