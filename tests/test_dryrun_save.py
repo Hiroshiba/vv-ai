@@ -527,6 +527,37 @@ class TestImplementResponseComment:
         mock_push.assert_not_called()
         github_client.create_pull_request.assert_not_called()
 
+    def test_implement_issue_requires_non_empty_title(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="implement", dry_run=False)
+        )
+        result = _make_execution_result(
+            "success",
+            response_text="TITLE:   \nCOMMIT_MESSAGE: feat: ai commit\nBODY:\n本文",
+        )
+        github_client = MagicMock()
+        github_client.get_default_branch.return_value = "main"
+
+        with (
+            patch("vv_ai.commands.post_execution.commit_all_changes") as mock_commit,
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=True),
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
+            pytest.raises(RuntimeError, match="TITLE が空です"),
+        ):
+            _handle_implement_issue_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "vv-ai/issue-1-abc123",
+                None,
+                {},
+            )
+
+        mock_commit.assert_not_called()
+        mock_push.assert_not_called()
+        github_client.create_pull_request.assert_not_called()
+
     def test_implement_issue_requires_body_line(self) -> None:
         ready = _make_ready_execution(
             command=_make_command(command="implement", dry_run=False)

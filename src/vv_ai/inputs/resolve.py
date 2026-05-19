@@ -68,7 +68,7 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
     """`RawInput` を後続処理用の `ResolvedCommand` に変換する。"""
     _validate_event_requirements(raw_input)
     command = raw_input.command or "reply"
-    instruction = _normalize_instruction(raw_input.instruction)
+    instruction = _resolve_instruction(raw_input.instruction)
     target_url, target_type, target_number, has_target = _resolve_target_fields(raw_input)
     repo = _resolve_repo(command, raw_input)
 
@@ -154,12 +154,14 @@ def _raise_for_missing_fields(
         )
 
 
-def _normalize_instruction(instruction: str | None) -> str | None:
-    """空文字 instruction を未指定として扱う。"""
+def _resolve_instruction(instruction: str | None) -> str | None:
+    """instruction を正規化する。"""
     if instruction is None:
         return None
     stripped = instruction.strip()
-    return stripped or None
+    if stripped == "":
+        raise ResolutionError("`instruction` は空文字にできません")
+    return stripped
 
 
 def _resolve_target_fields(
@@ -186,4 +188,8 @@ def _resolve_repo(command: CommandName, raw_input: RawInput) -> str | None:
     """Issue 作成先の repository を確定する。"""
     if command != "issue":
         return raw_input.repo
-    return raw_input.repo or raw_input.repository_full_name
+    if raw_input.repo is not None:
+        if raw_input.repo.strip() == "":
+            raise ResolutionError("`repo` は空文字にできません")
+        return raw_input.repo
+    return raw_input.repository_full_name
