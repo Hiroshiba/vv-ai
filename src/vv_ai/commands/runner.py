@@ -26,7 +26,7 @@ from vv_ai.prompts.build import build_provider_prompt
 from vv_ai.providers.runner import execute_provider
 from vv_ai.inputs.resolve import ResolvedTarget
 from vv_ai.sessions.models import SessionStateRef, TargetContextState
-from vv_ai.sync_command import run_sync_command
+from vv_ai.commands.sync import run_sync_command
 from vv_ai.prompts.target_context import (
     build_target_context,
     empty_target_context_state,
