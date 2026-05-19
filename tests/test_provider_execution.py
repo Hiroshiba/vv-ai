@@ -13,7 +13,10 @@ import pytest
 from vv_ai.config import VVAIConfig
 from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.claude import execute_claude as _execute_claude
-from vv_ai.providers.codex import execute_codex as _execute_codex
+from vv_ai.providers.codex import (
+    _build_codex_provider_prompt,
+    execute_codex as _execute_codex,
+)
 from vv_ai.providers.environment import build_codex_env as _build_codex_env
 from vv_ai.providers.runner import ProviderExecutionError
 from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
@@ -99,7 +102,7 @@ def test_execute_codex_deploys_after_restore_before_subprocess(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """_execute_codex は session restore 後、subprocess 前に asset 配置する。"""
+    """_execute_codex は restore 後に asset と作業用ディレクトリを準備する。"""
     events: list[str] = []
     restored_dir = tmp_path / "restored"
     restored_dir.mkdir()
@@ -114,6 +117,13 @@ def test_execute_codex_deploys_after_restore_before_subprocess(
     def fake_deploy_assets(env, codex_home: Path) -> None:
         events.append("deploy")
 
+    def fake_prepare_work(repo_root: Path) -> Path:
+        events.append("prepare_work")
+        return repo_root / ".vv-ai" / "codex-work"
+
+    def fake_sync_work(repo_root: Path, work_dir: Path) -> None:
+        events.append("sync_work")
+
     def fake_run(
         command: Sequence[str],
         cwd: Path,
@@ -123,6 +133,7 @@ def test_execute_codex_deploys_after_restore_before_subprocess(
         check: bool,
     ) -> subprocess.CompletedProcess[str]:
         events.append("run")
+        assert ".vv-ai/codex-work" in command[-1]
         session_path = Path(env["CODEX_HOME"]) / "sessions" / "2026" / "05" / "15"
         session_path.mkdir(parents=True)
         (session_path / "rollout.jsonl").write_text("{}", encoding="utf-8")
@@ -135,6 +146,11 @@ def test_execute_codex_deploys_after_restore_before_subprocess(
         "vv_ai.providers.codex._deploy_codex_assets_before_execution",
         fake_deploy_assets,
     )
+    monkeypatch.setattr(
+        "vv_ai.providers.codex._prepare_codex_work_dir",
+        fake_prepare_work,
+    )
+    monkeypatch.setattr("vv_ai.providers.codex._sync_codex_work_dir", fake_sync_work)
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     result = None
@@ -151,11 +167,143 @@ def test_execute_codex_deploys_after_restore_before_subprocess(
             skip_api_key_check=False,
         )
 
-        assert events == ["restore", "deploy", "run"]
+        assert events == ["restore", "deploy", "prepare_work", "run", "sync_work"]
         assert result.response_text == "Codex 応答"
     finally:
         if result is not None and result.provider_session_path is not None:
             shutil.rmtree(result.provider_session_path, ignore_errors=True)
+
+
+def test_execute_codex_does_not_sync_work_dir_when_subprocess_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Codex subprocess が失敗した場合は作業用ディレクトリを同期しない。"""
+    events: list[str] = []
+    ready_execution = _make_ready_execution("codex", None)
+
+    def fake_deploy_assets(env, codex_home: Path) -> None:
+        events.append("deploy")
+        codex_home.mkdir(parents=True)
+
+    def fake_prepare_work(repo_root: Path) -> Path:
+        events.append("prepare_work")
+        return repo_root / ".vv-ai" / "codex-work"
+
+    def fake_sync_work(repo_root: Path, work_dir: Path) -> None:
+        events.append("sync_work")
+
+    def fake_run(
+        command: Sequence[str],
+        cwd: Path,
+        env: dict[str, str],
+        capture_output: bool,
+        text: bool,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        events.append("run")
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="failed")
+
+    monkeypatch.setattr(
+        "vv_ai.providers.codex._deploy_codex_assets_before_execution",
+        fake_deploy_assets,
+    )
+    monkeypatch.setattr(
+        "vv_ai.providers.codex._prepare_codex_work_dir",
+        fake_prepare_work,
+    )
+    monkeypatch.setattr("vv_ai.providers.codex._sync_codex_work_dir", fake_sync_work)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(ProviderExecutionError, match="終了コード 1"):
+        _execute_codex(
+            tmp_path,
+            ready_execution,
+            {
+                "VV_OPENAI_API_KEY": "key",
+                "VV_CODEX_HOME": str(tmp_path / "codex_home"),
+            },
+            0.1,
+            "prompt",
+            skip_api_key_check=False,
+        )
+
+    assert events == ["deploy", "prepare_work", "run"]
+
+
+def test_execute_codex_does_not_sync_work_dir_when_session_resolve_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Codex session 保存に失敗した場合は作業用ディレクトリを同期しない。"""
+    events: list[str] = []
+    ready_execution = _make_ready_execution("codex", None)
+
+    def fake_deploy_assets(env, codex_home: Path) -> None:
+        events.append("deploy")
+        codex_home.mkdir(parents=True)
+
+    def fake_prepare_work(repo_root: Path) -> Path:
+        events.append("prepare_work")
+        return repo_root / ".vv-ai" / "codex-work"
+
+    def fake_sync_work(repo_root: Path, work_dir: Path) -> None:
+        events.append("sync_work")
+
+    def fake_run(
+        command: Sequence[str],
+        cwd: Path,
+        env: dict[str, str],
+        capture_output: bool,
+        text: bool,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        events.append("run")
+        output_path = Path(command[command.index("-o") + 1])
+        output_path.write_text("Codex 応答", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        "vv_ai.providers.codex._deploy_codex_assets_before_execution",
+        fake_deploy_assets,
+    )
+    monkeypatch.setattr(
+        "vv_ai.providers.codex._prepare_codex_work_dir",
+        fake_prepare_work,
+    )
+    monkeypatch.setattr("vv_ai.providers.codex._sync_codex_work_dir", fake_sync_work)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(ProviderExecutionError, match="Codex session directory"):
+        _execute_codex(
+            tmp_path,
+            ready_execution,
+            {
+                "VV_OPENAI_API_KEY": "key",
+                "VV_CODEX_HOME": str(tmp_path / "codex_home"),
+            },
+            0.1,
+            "prompt",
+            skip_api_key_check=False,
+        )
+
+    assert events == ["deploy", "prepare_work", "run"]
+
+
+def test_build_codex_provider_prompt_mentions_work_dir() -> None:
+    """Codex provider prompt は作業用ディレクトリの編集指示を含む。"""
+    prompt = _build_codex_provider_prompt(
+        "元の指示",
+        Path(".vv-ai/codex-work"),
+    )
+
+    assert "元の指示" in prompt
+    assert ".codex/" in prompt
+    assert ".vv-ai/codex-work/" in prompt
+    assert "AGENTS.md" in prompt
+    assert "skills/" in prompt
+    assert "agents/" in prompt
+    assert "直接編集しない" in prompt
 
 
 def test_resolve_codex_session_dir_copies_only_sessions(tmp_path: Path) -> None:
