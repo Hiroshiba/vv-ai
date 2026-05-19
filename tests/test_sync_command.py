@@ -30,8 +30,6 @@ from vv_ai.git_ops import (
 from vv_ai.backends.github.models import (
     GitHubActor,
     GitHubPullRequest,
-    GitHubPullRequestSyncState,
-    GitHubStatusCheckSummary,
 )
 from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
 from vv_ai.preflight import ReadyExecution
@@ -259,16 +257,16 @@ def test_run_sync_command_skips_push_when_base_is_ancestor(tmp_path: Path) -> No
         patch(
             "vv_ai.sync_command.execute_provider",
             side_effect=[
-                _make_execution_result("success", "整合性確認完了"),
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
-        ),
+        ) as execute_provider,
         patch("vv_ai.sync_command.push_branch") as push_branch,
         patch("vv_ai.sync_command.try_push_current_branch") as try_push_current_branch,
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
     assert result.status == "success"
+    assert execute_provider.call_count == 1
     push_branch.assert_not_called()
     try_push_current_branch.assert_not_called()
     assert github_client.comments == [("org/repo", 1, "sync 完了")]
@@ -296,10 +294,9 @@ def test_run_sync_command_deepens_history_before_merge_from_shallow_clone(
         patch(
             "vv_ai.sync_command.execute_provider",
             side_effect=[
-                _make_execution_result("success", "整合性確認完了"),
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
-        ),
+        ) as execute_provider,
         patch("vv_ai.sync_command.push_branch") as push_branch,
     ):
         result = run_sync_command(
@@ -311,6 +308,7 @@ def test_run_sync_command_deepens_history_before_merge_from_shallow_clone(
         )
 
     assert result.status == "success"
+    assert execute_provider.call_count == 1
     assert len(_run_git(clone, "rev-list", "--parents", "-n", "1", "HEAD").split()) == 3
     push_branch.assert_called_once_with(clone, "feature", "token")
 
@@ -334,10 +332,9 @@ def test_run_sync_command_pushes_after_merge_commit(tmp_path: Path) -> None:
         patch(
             "vv_ai.sync_command.execute_provider",
             side_effect=[
-                _make_execution_result("success", "整合性確認完了"),
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
-        ),
+        ) as execute_provider,
         patch("vv_ai.sync_command.push_branch") as push_branch,
     ):
         result = run_sync_command(
@@ -349,6 +346,7 @@ def test_run_sync_command_pushes_after_merge_commit(tmp_path: Path) -> None:
         )
 
     assert result.status == "success"
+    assert execute_provider.call_count == 1
     push_branch.assert_called_once_with(clone, "feature", "token")
 
 
@@ -384,7 +382,6 @@ def test_run_sync_command_ensures_merge_base_for_fork_pr(tmp_path: Path) -> None
         patch(
             "vv_ai.sync_command.execute_provider",
             side_effect=[
-                _make_execution_result("success", "整合性確認完了"),
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
         ),
@@ -402,10 +399,10 @@ def test_run_sync_command_ensures_merge_base_for_fork_pr(tmp_path: Path) -> None
     ensure_merge_base.assert_called_once_with(clone, "origin", 1, "main", "origin/main")
 
 
-def test_run_sync_command_passes_consistency_result_to_final_prompt_when_session_is_new(
+def test_run_sync_command_requests_comment_body_in_consistency_prompt(
     tmp_path: Path,
 ) -> None:
-    """run_sync_command は session 継続なしなら整合性確認結果を最終 prompt に渡す。"""
+    """run_sync_command は整合性確認 prompt で最終コメント本文も依頼する。"""
     source = _init_repo_at(tmp_path / "source")
     _run_git(source, "checkout", "-b", "feature")
     _write(source, "feature.txt", "feature\n")
@@ -425,26 +422,30 @@ def test_run_sync_command_passes_consistency_result_to_final_prompt_when_session
         provider_prompt: str,
     ) -> ExecutionResult:
         prompts.append(provider_prompt)
-        if len(prompts) == 1:
-            return _make_execution_result("success", "整合性確認で追従漏れを修正しました")
         return _make_execution_result("success", "BODY:\nsync 完了")
 
     with patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
     assert result.status == "success"
-    assert "整合性確認 AI の出力:\n整合性確認で追従漏れを修正しました" in prompts[1]
+    assert len(prompts) == 1
+    assert "整合性確認を行ってください" in prompts[0]
+    assert "必要最小限の修正" in prompts[0]
+    assert "BODY:" in prompts[0]
+    assert "push succeeded" not in prompts[0]
+    assert "GitHub state" not in prompts[0]
 
 
-def test_run_sync_command_passes_conflict_result_to_final_prompt_when_session_is_new(
+def test_run_sync_command_resumes_consistency_provider_after_conflict(
     tmp_path: Path,
 ) -> None:
-    """run_sync_command は session 継続なしなら conflict 結果を最終 prompt に渡す。"""
+    """run_sync_command は conflict 後の整合性確認で直前 session を継続する。"""
     source = _make_conflict_source(tmp_path)
-    clone = _clone_all_branches(tmp_path, source, "sync-conflict-final-prompt")
+    clone = _clone_all_branches(tmp_path, source, "sync-conflict-resume")
     github_client = _make_github_client(is_cross_repository=False)
     ready_execution = _make_ready_execution()
     prompts: list[str] = []
+    session_refs: list[tuple[str | None, str]] = []
 
     def execute_provider_mock(
         repo_root: Path,
@@ -454,12 +455,28 @@ def test_run_sync_command_passes_conflict_result_to_final_prompt_when_session_is
         provider_prompt: str,
     ) -> ExecutionResult:
         prompts.append(provider_prompt)
+        session = ready_execution.resolved_session
+        if session is None:
+            raise AssertionError("resolved_session がありません")
+        state_ref = session.state_ref
+        session_refs.append(
+            (
+                None if state_ref is None else state_ref.provider_session_id,
+                session.restore_strategy,
+            )
+        )
         if len(prompts) == 1:
             _write(repo_root, "file.txt", "resolved\n")
-            return _make_execution_result("success", "conflict を解消しました")
-        if len(prompts) == 2:
-            return _make_execution_result("success", "整合性確認完了")
-        return _make_execution_result("success", "BODY:\nsync 完了")
+            return _make_execution_result_with_provider_session_id(
+                "success",
+                "conflict を解消しました",
+                "conflict-session",
+            )
+        return _make_execution_result_with_provider_session_id(
+            "success",
+            "BODY:\nsync 完了",
+            "consistency-session",
+        )
 
     with (
         patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock),
@@ -468,9 +485,66 @@ def test_run_sync_command_passes_conflict_result_to_final_prompt_when_session_is
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
     assert result.status == "success"
-    assert "conflict occurred: True" in prompts[2]
-    assert "conflict resolved by AI: True" in prompts[2]
-    assert "conflict 解消 AI の出力:\nconflict を解消しました" in prompts[2]
+    assert len(prompts) == 2
+    assert session_refs[1] == ("conflict-session", "inherit")
+    assert github_client.comments == [("org/repo", 1, "sync 完了")]
+
+
+def test_run_sync_command_rejects_missing_provider_session_id_after_conflict(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は conflict 後に session ID がなければ失敗する。"""
+    source = _make_conflict_source(tmp_path)
+    clone = _clone_all_branches(tmp_path, source, "sync-conflict-missing-session")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+
+    def execute_provider_mock(
+        repo_root: Path,
+        ready_execution: ReadyExecution,
+        env: object,
+        preflight_duration_seconds: float,
+        provider_prompt: str,
+    ) -> ExecutionResult:
+        _write(repo_root, "file.txt", "resolved\n")
+        return _make_execution_result("success", "conflict を解消しました")
+
+    with (
+        patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock),
+        patch("vv_ai.sync_command.push_branch") as push_branch,
+    ):
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "failure"
+    assert result.response_text == "provider session ID を取得できませんでした"
+    assert github_client.comments == []
+    push_branch.assert_not_called()
+
+
+def test_run_sync_command_rejects_missing_body_in_consistency_output(
+    tmp_path: Path,
+) -> None:
+    """run_sync_command は BODY がない整合性確認出力を拒否する。"""
+    source = _init_repo_at(tmp_path / "source")
+    _run_git(source, "checkout", "-b", "feature")
+    _write(source, "feature.txt", "feature\n")
+    _run_git(source, "add", "feature.txt")
+    _run_git(source, "commit", "-m", "feature")
+    _run_git(source, "checkout", "main")
+    clone = _clone_main_only(tmp_path, source, "sync-missing-body")
+    github_client = _make_github_client(is_cross_repository=False)
+    ready_execution = _make_ready_execution()
+
+    with patch(
+        "vv_ai.sync_command.execute_provider",
+        return_value=_make_execution_result("success", "整合性確認完了"),
+    ) as execute_provider:
+        result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
+
+    assert result.status == "failure"
+    assert result.response_text == "最終コメント本文が空です"
+    assert execute_provider.call_count == 1
+    assert github_client.comments == []
 
 
 def test_run_sync_command_rejects_consistency_marker_before_commit(
@@ -726,23 +800,6 @@ class _FakeGitHubClient:
         """Pull Request を返す。"""
         return self.pr
 
-    def get_pull_request_sync_state(
-        self,
-        repository_full_name: str,
-        number: int,
-    ) -> GitHubPullRequestSyncState:
-        """Pull Request sync 状態を返す。"""
-        return GitHubPullRequestSyncState(
-            mergeable="MERGEABLE",
-            merge_state_status="CLEAN",
-            status_check_summary=GitHubStatusCheckSummary(
-                success_count=1,
-                failure_count=0,
-                pending_count=0,
-                unknown_count=0,
-            ),
-        )
-
     def create_issue_comment(
         self,
         repository_full_name: str,
@@ -810,6 +867,15 @@ def _make_execution_result(
     response_text: str | None,
 ) -> ExecutionResult:
     """sync テスト用 ExecutionResult を生成する。"""
+    return _make_execution_result_with_provider_session_id(status, response_text, None)
+
+
+def _make_execution_result_with_provider_session_id(
+    status: ExecutionStatus,
+    response_text: str | None,
+    provider_session_id: str | None,
+) -> ExecutionResult:
+    """provider session ID 付きの sync テスト用 ExecutionResult を生成する。"""
     return ExecutionResult(
         status=status,
         report_sections=ReportSections(
@@ -826,7 +892,7 @@ def _make_execution_result(
         tools={},
         steps={},
         provider_specific=ProviderSpecificMetrics(),
-        state_ref=SessionStateRef(),
+        state_ref=SessionStateRef(provider_session_id=provider_session_id),
         provider_session_path=None,
         allow_edits_notice_posted=False,
         response_text=response_text,
