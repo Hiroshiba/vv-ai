@@ -16,6 +16,22 @@ from vv_ai.providers.assets import (
     deploy_codex_provider_assets,
 )
 
+_REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[1]
+_PROVIDER_ASSET_READONLY_POLICY: str = (
+    "調査に必要な参照系 git コマンドは実行して構いません。"
+)
+_PROVIDER_ASSET_MUTATION_POLICY: str = (
+    "作業ツリー、ステージング領域、ブランチ、リモートを変更する git コマンドは、"
+    "明示指示がない限り実行しないでください。"
+)
+_GIT_COMMAND_EXAMPLES: tuple[str, ...] = (
+    "git status",
+    "git diff",
+    "git log",
+    "git blame",
+    "git show",
+)
+
 
 class _FakeDistribution:
     """direct_url.json を返すテスト用 distribution。"""
@@ -64,6 +80,34 @@ def _patch_client(
         "vv_ai.providers.assets.build_github_client_with_token",
         lambda token: _FakeGitHubClient(tree, blobs),
     )
+
+
+def _read_repository_text(relative_path: str) -> str:
+    """リポジトリ内ファイルの本文を返す。"""
+    return (_REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
+
+
+def _assert_provider_asset_mentions_git_command_policy(text: str) -> None:
+    """provider asset に git コマンド方針が含まれることを検証する。"""
+    assert _PROVIDER_ASSET_READONLY_POLICY in text
+    assert _PROVIDER_ASSET_MUTATION_POLICY in text
+    assert "index" not in text
+    for command_example in _GIT_COMMAND_EXAMPLES:
+        assert command_example not in text
+
+
+def test_codex_agents_md_mentions_git_command_policy() -> None:
+    """Codex の provider asset に git コマンド方針を書く。"""
+    text = _read_repository_text(".codex/AGENTS.md")
+
+    _assert_provider_asset_mentions_git_command_policy(text)
+
+
+def test_claude_claude_md_mentions_git_command_policy() -> None:
+    """Claude の provider asset に git コマンド方針を書く。"""
+    text = _read_repository_text(".claude/CLAUDE.md")
+
+    _assert_provider_asset_mentions_git_command_policy(text)
 
 
 def test_resolve_vv_ai_commit_id_reads_direct_url(

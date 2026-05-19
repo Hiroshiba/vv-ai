@@ -10,6 +10,13 @@ from vv_ai.prompts.build import build_next_decision_prompt, build_provider_promp
 from vv_ai.providers.selection import ProviderSpec, ResolvedProvider
 from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
+_GIT_READONLY_POLICY: str = "調査に必要な参照系 git コマンドは実行して構いません。"
+_GIT_MUTATION_POLICY: str = (
+    "作業ツリー、ステージング領域、ブランチ、リモートを変更する git コマンドは、"
+    "明示指示がない限り実行しないでください。"
+)
+_OLD_GIT_INSTRUCTION: str = "git の操作は不要です"
+
 
 def _make_provider() -> ResolvedProvider:
     """テスト用の最小 ResolvedProvider を生成する。"""
@@ -178,8 +185,25 @@ def _build_next_decision_prompt() -> str:
     )
 
 
+def _assert_prompt_mentions_git_command_policy(prompt: str) -> None:
+    """provider prompt に git コマンド方針が含まれることを検証する。"""
+    assert _GIT_READONLY_POLICY in prompt
+    assert _GIT_MUTATION_POLICY in prompt
+    assert _OLD_GIT_INSTRUCTION not in prompt
+
+
 class TestImplementPrompt:
     """implement の provider prompt を検証する。"""
+
+    def test_issue_prompt_mentions_git_command_policy(self) -> None:
+        prompt = _build_prompt("issue", "implement")
+
+        _assert_prompt_mentions_git_command_policy(prompt)
+
+    def test_pr_prompt_mentions_git_command_policy(self) -> None:
+        prompt = _build_prompt("pr", "implement")
+
+        _assert_prompt_mentions_git_command_policy(prompt)
 
     def test_pr_prompt_mentions_response_comment(self) -> None:
         prompt = _build_prompt("pr", "implement")
@@ -302,6 +326,11 @@ class TestIssueCommandPrompt:
 
 class TestAddressPrompt:
     """address の provider prompt を検証する。"""
+
+    def test_prompt_mentions_git_command_policy(self) -> None:
+        prompt = _build_prompt("pr", "address")
+
+        _assert_prompt_mentions_git_command_policy(prompt)
 
     def test_prompt_mentions_address_review_skill(self) -> None:
         prompt = _build_prompt("pr", "address")
