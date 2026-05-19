@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from vv_ai.config import VVAIConfig
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.claude import execute_claude as _execute_claude
 from vv_ai.providers.codex import execute_codex as _execute_codex
 from vv_ai.providers.environment import build_codex_env as _build_codex_env
@@ -21,8 +21,8 @@ from vv_ai.providers.sessions import (
     deploy_codex_session_dir as _deploy_codex_session_dir,
     resolve_codex_session_dir as _resolve_codex_session_dir,
 )
-from vv_ai.resolve import ResolvedCommand
-from vv_ai.session import ResolvedSession, SessionKey
+from vv_ai.inputs.resolve import ResolvedCommand
+from vv_ai.sessions.models import ResolvedSession, SessionKey
 
 
 def _make_ready_execution(provider: str, session: ResolvedSession | None) -> ReadyExecution:

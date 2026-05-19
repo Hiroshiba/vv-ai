@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 
 _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
     "reply": (

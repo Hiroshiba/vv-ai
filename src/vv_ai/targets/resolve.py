@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from vv_ai.input import TargetType
-from vv_ai.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.inputs.models import TargetType
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
 
 class TargetResolutionError(Exception):

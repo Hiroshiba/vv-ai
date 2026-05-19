@@ -9,15 +9,17 @@ from typing import Literal
 from pydantic import BaseModel, ValidationError
 
 from vv_ai.config import VVAIConfig
-from vv_ai.input import (
+from vv_ai.inputs.build import (
+    build_raw_input_from_issue_labeled_event,
+    build_raw_input_from_pull_request_labeled_event,
+    parse_comment_invocation,
+)
+from vv_ai.inputs.models import (
     InputError,
     IssueCommentEvent,
     IssueLabeledEvent,
     PullRequestLabeledEvent,
     WorkflowDispatchEvent,
-    build_raw_input_from_issue_labeled_event,
-    build_raw_input_from_pull_request_labeled_event,
-    parse_comment_invocation,
 )
 
 VerifyEventName = Literal[

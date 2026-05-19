@@ -23,11 +23,11 @@ from vv_ai.artifacts.metrics import (
     MetricsUsage,
     ProviderSpecificMetrics,
 )
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.selection import ProviderSpec, ResolvedProvider
 from vv_ai.artifacts.report import ReportSections
-from vv_ai.resolve import ResolvedCommand, ResolvedTarget
-from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.sessions.models import ResolvedSession, SessionKey, SessionStateRef
 
 
 def _make_command(**overrides: object) -> ResolvedCommand:

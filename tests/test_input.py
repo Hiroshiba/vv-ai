@@ -7,14 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from vv_ai.input import (
-    CLIInput,
-    InputError,
-    IssueCommentEvent,
-    IssueLabeledEvent,
-    PullRequestLabeledEvent,
-    RawInput,
-    WorkflowDispatchEvent,
+from vv_ai.inputs.build import (
     build_raw_input_from_cli,
     build_raw_input_from_issue_comment_event,
     build_raw_input_from_issue_labeled_event,
@@ -23,7 +16,16 @@ from vv_ai.input import (
     parse_comment_invocation,
     parse_label_invocation,
 )
-from vv_ai.resolve import ResolutionError, resolve_raw_input
+from vv_ai.inputs.models import (
+    CLIInput,
+    InputError,
+    IssueCommentEvent,
+    IssueLabeledEvent,
+    PullRequestLabeledEvent,
+    RawInput,
+    WorkflowDispatchEvent,
+)
+from vv_ai.inputs.resolve import ResolutionError, resolve_raw_input
 
 
 class TestParseCommentInvocation:

@@ -11,7 +11,7 @@ from vv_ai.backends.github.models import GitHubPullRequest
 from vv_ai.commands.post_execution import handle_post_execution
 from vv_ai.commands.reactions import add_reaction_safely, finalize_reactions
 from vv_ai.executions.result import ExecutionResult, ExecutionStatus
-from vv_ai.git_ops import (
+from vv_ai.git.operations import (
     checkout_fork_pr,
     checkout_ref,
     create_and_checkout_branch,
@@ -21,13 +21,13 @@ from vv_ai.git_ops import (
     get_head_sha,
     setup_upstream_remote,
 )
-from vv_ai.preflight import ReadyExecution
-from vv_ai.prompt import build_provider_prompt
+from vv_ai.workflow.preflight import ReadyExecution
+from vv_ai.prompts.build import build_provider_prompt
 from vv_ai.providers.runner import execute_provider
-from vv_ai.resolve import ResolvedTarget
-from vv_ai.session import SessionStateRef, TargetContextState
+from vv_ai.inputs.resolve import ResolvedTarget
+from vv_ai.sessions.models import SessionStateRef, TargetContextState
 from vv_ai.sync_command import run_sync_command
-from vv_ai.target_context import (
+from vv_ai.prompts.target_context import (
     build_target_context,
     empty_target_context_state,
     merge_target_context_state,

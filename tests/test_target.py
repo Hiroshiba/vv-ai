@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from vv_ai.resolve import ResolvedCommand
-from vv_ai.target import TargetResolutionError, resolve_target
+from vv_ai.inputs.resolve import ResolvedCommand
+from vv_ai.targets.resolve import TargetResolutionError, resolve_target
 
 
 def _make_command(**overrides: object) -> ResolvedCommand:

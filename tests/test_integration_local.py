@@ -11,8 +11,8 @@ from vv_ai.executions.result import ExecutionResult, ExecutionStatus
 from vv_ai.backends.github.models import GitHubActor, GitHubIssue, RepoInfo
 from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
 from vv_ai.artifacts.report import ReportSections
-from vv_ai.resolve import BackendName
-from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
+from vv_ai.inputs.resolve import BackendName
+from vv_ai.sessions.models import ResolvedSession, SessionKey, SessionStateRef
 
 
 def _write_config(tmp_path: Path) -> None:

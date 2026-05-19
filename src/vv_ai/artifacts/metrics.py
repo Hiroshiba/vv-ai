@@ -17,8 +17,8 @@ from vv_ai.artifacts.crypto import (
     encrypt_file,
 )
 from vv_ai.providers.selection import ResolvedProvider
-from vv_ai.resolve import BackendName, ResolvedCommand
-from vv_ai.session import ResolvedSession, SessionKey
+from vv_ai.inputs.resolve import BackendName, ResolvedCommand
+from vv_ai.sessions.models import ResolvedSession, SessionKey
 
 _SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 

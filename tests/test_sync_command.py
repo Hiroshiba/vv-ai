@@ -10,7 +10,7 @@ import pytest
 
 from vv_ai.config import VVAIConfig
 from vv_ai.executions.result import ExecutionResult, ExecutionStatus
-from vv_ai.git_ops import (
+from vv_ai.git.operations import (
     GitOpsError,
     commit_merge_no_edit,
     ensure_merge_base_available,
@@ -32,11 +32,11 @@ from vv_ai.backends.github.models import (
     GitHubPullRequest,
 )
 from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
 from vv_ai.artifacts.report import ReportSections
-from vv_ai.resolve import ResolvedCommand, ResolvedTarget
-from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.sessions.models import ResolvedSession, SessionKey, SessionStateRef
 from vv_ai.sync_command import SyncCommandError, run_sync_command
 
 
