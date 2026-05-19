@@ -326,12 +326,16 @@ def _collect_local_provider_asset_files(
     files: list[ProviderAssetFile] = []
     for root_file_name in _PROVIDER_ROOT_FILES[provider]:
         path = source_root / root_file_name
+        if path.is_symlink():
+            raise ProviderAssetDeployError(f"`{path}` は symlink です")
         if path.exists() is False:
             continue
         _ensure_regular_file(path)
         files.append(_read_local_provider_asset_file(path, Path(root_file_name)))
     for directory_name in _PROVIDER_DIRECTORIES[provider]:
         directory = source_root / directory_name
+        if directory.is_symlink():
+            raise ProviderAssetDeployError(f"`{directory}` は symlink です")
         if directory.exists() is False:
             continue
         _ensure_directory(directory)

@@ -105,18 +105,19 @@ def execute_codex(
                 + (f": {stderr}" if stderr else "")
             )
 
-        _sync_codex_work_dir(repo_root, work_dir)
         file_content = output_file.read_text()
         result_text = file_content if file_content else proc.stdout
         codex_output = _parse_codex_jsonl(proc.stdout, result_text)
         provider_session_path = resolve_codex_session_dir(codex_env)
-        return _build_codex_execution_result(
+        result = _build_codex_execution_result(
             ready_execution,
             codex_output,
             preflight_duration_seconds,
             execution_duration_seconds,
             provider_session_path,
         )
+        _sync_codex_work_dir(repo_root, work_dir)
+        return result
     finally:
         output_file.unlink(missing_ok=True)
 

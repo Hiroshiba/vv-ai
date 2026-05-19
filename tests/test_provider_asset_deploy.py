@@ -401,6 +401,40 @@ def test_copy_codex_provider_assets_to_work_dir_rejects_symlink(
         )
 
 
+def test_copy_codex_provider_assets_to_work_dir_rejects_dangling_root_symlink(
+    tmp_path: Path,
+) -> None:
+    """Codex provider asset の dangling symlink は欠落扱いしない。"""
+    codex_root = tmp_path / ".codex"
+    (codex_root / "skills" / "a").mkdir(parents=True)
+    (codex_root / "AGENTS.md").symlink_to(tmp_path / "missing.md")
+    (codex_root / "skills" / "a" / "SKILL.md").write_text(
+        "skill", encoding="utf-8"
+    )
+
+    with pytest.raises(ProviderAssetDeployError, match="symlink"):
+        copy_codex_provider_assets_to_work_dir(
+            tmp_path,
+            tmp_path / ".vv-ai" / "codex-work",
+        )
+
+
+def test_copy_codex_provider_assets_to_work_dir_rejects_dangling_directory_symlink(
+    tmp_path: Path,
+) -> None:
+    """Codex provider asset の directory symlink は欠落扱いしない。"""
+    codex_root = tmp_path / ".codex"
+    codex_root.mkdir()
+    (codex_root / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (codex_root / "skills").symlink_to(tmp_path / "missing-skills")
+
+    with pytest.raises(ProviderAssetDeployError, match="symlink"):
+        copy_codex_provider_assets_to_work_dir(
+            tmp_path,
+            tmp_path / ".vv-ai" / "codex-work",
+        )
+
+
 def test_sync_codex_provider_assets_from_work_dir_updates_allowed_assets(
     tmp_path: Path,
 ) -> None:
@@ -478,6 +512,26 @@ def test_sync_codex_provider_assets_from_work_dir_rejects_symlink(
 
     with pytest.raises(ProviderAssetDeployError, match="symlink"):
         sync_codex_provider_assets_from_work_dir(tmp_path, work_root)
+
+
+def test_sync_codex_provider_assets_from_work_dir_rejects_dangling_root_symlink(
+    tmp_path: Path,
+) -> None:
+    """作業用 root file の dangling symlink は同期前に拒否する。"""
+    codex_root = tmp_path / ".codex"
+    codex_root.mkdir()
+    (codex_root / "AGENTS.md").write_text("old agents", encoding="utf-8")
+    work_root = tmp_path / ".vv-ai" / "codex-work"
+    (work_root / "skills" / "a").mkdir(parents=True)
+    (work_root / "AGENTS.md").symlink_to(tmp_path / "missing.md")
+    (work_root / "skills" / "a" / "SKILL.md").write_text(
+        "skill", encoding="utf-8"
+    )
+
+    with pytest.raises(ProviderAssetDeployError, match="symlink"):
+        sync_codex_provider_assets_from_work_dir(tmp_path, work_root)
+
+    assert (codex_root / "AGENTS.md").read_text(encoding="utf-8") == "old agents"
 
 
 def test_deploy_claude_provider_assets_writes_skill(
