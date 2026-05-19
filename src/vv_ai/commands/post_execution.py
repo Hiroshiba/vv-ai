@@ -33,6 +33,7 @@ from vv_ai.git.operations import (
 )
 from vv_ai.inputs.models import CommandName
 from vv_ai.inputs.resolve import ResolvedTarget
+from vv_ai.next_decision import NextDecisionCommand, format_next_decision_history_comment
 from vv_ai.workflow.preflight import ReadyExecution
 
 _PR_CHANGE_COMMANDS = frozenset({"implement", "address"})
@@ -421,6 +422,35 @@ def _post_response_comment(
         )
     except GitHubClientError as exc:
         print(f"コメント投稿に失敗しました: {exc}", file=sys.stderr)
+
+
+def _post_next_decision_history_comment(
+    ready_execution: ReadyExecution,
+    execution_result: ExecutionResult,
+    github_client: GitHubClient | None,
+    command: NextDecisionCommand | None,
+) -> None:
+    if command is None:
+        return
+    if execution_result.status != "success":
+        return
+
+    target = ready_execution.command.target
+    if (
+        ready_execution.command.dry_run
+        or github_client is None
+        or not _is_github_target(target)
+    ):
+        return
+
+    assert target is not None
+    assert target.repository_full_name is not None
+    assert target.number is not None
+    github_client.create_issue_comment(
+        target.repository_full_name,
+        target.number,
+        format_next_decision_history_comment(command),
+    )
 
 
 def _format_response_comment_body(command_name: CommandName, response_text: str) -> str:

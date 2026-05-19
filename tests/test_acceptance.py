@@ -691,7 +691,7 @@ class TestNextDryRun:
                 _make_github_timeline_comment(1003, "@vv-ai detail"),
             ]
             mock_branch = stack.enter_context(
-                patch("vv_ai.command_handler.create_and_checkout_branch")
+                patch("vv_ai.commands.runner.create_and_checkout_branch")
             )
             exit_code = main(argv)
 
@@ -758,7 +758,7 @@ class TestNextDryRun:
             )
             execute_provider = stack.enter_context(
                 patch(
-                    "vv_ai.command_handler.execute_provider",
+                    "vv_ai.commands.runner.execute_provider",
                     side_effect=execute_provider_mock,
                 )
             )
@@ -768,7 +768,7 @@ class TestNextDryRun:
                 _make_github_timeline_comment(1002, "@vv-ai arch"),
                 _make_github_timeline_comment(1003, "@vv-ai detail"),
             ]
-            stack.enter_context(patch("vv_ai.command_handler.create_and_checkout_branch"))
+            stack.enter_context(patch("vv_ai.commands.runner.create_and_checkout_branch"))
             exit_code = main(argv)
 
         assert exit_code == 0
