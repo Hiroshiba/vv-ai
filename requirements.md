@@ -34,15 +34,7 @@ GitHub の Issue / PR に対してコメント、ラベル、ワークフロー�
 | `issue`        | 自然言語指示から Issue を作成                                | ✅        | ✅     |
 | `next`         | 履歴から次の既存工程を選んで実行するショートカット           | ✅        | ✅     |
 
-`confirm`、`requirements`、`arch`、`detail`、`review` の結果コメントは、本文の先頭に工程見出しを付ける。
-
-| コマンド | 工程見出し |
-| --- | --- |
-| `confirm` | `## 要望確認` |
-| `requirements` | `## 要件定義` |
-| `arch` | `## 基本設計` |
-| `detail` | `## 詳細設計` |
-| `review` | `## レビュー` |
+AI が工程成果物をコメントとして返す結果コメントは、本文の先頭に内容種別を表す H2 見出しを付ける。任意返信や、実装・レビュー対応・同期など作業結果の連絡コメントには付けない。`next` は解決後の工程に従う。
 
 `sync` は PR 専用コマンドとして実行し、公開用の同期コマンドは分けない。PR head branch を checkout し、`origin/<base>` との共通祖先を判定できる履歴を取得して取り込み状況を確認する。base branch がすでに HEAD の祖先なら merge commit は作らない。取り込みが必要なら `--no-ff --no-commit` で merge し、conflict がなければ wrapper が merge commit を作成する。
 
