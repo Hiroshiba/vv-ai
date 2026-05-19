@@ -70,12 +70,7 @@ class SyncRuntimeState:
 
     provider_results: list[ExecutionResult] = field(default_factory=list)
     allow_edits_notice_posted: bool = False
-    conflict_occurred: bool = False
-    conflict_resolved_by_ai: bool = False
-    merge_commit_created: bool = False
-    consistency_commit_created: bool = False
     push_needed: bool = False
-    push_succeeded: bool = False
 
 
 def run_sync_command(
@@ -158,13 +153,11 @@ def run_sync_command(
                 + ", ".join(marker_files_after_consistency),
             )
         if len(changed_files_after_consistency) > 0:
-            runtime.consistency_commit_created = commit_all_changes(
+            consistency_commit_created = commit_all_changes(
                 repo_root,
                 "chore: sync 整合性を修正する",
             )
-            runtime.push_needed = (
-                runtime.push_needed or runtime.consistency_commit_created
-            )
+            runtime.push_needed = runtime.push_needed or consistency_commit_created
 
         comment_body = _extract_comment_body(consistency_result.response_text)
         if comment_body == "":
@@ -190,7 +183,6 @@ def run_sync_command(
                     )
             else:
                 push_branch(repo_root, pr_info.head_ref_name, env.get("GITHUB_TOKEN"))
-            runtime.push_succeeded = True
 
         if not command.dry_run:
             post_issue_comment_safely(
@@ -218,13 +210,11 @@ def _merge_base_branch(
     attempt = merge_no_ff_no_commit(repo_root, base_ref)
     if attempt.succeeded:
         commit_merge_no_edit(repo_root)
-        runtime.merge_commit_created = True
         runtime.push_needed = True
         return
 
     conflict_files = attempt.unmerged_files
     conflict_file_set = set(conflict_files)
-    runtime.conflict_occurred = True
     snapshots = _snapshot_conflict_files(repo_root, conflict_files)
     head_sha_before_ai = get_head_sha(repo_root)
     staged_signature_before_ai = get_staged_diff_signature(repo_root)
@@ -277,8 +267,6 @@ def _merge_base_branch(
             "未解消 conflict が残っています: " + ", ".join(remaining_unmerged)
         )
     commit_merge_no_edit(repo_root)
-    runtime.conflict_resolved_by_ai = True
-    runtime.merge_commit_created = True
     runtime.push_needed = True
 
 

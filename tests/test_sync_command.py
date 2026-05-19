@@ -30,8 +30,6 @@ from vv_ai.git_ops import (
 from vv_ai.backends.github.models import (
     GitHubActor,
     GitHubPullRequest,
-    GitHubPullRequestSyncState,
-    GitHubStatusCheckSummary,
 )
 from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
 from vv_ai.preflight import ReadyExecution
@@ -801,23 +799,6 @@ class _FakeGitHubClient:
     ) -> GitHubPullRequest:
         """Pull Request を返す。"""
         return self.pr
-
-    def get_pull_request_sync_state(
-        self,
-        repository_full_name: str,
-        number: int,
-    ) -> GitHubPullRequestSyncState:
-        """Pull Request sync 状態を返す。"""
-        return GitHubPullRequestSyncState(
-            mergeable="MERGEABLE",
-            merge_state_status="CLEAN",
-            status_check_summary=GitHubStatusCheckSummary(
-                success_count=1,
-                failure_count=0,
-                pending_count=0,
-                unknown_count=0,
-            ),
-        )
 
     def create_issue_comment(
         self,
