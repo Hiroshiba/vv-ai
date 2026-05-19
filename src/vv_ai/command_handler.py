@@ -393,6 +393,8 @@ def _remember_next_decision_state(
     if session is None:
         return
     session.state_ref = decision_result.state_ref
+    session.restore_strategy = "inherit"
+    session.restored_provider_session_path = None
 
 
 def _is_github_target(target: ResolvedTarget | None) -> bool:

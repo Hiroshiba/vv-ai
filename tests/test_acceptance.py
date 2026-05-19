@@ -701,6 +701,79 @@ class TestNextDryRun:
         assert ready_execution.command.command == "implement"
         mock_branch.assert_called_once()
 
+    def test_issue_after_detail_next_decision_continues_decision_session(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "next",
+            "--target-url", "https://github.com/org/repo/issues/1",
+            "--provider", "codex",
+            "--session_mode", "inherit",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        session.restore_strategy = "inherit"
+        session.restored_provider_session_path = "/tmp/restored-old-session"
+        session.state_ref = SessionStateRef(provider_session_id="detail-session")
+        decision_result = _make_execution_result(
+            "success",
+            "COMMAND: implement",
+        ).model_copy(
+            update={"state_ref": SessionStateRef(provider_session_id="decision-session")}
+        )
+        implement_result = _make_execution_result("success", "未使用")
+        mock_gh = MagicMock()
+        mock_gh.get_issue_parent_number.return_value = None
+        provider_call_count = 0
+
+        def execute_provider_mock(
+            repo_root: Path,
+            ready_execution: ReadyExecution,
+            env: dict[str, str],
+            preflight_duration_seconds: float,
+            provider_prompt: str,
+        ) -> ExecutionResult:
+            nonlocal provider_call_count
+            provider_call_count += 1
+            if provider_call_count == 1:
+                assert ready_execution.resolved_session is session
+                assert session.restored_provider_session_path == "/tmp/restored-old-session"
+                return decision_result
+            assert ready_execution.resolved_session is session
+            assert session.restore_strategy == "inherit"
+            assert session.state_ref is not None
+            assert session.state_ref.provider_session_id == "decision-session"
+            assert session.restored_provider_session_path is None
+            return implement_result
+
+        with contextlib.ExitStack() as stack:
+            _enter_next_patches(
+                stack,
+                tmp_path,
+                session,
+                decision_result,
+                mock_gh,
+            )
+            execute_provider = stack.enter_context(
+                patch(
+                    "vv_ai.command_handler.execute_provider",
+                    side_effect=execute_provider_mock,
+                )
+            )
+            mock_gh.list_issue_timeline_events.return_value = [
+                _make_github_timeline_comment(1000, "@vv-ai confirm"),
+                _make_github_timeline_comment(1001, "@vv-ai requirements"),
+                _make_github_timeline_comment(1002, "@vv-ai arch"),
+                _make_github_timeline_comment(1003, "@vv-ai detail"),
+            ]
+            stack.enter_context(patch("vv_ai.command_handler.create_and_checkout_branch"))
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        assert execute_provider.call_count == 2
+
     def test_issue_after_detail_next_invalid_decision_exits_one(
         self,
         tmp_path: Path,
