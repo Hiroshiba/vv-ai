@@ -1,15 +1,14 @@
 ---
-description: GitHub Issue を作成する。親 Issue が指定された場合はサブ Issue として紐付ける。
-allowed-tools: Bash(gh issue create:*), Bash(gh api:*)
+description: Issue 作成用のタイトルと本文を生成する。
 ---
 
-# Issue 作成
+# Issue 作成文面
 
-引数のクォート事故を避けるため、本文は一時ファイル経由で渡す。
+議論の出発点になる Issue として、ユーザーが明示した内容を中心に短く整理する。
 
-## 処理フロー
+## 方針
 
-1. `mkdir -p hiho_temp && mktemp -u hiho_temp/hiho.XXXXXXXXXX` で一時ファイルパスを取得する
-2. 本文をそのパスに書く
-3. `gh issue create -t "タイトル" -F <tempfile>` で Issue を作成する
-4. 親 Issue が指定されている場合、`gh api --method POST /repos/{owner}/{repo}/issues/{親番号}/sub_issues -F sub_issue_id={作成したIssue番号}` で紐付ける
+- タイトルはスコープと意図がわかる短い 1 行にする
+- 細かい仕様、受入基準、対象外、実装方式、テスト方針は、ユーザーが明示している場合や Issue として自然に必要な場合だけ書く
+- 未確定の詳細は確定した仕様のように断定せず、補足や確認したいこととして扱う
+- 読者がその Issue だけを見て目的と背景を理解できるようにする
