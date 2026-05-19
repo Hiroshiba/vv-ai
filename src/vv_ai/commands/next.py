@@ -203,6 +203,9 @@ def _build_github_history_entry(
             source="comment",
         )
 
+    if timeline_event.event not in {"commented", "labeled"}:
+        return None
+
     if timeline_event.actor.login not in config.allowed_users:
         return None
     command = _parse_timeline_history_command(timeline_event)

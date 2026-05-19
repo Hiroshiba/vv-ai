@@ -145,6 +145,36 @@ def _make_label_events(commands: list[str]) -> list[GitHubIssueTimelineEvent]:
     ]
 
 
+def _make_sub_issue_added_event(
+    event_id: int,
+    created_at: str,
+) -> GitHubIssueTimelineEvent:
+    return GitHubIssueTimelineEvent(
+        id=event_id,
+        event="sub_issue_added",
+        actor=GitHubActor(login="Hiroshiba"),
+        created_at=created_at,
+        source_kind="issue",
+        source_number=2,
+        source_repository_full_name="org/repo",
+    )
+
+
+def _make_cross_referenced_event(
+    event_id: int,
+    created_at: str,
+) -> GitHubIssueTimelineEvent:
+    return GitHubIssueTimelineEvent(
+        id=event_id,
+        event="cross_referenced",
+        actor=GitHubActor(login="Hiroshiba"),
+        created_at=created_at,
+        source_kind="pull_request",
+        source_number=3,
+        source_repository_full_name="org/repo",
+    )
+
+
 def _resolve_github(
     target: ResolvedTarget,
     comments: list[GitHubIssueTimelineEvent],
@@ -590,6 +620,25 @@ def test_ラベルrequirements後のコメントnextはarchに解決される() 
     result = _resolve_github(_make_target("issue", "github"), comments, labeled_events, None, 2)
 
     assert result.command == "arch"
+
+
+def test_コマンドではないtimeline_eventは履歴に入らない() -> None:
+    target = _make_target("issue", "github")
+    timeline_events = [
+        _make_comment(1, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:01:00Z"),
+        _make_sub_issue_added_event(10, "2026-05-15T00:02:00Z"),
+        _make_cross_referenced_event(11, "2026-05-15T00:03:00Z"),
+        _make_comment(2, "@vv-ai next", "Hiroshiba", "2026-05-15T00:04:00Z"),
+    ]
+
+    result = _resolve_github_timeline(
+        target,
+        timeline_events,
+        None,
+        _make_next_command(target, 2),
+    )
+
+    assert result.command == "requirements"
 
 
 def test_同じcreated_atでラベルがコメントより前ならラベルを履歴に入れる() -> None:

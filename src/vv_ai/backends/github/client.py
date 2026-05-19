@@ -219,85 +219,93 @@ query($owner: String!, $repo: String!, $number: Int!) {
     ) -> list[GitHubIssueTimelineEvent]:
         """Issue timeline の next 履歴用 event 一覧を取得する。"""
         owner, repo = _require_repository_full_name(repository_full_name).split("/")
-        query = """
-query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
-  repository(owner: $owner, name: $repo) {
-    issueOrPullRequest(number: $number) {
-      timelineItems(
-        first: 100
-        after: $endCursor
-        itemTypes: [
-          ISSUE_COMMENT
-          LABELED_EVENT
-          SUB_ISSUE_ADDED_EVENT
-          CROSS_REFERENCED_EVENT
-        ]
-      ) {
-        nodes {
-          __typename
-          ... on IssueComment {
-            databaseId
-            author {
-              login
-            }
-            createdAt
-            body
-          }
-          ... on LabeledEvent {
-            databaseId
-            actor {
-              login
-            }
-            createdAt
-            label {
-              name
-            }
-          }
-          ... on SubIssueAddedEvent {
-            databaseId
-            actor {
-              login
-            }
-            createdAt
-            subIssue {
-              number
-              repository {
-                nameWithOwner
-              }
-            }
-          }
-          ... on CrossReferencedEvent {
-            databaseId
-            actor {
-              login
-            }
-            createdAt
-            source {
-              __typename
-              ... on Issue {
-                number
-                repository {
-                  nameWithOwner
-                }
-              }
-              ... on PullRequest {
-                number
-                repository {
-                  nameWithOwner
-                }
-              }
-            }
+        timeline_items_query = """
+timelineItems(
+  first: 100
+  after: $endCursor
+  itemTypes: [
+    ISSUE_COMMENT
+    LABELED_EVENT
+    SUB_ISSUE_ADDED_EVENT
+    CROSS_REFERENCED_EVENT
+  ]
+) {
+  nodes {
+    __typename
+    ... on IssueComment {
+      databaseId
+      author {
+        login
+      }
+      createdAt
+      body
+    }
+    ... on LabeledEvent {
+      databaseId
+      actor {
+        login
+      }
+      createdAt
+      label {
+        name
+      }
+    }
+    ... on SubIssueAddedEvent {
+      databaseId
+      actor {
+        login
+      }
+      createdAt
+      subIssue {
+        number
+        repository {
+          nameWithOwner
+        }
+      }
+    }
+    ... on CrossReferencedEvent {
+      databaseId
+      actor {
+        login
+      }
+      createdAt
+      source {
+        __typename
+        ... on Issue {
+          number
+          repository {
+            nameWithOwner
           }
         }
-        pageInfo {
-          hasNextPage
-          endCursor
+        ... on PullRequest {
+          number
+          repository {
+            nameWithOwner
+          }
         }
       }
     }
   }
+  pageInfo {
+    hasNextPage
+    endCursor
+  }
 }
 """.strip()
+        query = """
+query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    issueOrPullRequest(number: $number) {
+      ... on Issue {
+        __TIMELINE_ITEMS__
+      }
+      ... on PullRequest {
+        __TIMELINE_ITEMS__
+      }
+    }
+  }
+}
+""".strip().replace("__TIMELINE_ITEMS__", timeline_items_query)
         payload = self._run_json(
             [
                 "api",

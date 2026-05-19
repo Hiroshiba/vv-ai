@@ -226,6 +226,9 @@ def test_list_issue_labeled_events_builds_models() -> None:
     ]
     query = captured_args[6]
     assert "issueOrPullRequest(number: $number)" in query
+    assert "... on Issue" in query
+    assert "... on PullRequest" in query
+    assert "issueOrPullRequest(number: $number) {\n      timelineItems" not in query
     assert "ISSUE_COMMENT" in query
     assert "LABELED_EVENT" in query
     assert "SUB_ISSUE_ADDED_EVENT" in query
@@ -359,6 +362,9 @@ def test_list_issue_timeline_events_query_uses_issue_or_pull_request() -> None:
     assert client.list_issue_timeline_events("org/repo", 123) == []
     assert captured_args[0:5] == ["gh", "api", "graphql", "--paginate", "--slurp"]
     assert "issueOrPullRequest(number: $number)" in captured_args[6]
+    assert "... on Issue" in captured_args[6]
+    assert "... on PullRequest" in captured_args[6]
+    assert "issueOrPullRequest(number: $number) {\n      timelineItems" not in captured_args[6]
     assert "number=123" in captured_args
     assert "repos/org/repo/issues/123/timeline" not in captured_args
 
