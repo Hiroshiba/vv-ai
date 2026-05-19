@@ -37,7 +37,7 @@ from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
 from vv_ai.artifacts.report import ReportSections
 from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 from vv_ai.sessions.models import ResolvedSession, SessionKey, SessionStateRef
-from vv_ai.sync_command import SyncCommandError, run_sync_command
+from vv_ai.commands.sync import SyncCommandError, run_sync_command
 
 
 def test_ensure_worktree_clean_rejects_dirty_worktree(tmp_path: Path) -> None:
@@ -255,13 +255,13 @@ def test_run_sync_command_skips_push_when_base_is_ancestor(tmp_path: Path) -> No
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=[
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
         ) as execute_provider,
-        patch("vv_ai.sync_command.push_branch") as push_branch,
-        patch("vv_ai.sync_command.try_push_current_branch") as try_push_current_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.try_push_current_branch") as try_push_current_branch,
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
@@ -292,12 +292,12 @@ def test_run_sync_command_deepens_history_before_merge_from_shallow_clone(
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=[
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
         ) as execute_provider,
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(
             clone,
@@ -330,12 +330,12 @@ def test_run_sync_command_pushes_after_merge_commit(tmp_path: Path) -> None:
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=[
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
         ) as execute_provider,
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(
             clone,
@@ -375,17 +375,17 @@ def test_run_sync_command_ensures_merge_base_for_fork_pr(tmp_path: Path) -> None
 
     with (
         patch(
-            "vv_ai.sync_command.checkout_fork_pr",
+            "vv_ai.commands.sync.checkout_fork_pr",
             side_effect=checkout_fork_pr_mock,
         ),
-        patch("vv_ai.sync_command.ensure_merge_base_available") as ensure_merge_base,
+        patch("vv_ai.commands.sync.ensure_merge_base_available") as ensure_merge_base,
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=[
                 _make_execution_result("success", "BODY:\nsync 完了"),
             ],
         ),
-        patch("vv_ai.sync_command.try_push_current_branch", return_value=True),
+        patch("vv_ai.commands.sync.try_push_current_branch", return_value=True),
     ):
         result = run_sync_command(
             clone,
@@ -424,7 +424,7 @@ def test_run_sync_command_requests_comment_body_in_consistency_prompt(
         prompts.append(provider_prompt)
         return _make_execution_result("success", "BODY:\nsync 完了")
 
-    with patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock):
+    with patch("vv_ai.commands.sync.execute_provider", side_effect=execute_provider_mock):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
     assert result.status == "success"
@@ -479,8 +479,8 @@ def test_run_sync_command_resumes_consistency_provider_after_conflict(
         )
 
     with (
-        patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock),
-        patch("vv_ai.sync_command.push_branch"),
+        patch("vv_ai.commands.sync.execute_provider", side_effect=execute_provider_mock),
+        patch("vv_ai.commands.sync.push_branch"),
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
@@ -510,8 +510,8 @@ def test_run_sync_command_rejects_missing_provider_session_id_after_conflict(
         return _make_execution_result("success", "conflict を解消しました")
 
     with (
-        patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock),
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.execute_provider", side_effect=execute_provider_mock),
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
@@ -536,7 +536,7 @@ def test_run_sync_command_rejects_missing_body_in_consistency_output(
     ready_execution = _make_ready_execution()
 
     with patch(
-        "vv_ai.sync_command.execute_provider",
+        "vv_ai.commands.sync.execute_provider",
         return_value=_make_execution_result("success", "整合性確認完了"),
     ) as execute_provider:
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
@@ -571,7 +571,7 @@ def test_run_sync_command_rejects_consistency_marker_before_commit(
         _write(repo_root, "marker.txt", "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> main\n")
         return _make_execution_result("success", "整合性修正")
 
-    with patch("vv_ai.sync_command.execute_provider", side_effect=execute_provider_mock):
+    with patch("vv_ai.commands.sync.execute_provider", side_effect=execute_provider_mock):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
     assert result.status == "failure"
@@ -587,10 +587,10 @@ def test_run_sync_command_rejects_ai_staging_conflict_file(tmp_path: Path) -> No
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=_resolve_conflict_and_stage,
         ),
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
@@ -610,10 +610,10 @@ def test_run_sync_command_rejects_ai_changes_outside_conflict_files(
 
     with (
         patch(
-            "vv_ai.sync_command.execute_provider",
+            "vv_ai.commands.sync.execute_provider",
             side_effect=_resolve_conflict_and_change_other_file,
         ),
-        patch("vv_ai.sync_command.push_branch") as push_branch,
+        patch("vv_ai.commands.sync.push_branch") as push_branch,
     ):
         result = run_sync_command(clone, ready_execution, github_client, {}, 0.0)
 
