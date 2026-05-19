@@ -262,13 +262,9 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 
 provider asset は、vv-ai が各 AI provider の実行環境へ渡す指示や skill のファイル群である。
 
-コピー対象は provider ごとの allowlist で管理する。リポジトリ内の provider root 全体はコピーしない。Codex の provider asset は `.codex/AGENTS.md`、`.codex/skills/`、`.codex/agents/` だけを対象にする。`.codex/commands/`、`.codex/` 直下の未知ファイル、未知ディレクトリは対象外にする。
+コピー対象は provider ごとの allowlist で管理し、provider root 全体はコピーしない。Codex の provider asset は `.codex/AGENTS.md`、`.codex/skills/`、`.codex/agents/` だけを対象にする。
 
-Codex 実行時は `.codex/` を直接編集させず、`.vv-ai/codex-work/` を作業用 mirror として使う。`.vv-ai/codex-work/` から `.codex/` へ同期する対象も同じ allowlist だけにする。
-
-この allowlist はセキュリティ境界である。`.codex/` に置かれた想定外ファイル、秘密情報、攻撃用ファイルを Codex 実行環境や同期処理へ混入させないため、必要で害のないものだけを対象にする。symlink と通常ファイル以外の特殊ファイルは拒否し、リンク先を読まない。
-
-Claude provider は Codex の作業用 mirror の対象外である。
+Codex 実行時は `.codex/` を直接編集させず、`.vv-ai/codex-work/` を作業用 mirror として使う。`.vv-ai/codex-work/` から `.codex/` への同期も同じ allowlist に限定する。
 
 ---
 

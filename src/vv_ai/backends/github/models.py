@@ -158,7 +158,6 @@ class GitHubTreeEntry(BaseModel):
 
     path: str
     type: str
-    mode: str
     sha: str
 
 

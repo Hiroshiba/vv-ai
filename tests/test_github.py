@@ -108,7 +108,6 @@ def test_get_repository_tree_builds_model() -> None:
                     {
                         "path": ".codex/skills/detailed-design/SKILL.md",
                         "type": "blob",
-                        "mode": "100644",
                         "sha": "abc123",
                     }
                 ],
@@ -123,7 +122,6 @@ def test_get_repository_tree_builds_model() -> None:
     assert tree.truncated is False
     assert len(tree.tree) == 1
     assert tree.tree[0].path == ".codex/skills/detailed-design/SKILL.md"
-    assert tree.tree[0].mode == "100644"
     assert tree.tree[0].sha == "abc123"
 
 

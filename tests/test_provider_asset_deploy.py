@@ -151,7 +151,6 @@ def test_missing_token_uses_default_github_client(
             GitHubTreeEntry(
                 path=".codex/skills/detailed-design/SKILL.md",
                 type="blob",
-                mode="100644",
                 sha="skill",
             )
         ],
@@ -179,7 +178,6 @@ def test_fallback_gh_token_is_used(
             GitHubTreeEntry(
                 path=".codex/skills/detailed-design/SKILL.md",
                 type="blob",
-                mode="100644",
                 sha="skill",
             )
         ],
@@ -212,7 +210,6 @@ def test_deploy_codex_provider_assets_writes_skill(
             GitHubTreeEntry(
                 path=".codex/skills/detailed-design/SKILL.md",
                 type="blob",
-                mode="100644",
                 sha="skill",
             )
         ],
@@ -230,32 +227,6 @@ def test_deploy_codex_provider_assets_writes_skill(
     assert result.overwritten_files == 0
 
 
-def test_deploy_codex_provider_assets_rejects_git_symlink(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Codex provider asset の git symlink は配置しない。"""
-    _patch_commit_id(monkeypatch)
-    tree = GitHubTree(
-        truncated=False,
-        tree=[
-            GitHubTreeEntry(
-                path=".codex/skills/detailed-design/SKILL.md",
-                type="blob",
-                mode="120000",
-                sha="skill",
-            )
-        ],
-    )
-    _patch_client(monkeypatch, tree, {"skill": b"target"})
-
-    with pytest.raises(ProviderAssetDeployError, match="symlink"):
-        deploy_codex_provider_assets(
-            {"VV_GH_READONLY_TOKEN": "token"},
-            tmp_path,
-        )
-
-
 def test_deploy_codex_provider_assets_writes_agents_md(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -268,7 +239,6 @@ def test_deploy_codex_provider_assets_writes_agents_md(
             GitHubTreeEntry(
                 path=".codex/AGENTS.md",
                 type="blob",
-                mode="100644",
                 sha="agents",
             )
         ],
@@ -300,7 +270,6 @@ def test_deploy_codex_provider_assets_appends_agents_md(
             GitHubTreeEntry(
                 path=".codex/AGENTS.md",
                 type="blob",
-                mode="100644",
                 sha="agents",
             )
         ],
@@ -577,7 +546,6 @@ def test_deploy_claude_provider_assets_writes_skill(
             GitHubTreeEntry(
                 path=".claude/skills/detailed-design/SKILL.md",
                 type="blob",
-                mode="100644",
                 sha="skill",
             )
         ],
@@ -607,7 +575,6 @@ def test_deploy_claude_provider_assets_writes_claude_md(
             GitHubTreeEntry(
                 path=".claude/CLAUDE.md",
                 type="blob",
-                mode="100644",
                 sha="claude",
             )
         ],
@@ -639,7 +606,6 @@ def test_deploy_claude_provider_assets_appends_claude_md(
             GitHubTreeEntry(
                 path=".claude/CLAUDE.md",
                 type="blob",
-                mode="100644",
                 sha="claude",
             )
         ],
@@ -672,13 +638,11 @@ def test_deploy_claude_provider_assets_ignores_commands(
             GitHubTreeEntry(
                 path=".claude/skills/detailed-design/SKILL.md",
                 type="blob",
-                mode="100644",
                 sha="skill",
             ),
             GitHubTreeEntry(
                 path=".claude/commands/team-task.md",
                 type="blob",
-                mode="100644",
                 sha="command",
             ),
         ],
@@ -777,7 +741,6 @@ def test_missing_provider_assets_raises(
             GitHubTreeEntry(
                 path="README.md",
                 type="blob",
-                mode="100644",
                 sha="readme",
             )
         ],

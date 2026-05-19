@@ -22,12 +22,9 @@ from vv_ai.config import ProviderName
 _VV_AI_REPOSITORY = "Hiroshiba/vv-ai"
 _READONLY_TOKEN_ENV = "VV_GH_READONLY_TOKEN"
 _FALLBACK_TOKEN_ENVS = ("GH_TOKEN", "GITHUB_TOKEN")
-_GIT_SYMLINK_MODE = "120000"
 
-# provider asset のコピー対象を決める allowlist。
-# AI 実行環境へ渡してよい必要最小限の path だけを追加する。
-# ここはセキュリティ境界なので、必要性と安全性を確認してから変更する。
-# ここに含めた path は provider home への配置と Codex 作業用 mirror の同期に使う。
+# provider asset の allowlist。
+# provider home への配置と Codex 作業用 mirror の同期で共有する。
 _PROVIDER_ROOTS: dict[ProviderName, str] = {
     "codex": ".codex",
     "claude": ".claude",
@@ -169,8 +166,6 @@ def _fetch_provider_asset_files(
             relative_path = _build_provider_asset_relative_path(provider, entry.path)
             if relative_path is None:
                 continue
-            if entry.mode == _GIT_SYMLINK_MODE:
-                raise ProviderAssetDeployError(f"`{entry.path}` は symlink です")
             content = client.get_repository_blob(_VV_AI_REPOSITORY, entry.sha)
             files.append(
                 ProviderAssetFile(
