@@ -101,7 +101,7 @@ _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
 )
 
 _ADDRESS_TASK_DESCRIPTION: str = (
-    "address-review スキルを使って、この PR のレビュー指摘に対応してください。元 Issue と親 Issue も判断材料にし、今回の PR で扱う根拠がある指摘だけを実装してください。後続タスク、別タスク、別 Issue 化候補、判断根拠が足りない指摘は実装せず、必要な確認をコメントしてください。"
+    "address-review スキルを使って、この PR のレビュー指摘に対応してください。"
     "ファイル変更のみ行ってください。git の操作は不要です。"
     "終了後にワーキングツリーの全変更が git add -A でコミットされます。"
     "GitHub 実行時は、あなたの最終出力の本文が対象 PR にコメントとして投稿されます。"
