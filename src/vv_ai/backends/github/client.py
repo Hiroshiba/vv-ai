@@ -235,6 +235,7 @@ timelineItems(
     ... on IssueComment {
       databaseId
       author {
+        __typename
         login
       }
       createdAt
@@ -242,6 +243,7 @@ timelineItems(
     }
     ... on LabeledEvent {
       actor {
+        __typename
         login
       }
       createdAt
@@ -251,6 +253,7 @@ timelineItems(
     }
     ... on SubIssueAddedEvent {
       actor {
+        __typename
         login
       }
       createdAt
@@ -263,6 +266,7 @@ timelineItems(
     }
     ... on CrossReferencedEvent {
       actor {
+        __typename
         login
       }
       createdAt

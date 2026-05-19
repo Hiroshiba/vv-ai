@@ -458,9 +458,12 @@ def _build_actor(raw_actor: object) -> GitHubActor:
     """`gh issue view` 系の actor を変換する。"""
     if not isinstance(raw_actor, dict):
         raise GitHubClientError("author の JSON 形式が不正です")
+    login = raw_actor.get("login")
+    if raw_actor.get("__typename") == "Bot" and isinstance(login, str):
+        login = f"{login}[bot]"
     return _validate_model(
         GitHubActor,
-        {"login": raw_actor.get("login")},
+        {"login": login},
         "author",
     )
 

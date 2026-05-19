@@ -228,6 +228,7 @@ def test_list_issue_labeled_events_builds_models() -> None:
     assert "... on PullRequest" in query
     assert "issueOrPullRequest(number: $number) {\n      timelineItems" not in query
     assert "... on IssueComment {\n      databaseId" in query
+    assert "author {\n        __typename\n        login" in query
     assert "... on LabeledEvent {\n      databaseId" not in query
     assert "... on SubIssueAddedEvent {\n      databaseId" not in query
     assert "... on CrossReferencedEvent {\n      databaseId" not in query
@@ -313,6 +314,35 @@ def test_list_issue_timeline_events_builds_graphql_models() -> None:
     assert events[3].source_kind == "pull_request"
     assert events[3].source_number == 56
     assert events[3].source_repository_full_name == "other/repo"
+
+
+def test_list_issue_timeline_events_normalizes_bot_author() -> None:
+    """list_issue_timeline_events は GraphQL Bot author を REST 互換 login に変換する。"""
+    client = GitHubClient(
+        lambda args: json.dumps(
+            [
+                _make_timeline_page(
+                    [
+                        {
+                            "__typename": "IssueComment",
+                            "databaseId": 301,
+                            "body": "<!-- vv-ai-next-decision:breakdown -->",
+                            "author": {
+                                "__typename": "Bot",
+                                "login": "vv-ai-public-read-github-app",
+                            },
+                            "createdAt": "2026-05-17T16:00:00Z",
+                        }
+                    ]
+                )
+            ]
+        ),
+        lambda args: b"",
+    )
+
+    events = client.list_issue_timeline_events("org/repo", 1)
+
+    assert events[0].actor.login == "vv-ai-public-read-github-app[bot]"
 
 
 def test_list_issue_timeline_events_builds_issue_cross_reference_source() -> None:
