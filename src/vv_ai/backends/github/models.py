@@ -9,7 +9,13 @@ from pydantic import BaseModel, ConfigDict
 IssueState = Literal["OPEN", "CLOSED"]
 PullRequestState = Literal["OPEN", "CLOSED", "MERGED"]
 GitHubReactionContent = Literal["eyes", "confused"]
-GitHubIssueTimelineEventName = Literal["commented", "labeled"]
+GitHubIssueTimelineEventName = Literal[
+    "commented",
+    "labeled",
+    "sub_issue_added",
+    "cross_referenced",
+]
+GitHubIssueTimelineSourceKind = Literal["issue", "pull_request"]
 
 
 class GitHubClientError(Exception):
@@ -73,6 +79,10 @@ class GitHubIssueTimelineEvent(BaseModel):
     created_at: str
     body: str | None = None
     label_name: str | None = None
+    comment_database_id: int | None = None
+    source_kind: GitHubIssueTimelineSourceKind | None = None
+    source_number: int | None = None
+    source_repository_full_name: str | None = None
 
 
 class GitHubReaction(BaseModel):
