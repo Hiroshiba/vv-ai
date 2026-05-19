@@ -169,6 +169,31 @@ class TestRenderReportMarkdown:
         assert "summary text here" in md
         assert "notes text here" in md
 
+    def test_section_content_trimmed(self) -> None:
+        sections = ReportSections(
+            summary="  summary text here  ",
+            changes="changes text here",
+            decisions="decisions text here",
+            validation="validation text here",
+            risks_open_questions="risks text here",
+            next_actions="next actions text here",
+            notes="notes text here",
+        )
+
+        assert sections.summary == "summary text here"
+
+    def test_section_rejects_empty_string(self) -> None:
+        with pytest.raises(ValueError):
+            ReportSections(
+                summary=" ",
+                changes="changes text here",
+                decisions="decisions text here",
+                validation="validation text here",
+                risks_open_questions="risks text here",
+                next_actions="next actions text here",
+                notes="notes text here",
+            )
+
 
 class TestResolveAgeKey:
     def test_public_key_from_env_value(self) -> None:

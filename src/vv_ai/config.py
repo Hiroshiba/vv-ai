@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from yaml import YAMLError, safe_load
+
+from vv_ai.value_types import NonEmptyString
 
 ProviderName = Literal["codex", "claude"]
 
@@ -24,32 +26,12 @@ class VVAIConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    allowed_users: list[str] = Field(min_length=1)
-    pull_request_target_branch: str | None = None
+    allowed_users: list[NonEmptyString] = Field(min_length=1)
+    pull_request_target_branch: NonEmptyString | None = None
     provider_priority: list[ProviderName] = Field(
         default_factory=lambda: ["codex", "claude"],
         min_length=1,
     )
-
-    @field_validator("allowed_users")
-    @classmethod
-    def validate_allowed_users(cls, value: list[str]) -> list[str]:
-        """空文字や前後空白だけのユーザー名を弾く。"""
-        normalized = [user.strip() for user in value]
-        if any(not user for user in normalized):
-            raise ValueError("allowed_users に空文字は指定できません")
-        return normalized
-
-    @field_validator("pull_request_target_branch")
-    @classmethod
-    def validate_pull_request_target_branch(cls, value: str | None) -> str | None:
-        """空文字や前後空白だけの PR 作成先ブランチ名を弾く。"""
-        if value is None:
-            return None
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("pull_request_target_branch に空文字は指定できません")
-        return normalized
 
 
 def load_vv_ai_config(repo_root: Path) -> VVAIConfig:

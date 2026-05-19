@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from vv_ai.value_types import validate_non_empty_string
+
 
 def parse_implement_issue_output(response_text: str) -> tuple[str, str, str]:
     """Issue 起点 implement の AI 出力から PR タイトル、コミットメッセージ、本文を抽出する。"""
@@ -43,9 +45,10 @@ def parse_title_body_output(response_text: str) -> tuple[str, str]:
             "AI 出力が期待するフォーマットではありません。1行目は `TITLE: <タイトル>` である必要があります"
         )
 
-    title = lines[0][len("TITLE:") :].strip()
-    if title == "":
-        raise RuntimeError("AI 出力の TITLE が空です")
+    try:
+        title = validate_non_empty_string(lines[0][len("TITLE:") :])
+    except ValueError as exc:
+        raise RuntimeError("AI 出力の TITLE が空です") from exc
 
     if len(lines) < 2 or lines[1].strip() != "BODY:":
         raise RuntimeError(
@@ -104,10 +107,11 @@ def _parse_required_prefixed_line(
             f"AI 出力が期待するフォーマットではありません。{index + 1}行目は {expected} である必要があります"
         )
 
-    value = lines[index][len(prefix) :].strip()
-    if value == "":
+    try:
+        value = validate_non_empty_string(lines[index][len(prefix) :])
+    except ValueError as exc:
         label = prefix.removesuffix(":")
-        raise RuntimeError(f"AI 出力の {label} が空です")
+        raise RuntimeError(f"AI 出力の {label} が空です") from exc
     return value
 
 

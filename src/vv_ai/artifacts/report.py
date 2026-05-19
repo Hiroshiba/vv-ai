@@ -6,7 +6,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict
 
 from vv_ai.artifacts.crypto import (
     ArtifactCryptoError,
@@ -14,6 +14,7 @@ from vv_ai.artifacts.crypto import (
     encrypt_file,
 )
 from vv_ai.sessions.models import ResolvedSession, SessionKey
+from vv_ai.value_types import NonEmptyString
 
 _SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -27,30 +28,13 @@ class ReportSections(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    summary: str
-    changes: str
-    decisions: str
-    validation: str
-    risks_open_questions: str
-    next_actions: str
-    notes: str
-
-    @field_validator(
-        "summary",
-        "changes",
-        "decisions",
-        "validation",
-        "risks_open_questions",
-        "next_actions",
-        "notes",
-    )
-    @classmethod
-    def validate_non_empty_text(cls, value: str) -> str:
-        """空文字ではない report 本文を返す。"""
-        normalized = value.strip()
-        if normalized == "":
-            raise ValueError("report の各節は空文字にできません")
-        return normalized
+    summary: NonEmptyString
+    changes: NonEmptyString
+    decisions: NonEmptyString
+    validation: NonEmptyString
+    risks_open_questions: NonEmptyString
+    next_actions: NonEmptyString
+    notes: NonEmptyString
 
 
 class SavedReportArtifact(BaseModel):

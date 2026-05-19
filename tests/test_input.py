@@ -492,17 +492,38 @@ class TestBuildRawInputFromWorkflowDispatchEvent:
     def test_empty_string_becomes_none(self) -> None:
         event = WorkflowDispatchEvent.model_validate({
             "inputs": {
-                "command": "",
+                "command": "reply",
                 "instruction": "  ",
                 "target_url": "",
+                "target_type": "",
+                "target_number": "",
+                "provider": "",
+                "session_mode": "",
+                "repo": "",
             },
             "repository": {"full_name": "org/repo"},
             "sender": {"login": "Hiroshiba"},
         })
         raw = build_raw_input_from_workflow_dispatch_event(event)
-        assert raw.command is None
+        assert raw.command == "reply"
         assert raw.instruction is None
         assert raw.target_url is None
+        assert raw.target_type is None
+        assert raw.target_number is None
+        assert raw.provider is None
+        assert raw.session_mode is None
+        assert raw.repo is None
+
+    def test_empty_command_raises(self) -> None:
+        event = WorkflowDispatchEvent.model_validate({
+            "inputs": {
+                "command": "",
+            },
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        })
+        with pytest.raises(InputError, match="command"):
+            build_raw_input_from_workflow_dispatch_event(event)
 
     def test_next_command(self) -> None:
         event = WorkflowDispatchEvent.model_validate({
@@ -663,15 +684,15 @@ class TestResolveRawInput:
         assert resolved.trigger_label_name == "vv-ai:confirm"
         assert resolved.trigger_event_created_at == "2026-05-18T04:00:00Z"
 
-    def test_empty_instruction_normalized_to_none(self) -> None:
+    def test_empty_instruction_raises(self) -> None:
         raw = RawInput(
             event_name="local",
             command="arch",
             instruction="   ",
             target_url="https://github.com/org/repo/issues/1",
         )
-        resolved = resolve_raw_input(raw)
-        assert resolved.instruction is None
+        with pytest.raises(ResolutionError, match="instruction"):
+            resolve_raw_input(raw)
 
     def test_issue_repo_fallback(self) -> None:
         raw = RawInput(
@@ -693,6 +714,17 @@ class TestResolveRawInput:
         )
         resolved = resolve_raw_input(raw)
         assert resolved.repo == "explicit/repo"
+
+    def test_issue_repo_empty_string_does_not_fallback(self) -> None:
+        raw = RawInput(
+            event_name="local",
+            command="issue",
+            instruction="バグ報告",
+            repo="",
+            repository_full_name="fallback/repo",
+        )
+        resolved = resolve_raw_input(raw)
+        assert resolved.repo == ""
 
     def test_breakdown_requires_target(self) -> None:
         raw = RawInput(event_name="local", command="breakdown")

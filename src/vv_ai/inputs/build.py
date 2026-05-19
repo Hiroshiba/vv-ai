@@ -116,15 +116,30 @@ def build_raw_input_from_workflow_dispatch_event(
     inputs = event.inputs or {}
     return RawInput(
         event_name="workflow_dispatch",
-        command=_coerce_optional_literal(inputs.get("command"), "command"),
-        instruction=_coerce_optional_str(inputs.get("instruction")),
-        target_url=_coerce_optional_str(inputs.get("target_url")),
-        target_type=_coerce_optional_literal(inputs.get("target_type"), "target_type"),
-        target_number=_coerce_optional_int(inputs.get("target_number"), "target_number"),
-        provider=_coerce_optional_literal(inputs.get("provider"), "provider"),
-        session_mode=_coerce_optional_literal(inputs.get("session_mode"), "session_mode"),
-        dry_run=_coerce_optional_bool(inputs.get("dry_run"), "dry_run") or False,
-        repo=_coerce_optional_str(inputs.get("repo")),
+        command=_coerce_workflow_dispatch_command(inputs.get("command")),
+        instruction=_coerce_workflow_dispatch_optional_str(inputs.get("instruction")),
+        target_url=_coerce_workflow_dispatch_optional_str(inputs.get("target_url")),
+        target_type=_coerce_workflow_dispatch_optional_literal(
+            inputs.get("target_type"),
+            "target_type",
+        ),
+        target_number=_coerce_workflow_dispatch_optional_int(
+            inputs.get("target_number"),
+            "target_number",
+        ),
+        provider=_coerce_workflow_dispatch_optional_literal(
+            inputs.get("provider"),
+            "provider",
+        ),
+        session_mode=_coerce_workflow_dispatch_optional_literal(
+            inputs.get("session_mode"),
+            "session_mode",
+        ),
+        dry_run=_coerce_workflow_dispatch_optional_bool(
+            inputs.get("dry_run"),
+            "dry_run",
+        ) or False,
+        repo=_coerce_workflow_dispatch_optional_str(inputs.get("repo")),
         repository_full_name=event.repository.full_name,
         actor=event.sender.login,
     )
@@ -372,8 +387,20 @@ def _expect_option_value(tokens: list[str], index: int, option_name: str) -> str
         raise InputError(f"{option_name} には値が必要です") from exc
 
 
-def _coerce_optional_str(value: Any) -> str | None:
-    """空文字を除いて文字列として扱う。"""
+def _coerce_workflow_dispatch_command(value: Any) -> str:
+    """workflow_dispatch の必須 command を解釈する。"""
+    if value is None:
+        raise InputError("`command` は必須です")
+    if not isinstance(value, str):
+        raise InputError("`command` の形式が不正です")
+    stripped = value.strip()
+    if stripped == "":
+        raise InputError("`command` は必須です")
+    return stripped
+
+
+def _coerce_workflow_dispatch_optional_str(value: Any) -> str | None:
+    """workflow_dispatch の空文字を除いて文字列として扱う。"""
     if value is None:
         return None
     if not isinstance(value, str):
@@ -382,8 +409,8 @@ def _coerce_optional_str(value: Any) -> str | None:
     return stripped or None
 
 
-def _coerce_optional_int(value: Any, field_name: str) -> int | None:
-    """整数項目を解釈する。"""
+def _coerce_workflow_dispatch_optional_int(value: Any, field_name: str) -> int | None:
+    """workflow_dispatch の整数項目を解釈する。"""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -401,8 +428,8 @@ def _coerce_optional_int(value: Any, field_name: str) -> int | None:
     raise InputError(f"`{field_name}` の形式が不正です")
 
 
-def _coerce_optional_bool(value: Any, field_name: str) -> bool | None:
-    """真偽値項目を解釈する。"""
+def _coerce_workflow_dispatch_optional_bool(value: Any, field_name: str) -> bool | None:
+    """workflow_dispatch の真偽値項目を解釈する。"""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -418,8 +445,11 @@ def _coerce_optional_bool(value: Any, field_name: str) -> bool | None:
     raise InputError(f"`{field_name}` は true または false である必要があります")
 
 
-def _coerce_optional_literal(value: Any, field_name: str) -> Any:
-    """空文字を除いてリテラル候補をそのまま返す。"""
+def _coerce_workflow_dispatch_optional_literal(
+    value: Any,
+    field_name: str,
+) -> Any:
+    """workflow_dispatch の空文字を除いてリテラル候補をそのまま返す。"""
     if value is None:
         return None
     if not isinstance(value, str):

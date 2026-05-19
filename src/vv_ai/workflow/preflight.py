@@ -101,8 +101,14 @@ def _resolve_workflow_id(
 ) -> str:
     """全 event で使う workflow_id を解決する。"""
     if resolved_command.event_name != "local":
-        run_id = _normalize_optional_env_value(env.get("GITHUB_RUN_ID"))
-        run_attempt = _normalize_optional_env_value(env.get("GITHUB_RUN_ATTEMPT"))
+        run_id = _resolve_optional_env_value(
+            env.get("GITHUB_RUN_ID"),
+            "GITHUB_RUN_ID",
+        )
+        run_attempt = _resolve_optional_env_value(
+            env.get("GITHUB_RUN_ATTEMPT"),
+            "GITHUB_RUN_ATTEMPT",
+        )
         if run_id is not None:
             if run_attempt is None:
                 return f"run-{run_id}"
@@ -111,9 +117,11 @@ def _resolve_workflow_id(
     return generate_local_workflow_id()
 
 
-def _normalize_optional_env_value(value: str | None) -> str | None:
-    """空文字の環境変数を未指定として扱う。"""
+def _resolve_optional_env_value(value: str | None, env_name: str) -> str | None:
+    """任意の環境変数値を解決する。"""
     if value is None:
         return None
     stripped = value.strip()
-    return stripped or None
+    if stripped == "":
+        raise PreflightError(f"環境変数 `{env_name}` が空です")
+    return stripped
