@@ -1,4 +1,4 @@
-"""provider_execution の単体テスト。"""
+"""provider 実行の単体テスト。"""
 
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ import pytest
 
 from vv_ai.config import VVAIConfig
 from vv_ai.preflight import ReadyExecution
-from vv_ai.provider import ResolvedProvider, get_provider_spec
-from vv_ai.provider_execution import (
-    ProviderExecutionError,
-    _build_codex_env,
-    _deploy_codex_session_dir,
-    _execute_claude,
-    _execute_codex,
-    _resolve_codex_session_dir,
+from vv_ai.providers.claude import execute_claude as _execute_claude
+from vv_ai.providers.codex import execute_codex as _execute_codex
+from vv_ai.providers.environment import build_codex_env as _build_codex_env
+from vv_ai.providers.runner import ProviderExecutionError
+from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
+from vv_ai.providers.sessions import (
+    deploy_codex_session_dir as _deploy_codex_session_dir,
+    resolve_codex_session_dir as _resolve_codex_session_dir,
 )
 from vv_ai.resolve import ResolvedCommand
 from vv_ai.session import ResolvedSession, SessionKey
@@ -130,9 +130,9 @@ def test_execute_codex_deploys_after_restore_before_subprocess(
         output_path.write_text("Codex 応答", encoding="utf-8")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("vv_ai.provider_execution._deploy_codex_session_dir", fake_deploy)
+    monkeypatch.setattr("vv_ai.providers.codex.deploy_codex_session_dir", fake_deploy)
     monkeypatch.setattr(
-        "vv_ai.provider_execution._deploy_codex_assets_before_execution",
+        "vv_ai.providers.codex._deploy_codex_assets_before_execution",
         fake_deploy_assets,
     )
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -278,9 +278,11 @@ def test_execute_claude_deploys_after_restore_before_subprocess(
             stderr="",
         )
 
-    monkeypatch.setattr("vv_ai.provider_execution._deploy_provider_session_dir", fake_deploy)
     monkeypatch.setattr(
-        "vv_ai.provider_execution._deploy_claude_assets_before_execution",
+        "vv_ai.providers.claude.deploy_provider_session_dir", fake_deploy
+    )
+    monkeypatch.setattr(
+        "vv_ai.providers.claude._deploy_claude_assets_before_execution",
         fake_deploy_assets,
     )
     monkeypatch.setattr(subprocess, "run", fake_run)

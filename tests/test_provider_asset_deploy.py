@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from vv_ai.backends.github.models import GitHubTree, GitHubTreeEntry
-from vv_ai.provider_asset_deploy import (
+from vv_ai.providers.assets import (
     ProviderAssetFile,
     ProviderAssetDeployError,
     resolve_vv_ai_commit_id,
@@ -49,7 +49,7 @@ class _FakeGitHubClient:
 def _patch_commit_id(monkeypatch: pytest.MonkeyPatch) -> None:
     """commit id 解決を固定する。"""
     monkeypatch.setattr(
-        "vv_ai.provider_asset_deploy.resolve_vv_ai_commit_id",
+        "vv_ai.providers.assets.resolve_vv_ai_commit_id",
         lambda: "a" * 40,
     )
 
@@ -61,7 +61,7 @@ def _patch_client(
 ) -> None:
     """GitHub client を固定応答に差し替える。"""
     monkeypatch.setattr(
-        "vv_ai.provider_asset_deploy.build_github_client_with_token",
+        "vv_ai.providers.assets.build_github_client_with_token",
         lambda token: _FakeGitHubClient(tree, blobs),
     )
 
@@ -71,7 +71,7 @@ def test_resolve_vv_ai_commit_id_reads_direct_url(
 ) -> None:
     """direct_url.json の vcs_info.commit_id を返す。"""
     monkeypatch.setattr(
-        "vv_ai.provider_asset_deploy.metadata.distribution",
+        "vv_ai.providers.assets.metadata.distribution",
         lambda name: _FakeDistribution(
             json.dumps({"vcs_info": {"commit_id": "b" * 40}})
         ),
@@ -85,7 +85,7 @@ def test_resolve_vv_ai_commit_id_rejects_missing_commit(
 ) -> None:
     """commit_id が無い direct_url.json は拒否する。"""
     monkeypatch.setattr(
-        "vv_ai.provider_asset_deploy.metadata.distribution",
+        "vv_ai.providers.assets.metadata.distribution",
         lambda name: _FakeDistribution(json.dumps({"dir_info": {"editable": True}})),
     )
 
@@ -110,7 +110,7 @@ def test_missing_token_uses_default_github_client(
         ],
     )
     monkeypatch.setattr(
-        "vv_ai.provider_asset_deploy.build_github_client",
+        "vv_ai.providers.assets.build_github_client",
         lambda: _FakeGitHubClient(tree, {"skill": b"codex skill"}),
     )
 
@@ -143,7 +143,7 @@ def test_fallback_gh_token_is_used(
         return _FakeGitHubClient(tree, {"skill": b"codex skill"})
 
     monkeypatch.setattr(
-        "vv_ai.provider_asset_deploy.build_github_client_with_token",
+        "vv_ai.providers.assets.build_github_client_with_token",
         fake_build_client,
     )
 
@@ -257,7 +257,7 @@ def test_deploy_root_instruction_appends_after_existing_newline(
         content=b"codex agents",
     )
 
-    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+    from vv_ai.providers.assets import _deploy_provider_asset_files
 
     result = _deploy_provider_asset_files("codex", [file], tmp_path)
 
@@ -281,7 +281,7 @@ def test_deploy_root_instruction_appends_same_content(
         content=b"same",
     )
 
-    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+    from vv_ai.providers.assets import _deploy_provider_asset_files
 
     result = _deploy_provider_asset_files("codex", [file], tmp_path)
 
@@ -440,7 +440,7 @@ def test_deploy_overwrites_changed_file_with_warning(
         content=b"new",
     )
 
-    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+    from vv_ai.providers.assets import _deploy_provider_asset_files
 
     result = _deploy_provider_asset_files("codex", [file], tmp_path)
 
@@ -465,7 +465,7 @@ def test_deploy_same_file_without_warning(
         content=b"same",
     )
 
-    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+    from vv_ai.providers.assets import _deploy_provider_asset_files
 
     result = _deploy_provider_asset_files("codex", [file], tmp_path)
 
@@ -519,7 +519,7 @@ def test_destination_type_mismatch_raises(tmp_path: Path) -> None:
         content=b"content",
     )
 
-    from vv_ai.provider_asset_deploy import _deploy_provider_asset_files
+    from vv_ai.providers.assets import _deploy_provider_asset_files
 
     with pytest.raises(ProviderAssetDeployError, match="ディレクトリ"):
         _deploy_provider_asset_files("codex", [file], tmp_path)

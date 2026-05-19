@@ -33,7 +33,7 @@ from vv_ai.backends.github.models import (
 )
 from vv_ai.preflight import ReadyExecution
 from vv_ai.prompt import build_provider_prompt
-from vv_ai.provider_execution import execute_provider
+from vv_ai.providers.runner import execute_provider
 from vv_ai.resolve import ResolvedTarget
 from vv_ai.session import SessionStateRef, TargetContextState
 from vv_ai.sync_command import run_sync_command

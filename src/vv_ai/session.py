@@ -13,7 +13,7 @@ from vv_ai.artifacts.crypto import ArtifactCryptoError, resolve_age_secret_key
 from vv_ai.backends.github.client import build_github_client
 from vv_ai.backends.github.models import GitHubClientError
 from vv_ai.input import SessionMode
-from vv_ai.provider import ResolvedProvider
+from vv_ai.providers.selection import ResolvedProvider
 from vv_ai.resolve import BackendName, ResolvedCommand
 
 if TYPE_CHECKING:

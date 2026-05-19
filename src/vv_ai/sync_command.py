@@ -46,7 +46,7 @@ from vv_ai.artifacts.metrics import (
     ToolMetric,
 )
 from vv_ai.preflight import ReadyExecution
-from vv_ai.provider_execution import execute_provider
+from vv_ai.providers.runner import execute_provider
 from vv_ai.artifacts.report import ReportSections
 from vv_ai.session import SessionStateRef
 

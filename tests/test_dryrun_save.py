@@ -24,7 +24,7 @@ from vv_ai.artifacts.metrics import (
     ProviderSpecificMetrics,
 )
 from vv_ai.preflight import ReadyExecution
-from vv_ai.provider import ProviderSpec, ResolvedProvider
+from vv_ai.providers.selection import ProviderSpec, ResolvedProvider
 from vv_ai.artifacts.report import ReportSections
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef

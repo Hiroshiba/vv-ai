@@ -40,7 +40,7 @@ from vv_ai.preflight import (
     SilentSkip,
     run_preflight,
 )
-from vv_ai.provider import ProviderResolutionError
+from vv_ai.providers.selection import ProviderResolutionError
 from vv_ai.command_handler import CommandCleanupError, run_command
 from vv_ai.session import SessionKey
 from vv_ai.artifacts.session import SessionArtifactError, fork_session_artifact
