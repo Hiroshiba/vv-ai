@@ -15,16 +15,17 @@ from vv_ai.command_handler import (
     _post_response_comment,
 )
 from vv_ai.config import VVAIConfig
-from vv_ai.execution import ExecutionResult, ExecutionStatus, SavedExecutionArtifacts
+from vv_ai.artifacts.execution import SavedExecutionArtifacts
+from vv_ai.executions.result import ExecutionResult, ExecutionStatus
 from vv_ai.backends.github.models import GitHubActor, GitHubIssue, GitHubPullRequest
-from vv_ai.metrics_artifact import (
+from vv_ai.artifacts.metrics import (
     MetricsBehavior,
     MetricsUsage,
     ProviderSpecificMetrics,
 )
 from vv_ai.preflight import ReadyExecution
 from vv_ai.provider import ProviderSpec, ResolvedProvider
-from vv_ai.report_artifact import ReportSections
+from vv_ai.artifacts.report import ReportSections
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
 

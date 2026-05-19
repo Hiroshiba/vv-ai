@@ -19,15 +19,15 @@ from vv_ai.config import (
     load_vv_ai_config,
     load_vv_ai_config_file,
 )
-from vv_ai.execution import (
+from vv_ai.artifacts.execution import (
     ExecutionArtifactError,
-    ExecutionResult,
     SavedExecutionArtifacts,
     save_execution_artifacts,
 )
+from vv_ai.executions.result import ExecutionResult
 from vv_ai.backends.github.models import GitHubPullRequest
 from vv_ai.input import CLIInput, InputError, build_raw_input_from_cli
-from vv_ai.metrics_artifact import (
+from vv_ai.artifacts.metrics import (
     MetricsBehavior,
     MetricsUsage,
     ProviderSpecificMetrics,
@@ -43,8 +43,8 @@ from vv_ai.preflight import (
 from vv_ai.provider import ProviderResolutionError
 from vv_ai.command_handler import CommandCleanupError, run_command
 from vv_ai.session import SessionKey
-from vv_ai.session_artifact import SessionArtifactError, fork_session_artifact
-from vv_ai.report_artifact import ReportSections
+from vv_ai.artifacts.session import SessionArtifactError, fork_session_artifact
+from vv_ai.artifacts.report import ReportSections
 from vv_ai.resolve import ResolutionError, resolve_raw_input
 from vv_ai.session import SessionResolutionError, SessionStateRef, resolve_session
 from vv_ai.target import TargetResolutionError, resolve_target

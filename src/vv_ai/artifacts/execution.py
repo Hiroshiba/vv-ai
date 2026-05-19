@@ -1,61 +1,34 @@
-"""実行結果と artifact 保存オーケストレーション。"""
+"""実行結果に対応する artifact 保存オーケストレーション。"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from vv_ai.artifact_crypto import ArtifactCryptoError, resolve_age_public_key
-from vv_ai.metrics_artifact import (
+from vv_ai.artifacts.crypto import ArtifactCryptoError, resolve_age_public_key
+from vv_ai.artifacts.metrics import (
     MetricsArtifactError,
-    MetricsBehavior,
-    MetricsUsage,
-    ProviderSpecificMetrics,
     SavedMetricsArtifact,
-    StepMetric,
-    ToolMetric,
     save_metrics_artifact,
 )
-from vv_ai.preflight import ReadyExecution
-from vv_ai.report_artifact import (
+from vv_ai.artifacts.report import (
     ReportArtifactError,
-    ReportSections,
     SavedReportArtifact,
     save_report_artifact,
 )
-from vv_ai.session import SessionStateRef
-from vv_ai.session_artifact import (
+from vv_ai.artifacts.session import (
     SavedSessionArtifact,
     SessionArtifactError,
     save_session_artifact,
 )
-
-ExecutionStatus = Literal["success", "failure", "cancelled"]
+from vv_ai.executions.result import ExecutionResult
+from vv_ai.preflight import ReadyExecution
 
 
 class ExecutionArtifactError(Exception):
     """artifact 保存に失敗したことを表す例外。"""
-
-
-class ExecutionResult(BaseModel):
-    """実行結果と保存用データ。"""
-
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
-
-    status: ExecutionStatus
-    report_sections: ReportSections
-    usage: MetricsUsage
-    behavior: MetricsBehavior
-    tools: dict[str, ToolMetric]
-    steps: dict[str, StepMetric]
-    provider_specific: ProviderSpecificMetrics
-    state_ref: SessionStateRef
-    provider_session_path: Path | None
-    allow_edits_notice_posted: bool
-    response_text: str | None
 
 
 class SavedExecutionArtifacts(BaseModel):
