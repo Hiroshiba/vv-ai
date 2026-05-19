@@ -7,7 +7,7 @@ from typing import Literal
 from vv_ai.config import VVAIConfig
 from vv_ai.preflight import ReadyExecution
 from vv_ai.prompt import build_provider_prompt
-from vv_ai.provider import ProviderSpec, ResolvedProvider
+from vv_ai.providers.selection import ProviderSpec, ResolvedProvider
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 
 

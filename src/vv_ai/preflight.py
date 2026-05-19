@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from vv_ai.config import VVAIConfig, load_vv_ai_config
 from vv_ai.local_store import generate_local_workflow_id
-from vv_ai.provider import ResolvedProvider, resolve_provider
+from vv_ai.providers.selection import ResolvedProvider, resolve_provider
 from vv_ai.resolve import ResolvedCommand
 from vv_ai.session import ResolvedSession
 

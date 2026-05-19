@@ -35,7 +35,7 @@ from vv_ai.backends.github.models import (
 )
 from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
 from vv_ai.preflight import ReadyExecution
-from vv_ai.provider import ResolvedProvider, get_provider_spec
+from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
 from vv_ai.artifacts.report import ReportSections
 from vv_ai.resolve import ResolvedCommand, ResolvedTarget
 from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef

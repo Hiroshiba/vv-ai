@@ -17,7 +17,7 @@ from vv_ai.artifacts.crypto import (
     decrypt_directory,
     encrypt_directory,
 )
-from vv_ai.provider import ResolvedProvider
+from vv_ai.providers.selection import ResolvedProvider
 from vv_ai.resolve import BackendName, ResolvedCommand
 from vv_ai.session import (
     ResolvedSession,
