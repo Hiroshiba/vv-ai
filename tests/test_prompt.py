@@ -192,6 +192,14 @@ class TestImplementPrompt:
 
         assert "2行目: COMMIT_MESSAGE: <コミットメッセージ>" in prompt
 
+    def test_issue_prompt_mentions_no_change_comment(self) -> None:
+        prompt = _build_prompt("issue", "implement")
+
+        assert (
+            "変更コミットがない場合、BODY は対象 Issue へのコメントとして投稿されます。"
+            in prompt
+        )
+
     def test_issue_prompt_mentions_conventional_commit_message(self) -> None:
         prompt = _build_prompt("issue", "implement")
 

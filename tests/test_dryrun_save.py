@@ -17,7 +17,12 @@ from vv_ai.commands.post_execution import (
 from vv_ai.config import VVAIConfig
 from vv_ai.artifacts.execution import SavedExecutionArtifacts
 from vv_ai.executions.result import ExecutionResult, ExecutionStatus
-from vv_ai.backends.github.models import GitHubActor, GitHubIssue, GitHubPullRequest
+from vv_ai.backends.github.models import (
+    GitHubActor,
+    GitHubClientError,
+    GitHubIssue,
+    GitHubPullRequest,
+)
 from vv_ai.artifacts.metrics import (
     MetricsBehavior,
     MetricsUsage,
@@ -313,6 +318,90 @@ class TestImplementResponseComment:
         )
         github_client.get_issue.assert_not_called()
         github_client.create_issue_comment.assert_not_called()
+
+    def test_implement_issue_posts_body_when_no_commits_ahead(self) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="implement", dry_run=False)
+        )
+        result = _make_execution_result(
+            "success",
+            response_text=(
+                "TITLE: AI PR\n"
+                "COMMIT_MESSAGE: feat: ai commit\n"
+                "BODY:\n"
+                "変更不要と判断しました"
+            ),
+        )
+        github_client = MagicMock()
+        github_client.get_default_branch.return_value = "main"
+
+        with (
+            patch(
+                "vv_ai.commands.post_execution.commit_all_changes", return_value=False
+            ) as mock_commit,
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=False),
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
+        ):
+            _handle_implement_issue_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "vv-ai/issue-1-abc123",
+                None,
+                {},
+            )
+
+        mock_commit.assert_called_once_with(Path("/dummy"), "feat: ai commit")
+        github_client.create_issue_comment.assert_called_once_with(
+            "org/repo",
+            1,
+            "変更不要と判断しました",
+        )
+        mock_push.assert_not_called()
+        github_client.create_pull_request.assert_not_called()
+
+    def test_implement_issue_continues_when_no_change_comment_fails(
+        self,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(command="implement", dry_run=False)
+        )
+        result = _make_execution_result(
+            "success",
+            response_text=(
+                "TITLE: AI PR\n"
+                "COMMIT_MESSAGE: feat: ai commit\n"
+                "BODY:\n"
+                "変更不要と判断しました"
+            ),
+        )
+        github_client = MagicMock()
+        github_client.get_default_branch.return_value = "main"
+        github_client.create_issue_comment.side_effect = GitHubClientError("失敗")
+
+        with (
+            patch(
+                "vv_ai.commands.post_execution.commit_all_changes", return_value=False
+            ),
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=False),
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
+        ):
+            result_pr = _handle_implement_issue_post_execution(
+                Path("/dummy"),
+                ready,
+                result,
+                github_client,
+                "vv-ai/issue-1-abc123",
+                None,
+                {},
+            )
+
+        assert result_pr is None
+        assert "implement 変更なしコメント投稿に失敗しました" in capsys.readouterr().err
+        mock_push.assert_not_called()
+        github_client.create_pull_request.assert_not_called()
 
     def test_implement_issue_requires_response_text(self) -> None:
         ready = _make_ready_execution(
