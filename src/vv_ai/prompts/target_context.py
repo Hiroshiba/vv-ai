@@ -13,8 +13,8 @@ from vv_ai.backends.github.models import (
     GitHubIssue,
     GitHubPullRequest,
 )
-from vv_ai.resolve import ResolvedTarget
-from vv_ai.session import SessionStateRef, TargetContextState
+from vv_ai.inputs.resolve import ResolvedTarget
+from vv_ai.sessions.models import SessionStateRef, TargetContextState
 
 
 class TargetContextError(Exception):

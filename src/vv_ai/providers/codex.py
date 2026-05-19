@@ -20,12 +20,12 @@ from vv_ai.artifacts.metrics import (
 )
 from vv_ai.artifacts.report import ReportSections
 from vv_ai.executions.result import ExecutionResult
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.assets import ProviderAssetDeployError, deploy_codex_provider_assets
 from vv_ai.providers.environment import build_codex_env, resolve_codex_home_from_env
 from vv_ai.providers.runner import ProviderExecutionError
 from vv_ai.providers.sessions import deploy_codex_session_dir, resolve_codex_session_dir
-from vv_ai.session import SessionStateRef
+from vv_ai.sessions.models import SessionStateRef
 
 _CODEX_SHELL_ENV_ALLOWLIST = json.dumps(
     ["PATH", "HOME", "USER", "LANG", "TERM", "SHELL", "TMPDIR", "GH_TOKEN"]

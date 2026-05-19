@@ -23,11 +23,11 @@ from vv_ai.backends.github.models import (
     RepoInfo,
 )
 from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
 from vv_ai.artifacts.report import ReportSections
-from vv_ai.resolve import BackendName, ResolvedCommand, ResolvedTarget
-from vv_ai.session import ResolvedSession, SessionKey, SessionStateRef
+from vv_ai.inputs.resolve import BackendName, ResolvedCommand, ResolvedTarget
+from vv_ai.sessions.models import ResolvedSession, SessionKey, SessionStateRef
 
 
 def _write_config(tmp_path: Path) -> None:
@@ -256,7 +256,7 @@ def _enter_next_patches(
         patch("vv_ai.commands.runner.build_github_client", return_value=github_client)
     )
     stack.enter_context(
-        patch("vv_ai.next_command.build_github_client", return_value=github_client)
+        patch("vv_ai.commands.next.build_github_client", return_value=github_client)
     )
     stack.enter_context(patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}))
     github_client.get_repo_info.return_value = RepoInfo(

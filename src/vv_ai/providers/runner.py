@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from vv_ai.executions.result import ExecutionResult
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 
 
 class ProviderExecutionError(Exception):

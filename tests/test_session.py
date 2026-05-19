@@ -8,13 +8,15 @@ import pytest
 
 from vv_ai.backends.github.models import GitHubArtifact
 from vv_ai.providers.selection import ProviderSpec, ResolvedProvider
-from vv_ai.resolve import ResolvedCommand, ResolvedTarget
-from vv_ai.session import (
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.sessions.models import (
     SavedSessionManifest,
     SessionKey,
-    SessionResolutionError,
     SessionStateRef,
     TargetContextState,
+)
+from vv_ai.sessions.resolve import (
+    SessionResolutionError,
     _build_manifest_from_restored_artifact,
     _resolve_restore_state,
 )
@@ -503,7 +505,7 @@ class TestResolveSessionDefault:
     def test_missing_session_mode_defaults_to_inherit_or_new(
         self, tmp_path: Path
     ) -> None:
-        from vv_ai.session import resolve_session
+        from vv_ai.sessions.resolve import resolve_session
 
         command = ResolvedCommand.model_validate(
             {
@@ -532,7 +534,7 @@ class TestResolveSessionDefault:
         assert resolved.restore_manifest is None
 
     def test_address_uses_main_lane(self, tmp_path: Path) -> None:
-        from vv_ai.session import resolve_session
+        from vv_ai.sessions.resolve import resolve_session
 
         command = ResolvedCommand.model_validate(
             {

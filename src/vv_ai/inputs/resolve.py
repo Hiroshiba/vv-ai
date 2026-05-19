@@ -6,8 +6,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from vv_ai.input import CommandName, EventName, RawInput, SessionMode, TargetType
 from vv_ai.config import ProviderName
+from vv_ai.inputs.models import (
+    CommandName,
+    EventName,
+    RawInput,
+    SessionMode,
+    TargetType,
+)
 
 BackendName = Literal["github", "local"]
 

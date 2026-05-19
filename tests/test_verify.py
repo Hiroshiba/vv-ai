@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from vv_ai.config import VVAIConfig
-from vv_ai.verify import run_verify
+from vv_ai.workflow.verify import run_verify
 
 
 def _write_payload(tmp_path: Path, payload: dict[str, object]) -> Path:

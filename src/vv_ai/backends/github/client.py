@@ -61,7 +61,7 @@ from vv_ai.backends.github.runner import (
     run_gh_text,
     run_gh_text_with_env,
 )
-from vv_ai.resolve import ResolvedTarget
+from vv_ai.inputs.resolve import ResolvedTarget
 
 
 class GitHubClient:

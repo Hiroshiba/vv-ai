@@ -20,7 +20,7 @@ from vv_ai.commands.output_parser import (
     parse_title_body_output,
 )
 from vv_ai.executions.result import ExecutionResult
-from vv_ai.git_ops import (
+from vv_ai.git.operations import (
     GitOpsError,
     commit_all_changes,
     generate_patch,
@@ -28,8 +28,8 @@ from vv_ai.git_ops import (
     push_branch,
     try_push_current_branch,
 )
-from vv_ai.preflight import ReadyExecution
-from vv_ai.resolve import ResolvedTarget
+from vv_ai.workflow.preflight import ReadyExecution
+from vv_ai.inputs.resolve import ResolvedTarget
 
 _PR_CHANGE_COMMANDS = frozenset({"implement", "address"})
 

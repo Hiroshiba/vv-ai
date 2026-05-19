@@ -20,8 +20,8 @@ from vv_ai.artifacts.report import (
     build_report_artifact_name,
     render_report_markdown,
 )
-from vv_ai.resolve import BackendName
-from vv_ai.session import (
+from vv_ai.inputs.resolve import BackendName
+from vv_ai.sessions.models import (
     SavedSessionManifest,
     SessionKey,
     SessionLane,

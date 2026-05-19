@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from vv_ai.executions.result import ExecutionResult, ExecutionStatus
-from vv_ai.git_ops import (
+from vv_ai.git.operations import (
     GitOpsError,
     checkout_fork_pr,
     commit_all_changes,
@@ -45,10 +45,10 @@ from vv_ai.artifacts.metrics import (
     StepMetric,
     ToolMetric,
 )
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.runner import execute_provider
 from vv_ai.artifacts.report import ReportSections
-from vv_ai.session import SessionStateRef
+from vv_ai.sessions.models import SessionStateRef
 
 
 class SyncCommandError(RuntimeError):

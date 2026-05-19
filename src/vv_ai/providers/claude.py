@@ -20,7 +20,7 @@ from vv_ai.artifacts.metrics import (
 )
 from vv_ai.artifacts.report import ReportSections
 from vv_ai.executions.result import ExecutionResult
-from vv_ai.preflight import ReadyExecution
+from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.assets import ProviderAssetDeployError, deploy_claude_provider_assets
 from vv_ai.providers.environment import (
     build_sanitized_env,
@@ -33,7 +33,7 @@ from vv_ai.providers.sessions import (
     deploy_provider_session_dir,
     resolve_claude_session_dir,
 )
-from vv_ai.session import SessionStateRef
+from vv_ai.sessions.models import SessionStateRef
 
 _CLAUDE_WEB_SEARCH_DISALLOWED_TOOL = "WebSearch"
 
