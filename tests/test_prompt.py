@@ -245,21 +245,17 @@ class TestImplementPrompt:
 class TestIssueCommandPrompt:
     """issue コマンドの provider prompt を検証する。"""
 
-    def test_prompt_mentions_issue_creation_as_discussion_start(self) -> None:
+    def test_prompt_uses_issue_create_skill(self) -> None:
         prompt = _build_issue_command_prompt()
 
-        assert "議論の出発点になる GitHub Issue を作成する" in prompt
+        assert "issue-create スキルに従って" in prompt
 
-    def test_prompt_mentions_user_explicit_content_priority(self) -> None:
+    def test_prompt_does_not_duplicate_issue_creation_policy(self) -> None:
         prompt = _build_issue_command_prompt()
 
-        assert "本文はユーザーが明示した内容を中心に短く整理してください。" in prompt
-
-    def test_prompt_mentions_uncertain_details_are_not_fixed_specs(self) -> None:
-        prompt = _build_issue_command_prompt()
-
-        assert "未確定の詳細は確定した仕様のように断定せず" in prompt
-        assert "必要に応じて補足や確認したいこととして扱ってください。" in prompt
+        assert "本文はユーザーが明示した内容を中心に短く整理してください。" not in prompt
+        assert "細かい仕様、受入基準、対象外、実装方式、テスト方針" not in prompt
+        assert "未確定の詳細は確定した仕様のように断定せず" not in prompt
 
     def test_prompt_keeps_title_body_format(self) -> None:
         prompt = _build_issue_command_prompt()
