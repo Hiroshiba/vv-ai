@@ -15,6 +15,29 @@ from vv_ai.backends.github.client import (
 from vv_ai.backends.github.models import GitHubClientError
 
 
+def _make_timeline_payload(
+    nodes: list[dict[str, object]],
+    has_next_page: bool,
+    end_cursor: str | None,
+) -> dict[str, object]:
+    """GraphQL timeline payload を生成する。"""
+    return {
+        "data": {
+            "repository": {
+                "issueOrPullRequest": {
+                    "timelineItems": {
+                        "nodes": nodes,
+                        "pageInfo": {
+                            "hasNextPage": has_next_page,
+                            "endCursor": end_cursor,
+                        },
+                    }
+                }
+            }
+        }
+    }
+
+
 def test_get_issue_parent_number_returns_parent_number() -> None:
     """get_issue_parent_number は親 Issue 番号を返す。"""
     captured_args: list[str] = []
@@ -153,92 +176,133 @@ def test_list_issue_labeled_events_builds_models() -> None:
     def fake_run(args: Sequence[str]) -> str:
         captured_args.extend(args)
         return json.dumps(
-            [
+            _make_timeline_payload(
                 [
                     {
-                        "id": 101,
-                        "event": "labeled",
+                        "__typename": "LabeledEvent",
+                        "id": "LE_101",
                         "label": {"name": "vv-ai:requirements"},
                         "actor": {"login": "Hiroshiba"},
-                        "created_at": "2026-05-17T16:00:00Z",
+                        "createdAt": "2026-05-17T16:00:00Z",
                     },
                     {
-                        "id": 102,
-                        "event": "renamed",
-                        "actor": {"login": "Hiroshiba"},
-                        "created_at": "2026-05-17T16:01:00Z",
-                    },
-                ],
-                [
-                    {
-                        "id": 103,
-                        "event": "labeled",
+                        "__typename": "LabeledEvent",
+                        "id": "LE_103",
                         "label": {"name": "bug"},
                         "actor": {"login": "other-user"},
-                        "created_at": "2026-05-17T16:02:00Z",
+                        "createdAt": "2026-05-17T16:02:00Z",
                     },
                 ],
-            ]
+                False,
+                None,
+            )
         )
 
     client = GitHubClient(fake_run, lambda args: b"")
 
     events = client.list_issue_labeled_events("org/repo", 1)
 
-    assert captured_args == [
-        "gh",
-        "api",
-        "--paginate",
-        "--slurp",
-        "repos/org/repo/issues/1/timeline",
-    ]
+    assert captured_args[0:3] == ["gh", "api", "graphql"]
     assert len(events) == 2
-    assert events[0].id == 101
+    assert events[0].id == "LE_101"
     assert events[0].label_name == "vv-ai:requirements"
     assert events[0].actor.login == "Hiroshiba"
     assert events[0].created_at == "2026-05-17T16:00:00Z"
-    assert events[1].id == 103
+    assert events[1].id == "LE_103"
     assert events[1].label_name == "bug"
 
 
-def test_list_issue_timeline_events_builds_comment_and_label_models() -> None:
-    """list_issue_timeline_events は comment と label を返却順で model 化する。"""
+def test_list_issue_timeline_events_builds_graphql_models() -> None:
+    """list_issue_timeline_events は GraphQL timeline を model 化する。"""
     client = GitHubClient(
         lambda args: json.dumps(
-            [
+            _make_timeline_payload(
                 [
                     {
-                        "id": 201,
-                        "event": "commented",
+                        "__typename": "IssueComment",
+                        "id": "IC_201",
+                        "databaseId": 201,
                         "body": "@vv-ai requirements",
-                        "user": {"login": "Hiroshiba"},
-                        "created_at": "2026-05-17T16:00:00Z",
+                        "author": {"login": "Hiroshiba"},
+                        "createdAt": "2026-05-17T16:00:00Z",
                     },
                     {
-                        "id": 202,
-                        "event": "labeled",
+                        "__typename": "LabeledEvent",
+                        "id": "LE_202",
                         "label": {"name": "vv-ai:next"},
                         "actor": {"login": "Hiroshiba"},
-                        "created_at": "2026-05-17T16:00:00Z",
+                        "createdAt": "2026-05-17T16:01:00Z",
                     },
-                ]
-            ]
+                    {
+                        "__typename": "SubIssueAddedEvent",
+                        "id": "SIAE_203",
+                        "actor": {"login": "Hiroshiba"},
+                        "createdAt": "2026-05-17T16:02:00Z",
+                        "subIssue": {"number": 2},
+                    },
+                    {
+                        "__typename": "CrossReferencedEvent",
+                        "id": "CRE_204",
+                        "actor": {"login": "Hiroshiba"},
+                        "createdAt": "2026-05-17T16:03:00Z",
+                        "source": {
+                            "__typename": "PullRequest",
+                            "number": 3,
+                            "repository": {
+                                "nameWithOwner": "org/repo",
+                            },
+                        },
+                    },
+                ],
+                False,
+                None,
+            )
         ),
         lambda args: b"",
     )
 
     events = client.list_issue_timeline_events("org/repo", 1)
 
-    assert [event.event for event in events] == ["commented", "labeled"]
+    assert [event.event for event in events] == [
+        "commented",
+        "labeled",
+        "sub_issue_added",
+        "cross_referenced",
+    ]
+    assert events[0].comment_database_id == 201
     assert events[0].body == "@vv-ai requirements"
     assert events[1].label_name == "vv-ai:next"
+    assert events[2].source_kind == "issue"
+    assert events[2].source_number == 2
+    assert events[3].source_kind == "pull_request"
+    assert events[3].source_repository_full_name == "org/repo"
 
 
-def test_list_issue_labeled_events_rejects_invalid_page() -> None:
-    """list_issue_labeled_events は不正なページ形式を拒否する。"""
-    client = GitHubClient(lambda args: json.dumps([{"event": "labeled"}]), lambda args: b"")
+def test_list_issue_timeline_events_uses_pagination() -> None:
+    """list_issue_timeline_events は GraphQL timeline をページングする。"""
+    captured_args: list[Sequence[str]] = []
+    payloads = [
+        _make_timeline_payload([], True, "cursor-1"),
+        _make_timeline_payload([], False, None),
+    ]
 
-    with pytest.raises(GitHubClientError, match="ページ形式"):
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.append(args)
+        return json.dumps(payloads.pop(0))
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    assert client.list_issue_timeline_events("org/repo", 1) == []
+    assert len(captured_args) == 2
+    assert "after=cursor-1" not in captured_args[0]
+    assert "after=cursor-1" in captured_args[1]
+
+
+def test_list_issue_labeled_events_rejects_invalid_payload() -> None:
+    """list_issue_labeled_events は不正な GraphQL payload を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps({"data": {"repository": None}}), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match="repository"):
         client.list_issue_labeled_events("org/repo", 1)
 
 
@@ -246,20 +310,34 @@ def test_list_issue_labeled_events_rejects_invalid_page() -> None:
     ("payload", "message"),
     [
         (
-            [[{"id": 101, "event": "labeled", "actor": {"login": "Hiroshiba"}}]],
+            _make_timeline_payload(
+                [
+                    {
+                        "__typename": "LabeledEvent",
+                        "id": "LE_101",
+                        "actor": {"login": "Hiroshiba"},
+                        "createdAt": "2026-05-17T16:00:00Z",
+                    }
+                ],
+                False,
+                None,
+            ),
             "label",
         ),
         (
-            [
+            _make_timeline_payload(
                 [
                     {
-                        "id": 101,
-                        "event": "labeled",
+                        "__typename": "LabeledEvent",
+                        "id": "LE_101",
                         "label": {"name": "vv-ai:next"},
+                        "createdAt": "2026-05-17T16:00:00Z",
                     }
-                ]
-            ],
-            "REST user",
+                ],
+                False,
+                None,
+            ),
+            "author",
         ),
     ],
 )

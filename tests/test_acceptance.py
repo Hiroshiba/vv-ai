@@ -141,12 +141,16 @@ def _make_github_timeline_comment(
 ) -> GitHubIssueTimelineEvent:
     """テスト用 GitHubIssueTimelineEvent comment を生成する。"""
     return GitHubIssueTimelineEvent(
-        id=event_id,
+        id=f"IC_{event_id}",
         event="commented",
         actor=GitHubActor(login="Hiroshiba"),
         created_at="2026-05-08T00:00:00Z",
+        comment_database_id=event_id,
         body=body,
         label_name=None,
+        source_kind=None,
+        source_number=None,
+        source_repository_full_name=None,
     )
 
 
@@ -156,12 +160,16 @@ def _make_github_labeled_event(
 ) -> GitHubIssueTimelineEvent:
     """テスト用 GitHubIssueTimelineEvent label を生成する。"""
     return GitHubIssueTimelineEvent(
-        id=event_id,
+        id=f"LE_{event_id}",
         event="labeled",
         label_name=label_name,
         actor=GitHubActor(login="Hiroshiba"),
         created_at="2026-05-08T00:00:00Z",
+        comment_database_id=None,
         body=None,
+        source_kind=None,
+        source_number=None,
+        source_repository_full_name=None,
     )
 
 

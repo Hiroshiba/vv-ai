@@ -32,7 +32,6 @@ from vv_ai.git.operations import (
     try_push_current_branch,
 )
 from vv_ai.inputs.resolve import ResolvedTarget
-from vv_ai.next_decision import NextDecisionCommand, format_next_decision_history_comment
 from vv_ai.workflow.preflight import ReadyExecution
 
 _PR_CHANGE_COMMANDS = frozenset({"implement", "address"})
@@ -367,10 +366,7 @@ def _handle_breakdown_post_execution(
     created: list[GitHubIssue] = []
     for title, body in tasks:
         issue = github_client.create_issue(repo, title, body)
-        try:
-            github_client.add_sub_issue(repo, target.number, issue.id)
-        except GitHubClientError as exc:
-            print(f"サブ Issue 紐付けに失敗しました（続行）: {exc}", file=sys.stderr)
+        github_client.add_sub_issue(repo, target.number, issue.id)
         created.append(issue)
         print(f"サブ Issue を作成しました: {issue.url}")
 
@@ -413,32 +409,3 @@ def _post_response_comment(
         )
     except GitHubClientError as exc:
         print(f"コメント投稿に失敗しました: {exc}", file=sys.stderr)
-
-
-def _post_next_decision_history_comment(
-    ready_execution: ReadyExecution,
-    execution_result: ExecutionResult,
-    github_client: GitHubClient | None,
-    command: NextDecisionCommand | None,
-) -> None:
-    if command is None:
-        return
-    if execution_result.status != "success":
-        return
-
-    target = ready_execution.command.target
-    if (
-        ready_execution.command.dry_run
-        or github_client is None
-        or not _is_github_target(target)
-    ):
-        return
-
-    assert target is not None
-    assert target.repository_full_name is not None
-    assert target.number is not None
-    github_client.create_issue_comment(
-        target.repository_full_name,
-        target.number,
-        format_next_decision_history_comment(command),
-    )

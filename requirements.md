@@ -80,7 +80,11 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 - サブ Issue の履歴なし `next` は `implement`
 - Issue では `confirm` → `requirements` → `arch` → `detail` の順に進む
 - 通常 Issue の `detail` 後の `next` は AI が `breakdown` または `implement` を判断する
-- AI 判断付き `next` の選択結果は履歴保存コメントとして残し、後続の `next` 履歴再生で選択済みコマンドとして扱う
+- GitHub target では `SUB_ISSUE_ADDED_EVENT` を `breakdown` 済み履歴として扱う
+- GitHub target では同一 repo の PR からの `CROSS_REFERENCED_EVENT` を `implement` 済み履歴として扱う
+- Issue からの cross reference と別 repo の PR からの cross reference は `next` 履歴では無視する
+- `willCloseTarget` は `implement` 済み判定に使わない
+- local backend は成果物ベース判定の対象外
 - 親 Issue の `breakdown` 後の `next` はエラー終了
 - Issue の `implement` 後の `next` はエラー終了
 - PR の履歴なし `next` は `review`

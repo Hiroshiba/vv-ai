@@ -14,14 +14,13 @@ from vv_ai.inputs.build import (
     parse_comment_invocation,
     parse_label_invocation,
 )
-from vv_ai.next_decision import NextDecisionError, parse_next_decision_history_marker
 from vv_ai.inputs.models import (
     CommandName,
     InputError,
 )
 from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
-HistorySource = Literal["comment", "label"]
+HistorySource = Literal["comment", "label", "artifact"]
 
 
 class NextResolutionError(Exception):
@@ -156,7 +155,10 @@ def _resolve_current_comment_index(
     timeline_events: list[GitHubIssueTimelineEvent],
 ) -> int:
     for index, timeline_event in enumerate(timeline_events):
-        if timeline_event.event == "commented" and timeline_event.id == command.comment_id:
+        if (
+            timeline_event.event == "commented"
+            and timeline_event.comment_database_id == command.comment_id
+        ):
             return index
     raise NextResolutionError("現在処理中のコメントが履歴内に見つかりません")
 
@@ -177,6 +179,7 @@ def _resolve_current_label_index(
         for index, timeline_event in enumerate(timeline_events)
         if timeline_event.event == "labeled"
         and timeline_event.label_name == command.trigger_label_name
+        and timeline_event.actor is not None
         and timeline_event.actor.login == command.actor
         and timeline_event.created_at == command.trigger_event_created_at
     ]
@@ -192,17 +195,19 @@ def _build_github_history_entry(
     config: VVAIConfig,
     timeline_event: GitHubIssueTimelineEvent,
 ) -> NextHistoryEntry | None:
-    bot_decision_command = _parse_bot_next_decision_history_command(timeline_event)
-    if bot_decision_command is not None:
-        if _should_ignore_command(target, bot_decision_command):
-            return None
+    artifact_command = _parse_artifact_history_command(target, timeline_event)
+    if artifact_command is not None:
         return NextHistoryEntry(
-            command=bot_decision_command,
+            command=artifact_command,
             created_at=timeline_event.created_at,
-            id=timeline_event.id,
-            source="comment",
+            id=None,
+            source="artifact",
         )
+    if timeline_event.event in {"sub_issue_added", "cross_referenced"}:
+        return None
 
+    if timeline_event.actor is None:
+        raise NextResolutionError("timeline event の actor がありません")
     if timeline_event.actor.login not in config.allowed_users:
         return None
     command = _parse_timeline_history_command(timeline_event)
@@ -213,24 +218,26 @@ def _build_github_history_entry(
     return NextHistoryEntry(
         command=command,
         created_at=timeline_event.created_at,
-        id=timeline_event.id,
+        id=timeline_event.comment_database_id,
         source="comment" if timeline_event.event == "commented" else "label",
     )
 
 
-def _parse_bot_next_decision_history_command(
+def _parse_artifact_history_command(
+    target: ResolvedTarget,
     timeline_event: GitHubIssueTimelineEvent,
 ) -> CommandName | None:
-    if timeline_event.event != "commented":
+    if target.kind != "issue":
         return None
-    if not timeline_event.actor.login.endswith("[bot]"):
+    if timeline_event.event == "sub_issue_added":
+        return "breakdown"
+    if timeline_event.event != "cross_referenced":
         return None
-    if timeline_event.body is None:
+    if timeline_event.source_kind != "pull_request":
         return None
-    try:
-        return parse_next_decision_history_marker(timeline_event.body)
-    except NextDecisionError as exc:
-        raise NextResolutionError("AI 判断済み `next` 履歴の解析に失敗しました") from exc
+    if timeline_event.source_repository_full_name != target.repository_full_name:
+        return None
+    return "implement"
 
 
 def _load_local_history(repo_root: Path, target: ResolvedTarget) -> list[NextHistoryEntry]:

@@ -9,7 +9,6 @@ import pytest
 
 from vv_ai.config import VVAIConfig
 from vv_ai.backends.github.models import GitHubActor, GitHubIssueTimelineEvent
-from vv_ai.next_decision import format_next_decision_history_comment
 from vv_ai.commands.next import NextResolutionError, resolve_next_command
 from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
@@ -83,12 +82,16 @@ def _make_comment(
     created_at: str,
 ) -> GitHubIssueTimelineEvent:
     return GitHubIssueTimelineEvent(
-        id=comment_id,
+        id=f"IC_{comment_id}",
         event="commented",
         actor=GitHubActor(login=author),
         created_at=created_at,
+        comment_database_id=comment_id,
         body=body,
         label_name=None,
+        source_kind=None,
+        source_number=None,
+        source_repository_full_name=None,
     )
 
 
@@ -104,19 +107,6 @@ def _make_comments(commands: list[str]) -> list[GitHubIssueTimelineEvent]:
     ]
 
 
-def _make_next_decision_comment(
-    comment_id: int,
-    command: str,
-    created_at: str,
-) -> GitHubIssueTimelineEvent:
-    return _make_comment(
-        comment_id,
-        format_next_decision_history_comment(command),
-        "vv-ai-public-read-github-app[bot]",
-        created_at,
-    )
-
-
 def _make_label_event(
     event_id: int,
     label_name: str,
@@ -124,12 +114,54 @@ def _make_label_event(
     created_at: str,
 ) -> GitHubIssueTimelineEvent:
     return GitHubIssueTimelineEvent(
-        id=event_id,
+        id=f"LE_{event_id}",
         event="labeled",
         label_name=label_name,
         actor=GitHubActor(login=actor),
         created_at=created_at,
+        comment_database_id=None,
         body=None,
+        source_kind=None,
+        source_number=None,
+        source_repository_full_name=None,
+    )
+
+
+def _make_sub_issue_added_event(
+    event_id: int,
+    created_at: str,
+) -> GitHubIssueTimelineEvent:
+    return GitHubIssueTimelineEvent(
+        id=f"SIAE_{event_id}",
+        event="sub_issue_added",
+        actor=GitHubActor(login="Hiroshiba"),
+        created_at=created_at,
+        comment_database_id=None,
+        body=None,
+        label_name=None,
+        source_kind="issue",
+        source_number=event_id,
+        source_repository_full_name=None,
+    )
+
+
+def _make_cross_referenced_event(
+    event_id: int,
+    source_kind: str,
+    source_repository_full_name: str,
+    created_at: str,
+) -> GitHubIssueTimelineEvent:
+    return GitHubIssueTimelineEvent(
+        id=f"CRE_{event_id}",
+        event="cross_referenced",
+        actor=GitHubActor(login="Hiroshiba"),
+        created_at=created_at,
+        comment_database_id=None,
+        body=None,
+        label_name=None,
+        source_kind=source_kind,
+        source_number=event_id,
+        source_repository_full_name=source_repository_full_name,
     )
 
 
@@ -272,7 +304,7 @@ def test_過去nextがAI判断対象なら履歴を更新しない() -> None:
     assert result.command == "requirements"
 
 
-def test_過去nextのbreakdown判断結果は履歴として再生される() -> None:
+def test_サブissue追加eventはbreakdown履歴として再生される() -> None:
     target = _make_target("issue", "github")
 
     with pytest.raises(NextResolutionError, match="breakdown 後"):
@@ -280,9 +312,8 @@ def test_過去nextのbreakdown判断結果は履歴として再生される() -
             target,
             [
                 *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
-                _make_next_decision_comment(
+                _make_sub_issue_added_event(
                     100,
-                    "breakdown",
                     "2026-05-15T00:06:00Z",
                 ),
             ],
@@ -291,7 +322,7 @@ def test_過去nextのbreakdown判断結果は履歴として再生される() -
         )
 
 
-def test_過去nextのimplement判断結果は履歴として再生される() -> None:
+def test_同一repoのpr_cross_referenceはimplement履歴として再生される() -> None:
     target = _make_target("issue", "github")
 
     with pytest.raises(NextResolutionError, match="implement 後"):
@@ -299,9 +330,10 @@ def test_過去nextのimplement判断結果は履歴として再生される() -
             target,
             [
                 *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
-                _make_next_decision_comment(
+                _make_cross_referenced_event(
                     100,
-                    "implement",
+                    "pull_request",
+                    "org/repo",
                     "2026-05-15T00:06:00Z",
                 ),
             ],
@@ -310,7 +342,51 @@ def test_過去nextのimplement判断結果は履歴として再生される() -
         )
 
 
-def test_humanのnext判断履歴コメントは無視される() -> None:
+def test_issueのcross_referenceは無視される() -> None:
+    target = _make_target("issue", "github")
+
+    result = _resolve_github_timeline(
+        target,
+        [
+            *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
+            _make_cross_referenced_event(
+                100,
+                "issue",
+                "org/repo",
+                "2026-05-15T00:06:00Z",
+            ),
+            _make_comment(101, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:07:00Z"),
+        ],
+        None,
+        _make_next_command(target, None),
+    )
+
+    assert result.command == "requirements"
+
+
+def test_別repoのpr_cross_referenceは無視される() -> None:
+    target = _make_target("issue", "github")
+
+    result = _resolve_github_timeline(
+        target,
+        [
+            *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
+            _make_cross_referenced_event(
+                100,
+                "pull_request",
+                "other/repo",
+                "2026-05-15T00:06:00Z",
+            ),
+            _make_comment(101, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:07:00Z"),
+        ],
+        None,
+        _make_next_command(target, None),
+    )
+
+    assert result.command == "requirements"
+
+
+def test_next判断履歴コメントは無視される() -> None:
     target = _make_target("issue", "github")
 
     result = _resolve_github_timeline(
@@ -319,8 +395,8 @@ def test_humanのnext判断履歴コメントは無視される() -> None:
             *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
             _make_comment(
                 100,
-                format_next_decision_history_comment("breakdown"),
-                "Hiroshiba",
+                "<!-- vv-ai-next-decision: command=breakdown -->",
+                "vv-ai-public-read-github-app[bot]",
                 "2026-05-15T00:06:00Z",
             ),
             _make_comment(101, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:07:00Z"),
