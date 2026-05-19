@@ -51,7 +51,7 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
     ),
     "implement": (
         "以下の Issue の内容を実装してください。\n"
-        "ファイル変更のみ行ってください。git の操作は不要です。\n"
+        "ファイル変更のみ行ってください。\n"
         "終了後にワーキングツリーの全変更が git add -A でコミットされます。\n"
         "一時ファイルやキャッシュは削除してから終了してください。\n"
         "出力は作成する PR のタイトル、コミットメッセージ、本文として使います。\n"
@@ -95,7 +95,7 @@ _NEXT_DECISION_TASK_DESCRIPTION: str = (
 
 _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
     "この PR の内容・コメントの指示に基づいて追加実装してください。"
-    "ファイル変更のみ行ってください。git の操作は不要です。"
+    "ファイル変更のみ行ってください。"
     "終了後にワーキングツリーの全変更が git add -A でコミットされます。"
     "GitHub 実行時は、あなたの最終出力の本文が対象 PR にコメントとして投稿されます。"
     "fork PR で push できず patch コメントを投稿する場合、あなたの最終出力の本文は patch コメント内に含まれます。"
@@ -111,7 +111,7 @@ _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
 
 _ADDRESS_TASK_DESCRIPTION: str = (
     "address-review スキルを使って、この PR のレビュー指摘に対応してください。"
-    "ファイル変更のみ行ってください。git の操作は不要です。"
+    "ファイル変更のみ行ってください。"
     "終了後にワーキングツリーの全変更が git add -A でコミットされます。"
     "GitHub 実行時は、あなたの最終出力の本文が対象 PR にコメントとして投稿されます。"
     "fork PR で push できず patch コメントを投稿する場合、あなたの最終出力の本文は patch コメント内に含まれます。"
