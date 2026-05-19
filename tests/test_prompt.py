@@ -275,6 +275,18 @@ class TestAddressPrompt:
         assert "address-review スキルを使って" in prompt
         assert "レビュー指摘に対応してください。" in prompt
 
+    def test_prompt_mentions_issue_scope_for_review_response(self) -> None:
+        prompt = _build_prompt("pr", "address")
+
+        assert "元 Issue と親 Issue も判断材料にし" in prompt
+        assert "今回の PR で扱う根拠がある指摘だけを実装してください。" in prompt
+
+    def test_prompt_mentions_deferred_review_response(self) -> None:
+        prompt = _build_prompt("pr", "address")
+
+        assert "後続タスク、別タスク、別 Issue 化候補、判断根拠が足りない指摘は実装せず" in prompt
+        assert "必要な確認をコメントしてください。" in prompt
+
     def test_prompt_mentions_commit_message_format(self) -> None:
         prompt = _build_prompt("pr", "address")
 
