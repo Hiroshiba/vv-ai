@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 from pathlib import Path
+from typing import Literal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -163,6 +164,36 @@ def _make_github_labeled_event(
         actor=GitHubActor(login="Hiroshiba"),
         created_at="2026-05-08T00:00:00Z",
         body=None,
+    )
+
+
+def _make_github_sub_issue_added_event(event_id: int) -> GitHubIssueTimelineEvent:
+    """テスト用 GitHubIssueTimelineEvent sub_issue_added を生成する。"""
+    return GitHubIssueTimelineEvent(
+        id=event_id,
+        event="sub_issue_added",
+        actor=GitHubActor(login="other-user"),
+        created_at="2026-05-08T00:00:00Z",
+        source_kind="issue",
+        source_number=2,
+        source_repository_full_name="org/repo",
+    )
+
+
+def _make_github_cross_referenced_event(
+    event_id: int,
+    source_kind: Literal["issue", "pull_request"],
+    source_repository_full_name: str,
+) -> GitHubIssueTimelineEvent:
+    """テスト用 GitHubIssueTimelineEvent cross_referenced を生成する。"""
+    return GitHubIssueTimelineEvent(
+        id=event_id,
+        event="cross_referenced",
+        actor=GitHubActor(login="other-user"),
+        created_at="2026-05-08T00:00:00Z",
+        source_kind=source_kind,
+        source_number=3,
+        source_repository_full_name=source_repository_full_name,
     )
 
 
@@ -602,6 +633,86 @@ class TestNextDryRun:
                 _make_github_timeline_comment(1002, "@vv-ai arch"),
                 _make_github_timeline_comment(1003, "@vv-ai detail"),
                 _make_github_timeline_comment(1004, "@vv-ai breakdown"),
+            ]
+            exit_code = main(argv)
+
+        assert exit_code == 2
+        resolve_session.assert_not_called()
+        execute_provider.assert_not_called()
+
+    def test_issue_after_sub_issue_added_exits_two_without_provider(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "next",
+            "--target-url", "https://github.com/org/repo/issues/1",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "未使用")
+        mock_gh = MagicMock()
+        mock_gh.get_issue_parent_number.return_value = None
+
+        with contextlib.ExitStack() as stack:
+            resolve_session, execute_provider = _enter_next_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            mock_gh.list_issue_timeline_events.return_value = [
+                _make_github_timeline_comment(1000, "@vv-ai confirm"),
+                _make_github_timeline_comment(1001, "@vv-ai requirements"),
+                _make_github_timeline_comment(1002, "@vv-ai arch"),
+                _make_github_timeline_comment(1003, "@vv-ai detail"),
+                _make_github_sub_issue_added_event(1004),
+            ]
+            exit_code = main(argv)
+
+        assert exit_code == 2
+        resolve_session.assert_not_called()
+        execute_provider.assert_not_called()
+
+    def test_issue_after_same_repo_pr_cross_reference_exits_two_without_provider(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        argv = [
+            "--command", "next",
+            "--target-url", "https://github.com/org/repo/issues/1",
+            "--provider", "codex",
+            "--session_mode", "new",
+            "--dry-run",
+        ]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "未使用")
+        mock_gh = MagicMock()
+        mock_gh.get_issue_parent_number.return_value = None
+
+        with contextlib.ExitStack() as stack:
+            resolve_session, execute_provider = _enter_next_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            mock_gh.list_issue_timeline_events.return_value = [
+                _make_github_timeline_comment(1000, "@vv-ai confirm"),
+                _make_github_timeline_comment(1001, "@vv-ai requirements"),
+                _make_github_timeline_comment(1002, "@vv-ai arch"),
+                _make_github_timeline_comment(1003, "@vv-ai detail"),
+                _make_github_cross_referenced_event(
+                    1004,
+                    "pull_request",
+                    "org/repo",
+                ),
             ]
             exit_code = main(argv)
 

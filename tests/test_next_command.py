@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -149,11 +150,12 @@ def _make_label_events(commands: list[str]) -> list[GitHubIssueTimelineEvent]:
 def _make_sub_issue_added_event(
     event_id: int,
     created_at: str,
+    actor: str,
 ) -> GitHubIssueTimelineEvent:
     return GitHubIssueTimelineEvent(
         id=event_id,
         event="sub_issue_added",
-        actor=GitHubActor(login="Hiroshiba"),
+        actor=GitHubActor(login=actor),
         created_at=created_at,
         source_kind="issue",
         source_number=2,
@@ -164,15 +166,17 @@ def _make_sub_issue_added_event(
 def _make_cross_referenced_event(
     event_id: int,
     created_at: str,
+    source_kind: Literal["issue", "pull_request"],
+    source_repository_full_name: str,
 ) -> GitHubIssueTimelineEvent:
     return GitHubIssueTimelineEvent(
         id=event_id,
         event="cross_referenced",
         actor=GitHubActor(login="Hiroshiba"),
         created_at=created_at,
-        source_kind="pull_request",
+        source_kind=source_kind,
         source_number=3,
-        source_repository_full_name="org/repo",
+        source_repository_full_name=source_repository_full_name,
     )
 
 
@@ -385,6 +389,112 @@ def test_issueのimplement後のnextは失敗する() -> None:
         )
 
 
+def test_issueのsub_issue_added後のnextはbreakdown後として失敗する() -> None:
+    target = _make_target("issue", "github")
+
+    with pytest.raises(NextResolutionError, match="breakdown 後"):
+        _resolve_github_timeline(
+            target,
+            [
+                *_make_comments(["confirm", "requirements", "arch", "detail"]),
+                _make_sub_issue_added_event(
+                    10,
+                    "2026-05-15T00:05:00Z",
+                    "other-user",
+                ),
+            ],
+            None,
+            _make_next_command(target, None),
+        )
+
+
+def test_issueの同一repo_pr_cross_reference後のnextはimplement後として失敗する() -> None:
+    target = _make_target("issue", "github")
+
+    with pytest.raises(NextResolutionError, match="implement 後"):
+        _resolve_github_timeline(
+            target,
+            [
+                *_make_comments(["confirm", "requirements", "arch", "detail"]),
+                _make_cross_referenced_event(
+                    10,
+                    "2026-05-15T00:05:00Z",
+                    "pull_request",
+                    "org/repo",
+                ),
+            ],
+            None,
+            _make_next_command(target, None),
+        )
+
+
+def test_issue由来cross_referenceは履歴に入らない() -> None:
+    target = _make_target("issue", "github")
+
+    result = _resolve_github_timeline(
+        target,
+        [
+            *_make_comments(["confirm", "requirements", "arch", "detail"]),
+            _make_cross_referenced_event(
+                10,
+                "2026-05-15T00:05:00Z",
+                "issue",
+                "org/repo",
+            ),
+        ],
+        None,
+        _make_next_command(target, None),
+    )
+
+    assert result.command == "next"
+
+
+def test_別repo_pr_cross_referenceは履歴に入らない() -> None:
+    target = _make_target("issue", "github")
+
+    result = _resolve_github_timeline(
+        target,
+        [
+            *_make_comments(["confirm", "requirements", "arch", "detail"]),
+            _make_cross_referenced_event(
+                10,
+                "2026-05-15T00:05:00Z",
+                "pull_request",
+                "other/repo",
+            ),
+        ],
+        None,
+        _make_next_command(target, None),
+    )
+
+    assert result.command == "next"
+
+
+def test_pr_targetの成果物eventは履歴に入らない() -> None:
+    target = _make_target("pr", "github")
+
+    result = _resolve_github_timeline(
+        target,
+        [
+            _make_sub_issue_added_event(
+                10,
+                "2026-05-15T00:01:00Z",
+                "Hiroshiba",
+            ),
+            _make_cross_referenced_event(
+                11,
+                "2026-05-15T00:02:00Z",
+                "pull_request",
+                "org/repo",
+            ),
+        ],
+        None,
+        _make_next_command(target, None),
+    )
+
+    assert result.command == "review"
+
+
 def test_prの履歴なしnextはreviewに解決される() -> None:
     result = _resolve_github(_make_target("pr", "github"), [], [], None, None)
 
@@ -553,6 +663,23 @@ def test_同じcreated_atのコメントはidで境界を切る() -> None:
     assert result.command == "requirements"
 
 
+def test_コメント境界はtimeline_event_idではなくcomment_database_idで切る() -> None:
+    comments = [
+        _make_comment(10, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:01:00Z"),
+        _make_comment(
+            1000,
+            "@vv-ai next",
+            "Hiroshiba",
+            "2026-05-15T00:02:00Z",
+        ).model_copy(update={"comment_database_id": 11}),
+        _make_comment(12, "@vv-ai requirements", "Hiroshiba", "2026-05-15T00:03:00Z"),
+    ]
+
+    result = _resolve_github(_make_target("issue", "github"), comments, [], None, 11)
+
+    assert result.command == "requirements"
+
+
 def test_comment_idがあるのに現在コメントが見つからない場合は失敗する() -> None:
     with pytest.raises(NextResolutionError):
         _resolve_github(_make_target("issue", "github"), [], [], None, 999)
@@ -623,12 +750,16 @@ def test_ラベルrequirements後のコメントnextはarchに解決される() 
     assert result.command == "arch"
 
 
-def test_コマンドではないtimeline_eventは履歴に入らない() -> None:
+def test_履歴対象外のtimeline_eventは履歴に入らない() -> None:
     target = _make_target("issue", "github")
     timeline_events = [
         _make_comment(1, "@vv-ai confirm", "Hiroshiba", "2026-05-15T00:01:00Z"),
-        _make_sub_issue_added_event(10, "2026-05-15T00:02:00Z"),
-        _make_cross_referenced_event(11, "2026-05-15T00:03:00Z"),
+        _make_cross_referenced_event(
+            11,
+            "2026-05-15T00:03:00Z",
+            "issue",
+            "org/repo",
+        ),
         _make_comment(2, "@vv-ai next", "Hiroshiba", "2026-05-15T00:04:00Z"),
     ]
 
