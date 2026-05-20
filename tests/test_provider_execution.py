@@ -13,10 +13,7 @@ import pytest
 from vv_ai.config import VVAIConfig
 from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.claude import execute_claude as _execute_claude
-from vv_ai.providers.codex import (
-    _build_codex_provider_prompt,
-    execute_codex as _execute_codex,
-)
+from vv_ai.providers.codex import execute_codex as _execute_codex
 from vv_ai.providers.environment import build_codex_env as _build_codex_env
 from vv_ai.providers.runner import ProviderExecutionError
 from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
@@ -24,6 +21,7 @@ from vv_ai.providers.sessions import (
     deploy_codex_session_dir as _deploy_codex_session_dir,
     resolve_codex_session_dir as _resolve_codex_session_dir,
 )
+from vv_ai.prompts.codex import build_codex_provider_prompt
 from vv_ai.inputs.resolve import ResolvedCommand
 from vv_ai.sessions.models import ResolvedSession, SessionKey
 
@@ -292,7 +290,7 @@ def test_execute_codex_does_not_sync_work_dir_when_session_resolve_fails(
 
 def test_build_codex_provider_prompt_mentions_work_dir() -> None:
     """Codex provider prompt は作業用ディレクトリの編集指示を含む。"""
-    prompt = _build_codex_provider_prompt(
+    prompt = build_codex_provider_prompt(
         "元の指示",
         Path(".vv-ai/codex-work"),
     )

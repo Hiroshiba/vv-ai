@@ -30,6 +30,7 @@ from vv_ai.providers.assets import (
 from vv_ai.providers.environment import build_codex_env, resolve_codex_home_from_env
 from vv_ai.providers.runner import ProviderExecutionError
 from vv_ai.providers.sessions import deploy_codex_session_dir, resolve_codex_session_dir
+from vv_ai.prompts.codex import build_codex_provider_prompt
 from vv_ai.sessions.models import SessionStateRef
 
 _CODEX_SHELL_ENV_ALLOWLIST = json.dumps(
@@ -77,7 +78,7 @@ def execute_codex(
             deploy_codex_session_dir(session.restored_provider_session_path, codex_home)
         _deploy_codex_assets_before_execution(env, codex_home)
         work_dir = _prepare_codex_work_dir(repo_root)
-        codex_provider_prompt = _build_codex_provider_prompt(
+        codex_provider_prompt = build_codex_provider_prompt(
             provider_prompt,
             _CODEX_WORK_DIR_RELATIVE_PATH,
         )
@@ -207,27 +208,6 @@ def _sync_codex_work_dir(repo_root: Path, work_dir: Path) -> None:
         raise ProviderExecutionError(
             f"Codex provider asset 作業用ディレクトリの同期に失敗しました: {exc}"
         ) from exc
-
-
-def _build_codex_provider_prompt(provider_prompt: str, work_dir: Path) -> str:
-    """Codex provider 固有の作業用ディレクトリ指示を追加する。"""
-    work_dir_text = work_dir.as_posix()
-    return "\n\n".join(
-        [
-            provider_prompt,
-            "\n".join(
-                [
-                    "Codex provider asset の編集指示",
-                    "",
-                    "- `.codex/` は直接編集しないでください。",
-                    "- Codex 用 provider asset を変更する場合は "
-                    f"`{work_dir_text}/AGENTS.md`、`{work_dir_text}/skills/`、"
-                    f"`{work_dir_text}/agents/` を編集してください。",
-                    f"- 実行後に vv-ai が `{work_dir_text}/` から `.codex/` へ同期します。",
-                ]
-            ),
-        ]
-    )
 
 
 def _parse_codex_jsonl(jsonl_stdout: str, result_text: str) -> _CodexOutput:
