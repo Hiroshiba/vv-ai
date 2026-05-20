@@ -9,10 +9,10 @@ import pytest
 
 from vv_ai.cli import _run_ready_execution
 from vv_ai.commands.post_execution import (
+    _handle_breakdown_post_execution,
     _handle_implement_issue_post_execution,
     _handle_pr_change_post_execution,
     _handle_issue_post_execution,
-    _post_next_decision_history_comment,
     _post_response_comment,
 )
 from vv_ai.config import VVAIConfig
@@ -174,41 +174,6 @@ def _make_github_pr(
     )
 
 
-def test_next判断履歴コメントを投稿する() -> None:
-    ready = _make_ready_execution(
-        command=_make_command(
-            command="breakdown",
-            dry_run=False,
-        )
-    )
-    result = _make_execution_result("success")
-    github_client = MagicMock()
-
-    _post_next_decision_history_comment(ready, result, github_client, "breakdown")
-
-    github_client.create_issue_comment.assert_called_once()
-    args = github_client.create_issue_comment.call_args.args
-    assert args[0] == "org/repo"
-    assert args[1] == 1
-    assert "vv-ai-next-decision" in args[2]
-    assert "command=breakdown" in args[2]
-
-
-def test_next判断履歴コメントは失敗時に投稿しない() -> None:
-    ready = _make_ready_execution(
-        command=_make_command(
-            command="implement",
-            dry_run=False,
-        )
-    )
-    result = _make_execution_result("failure")
-    github_client = MagicMock()
-
-    _post_next_decision_history_comment(ready, result, github_client, "implement")
-
-    github_client.create_issue_comment.assert_not_called()
-
-
 class TestDryRunSuppression:
     def test_dryrun_suppresses_implement_issue_push(self) -> None:
         ready = _make_ready_execution(command=_make_command(command="implement"))
@@ -327,6 +292,64 @@ class TestDryRunSuppression:
             1,
             "返答です",
         )
+
+
+class TestBreakdownPostExecution:
+    def test_add_sub_issue失敗時は例外を伝播する(self, tmp_path: Path) -> None:
+        breakdown_dir = tmp_path / "hiho_temp" / "tasks"
+        breakdown_dir.mkdir(parents=True)
+        (breakdown_dir / "01.md").write_text(
+            "TITLE: テストタスク\nBODY:\n本文",
+            encoding="utf-8",
+        )
+        ready = _make_ready_execution(
+            command=_make_command(command="breakdown", dry_run=False)
+        )
+        result = _make_execution_result(
+            "success",
+            response_text=f"BREAKDOWN_DIR: {breakdown_dir}",
+        )
+        github_client = MagicMock()
+        github_client.create_issue.return_value = _make_github_issue()
+        github_client.add_sub_issue.side_effect = GitHubClientError("失敗")
+
+        with pytest.raises(GitHubClientError, match="失敗"):
+            _handle_breakdown_post_execution(tmp_path, ready, result, github_client)
+
+        github_client.add_sub_issue.assert_called_once_with("org/repo", 1, 1)
+        github_client.create_issue_comment.assert_not_called()
+
+    def test_サマリコメント投稿失敗時は続行する(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        breakdown_dir = tmp_path / "hiho_temp" / "tasks"
+        breakdown_dir.mkdir(parents=True)
+        (breakdown_dir / "01.md").write_text(
+            "TITLE: テストタスク\nBODY:\n本文",
+            encoding="utf-8",
+        )
+        ready = _make_ready_execution(
+            command=_make_command(
+                command="breakdown",
+                dry_run=False,
+                comment_id=100,
+            )
+        )
+        result = _make_execution_result(
+            "success",
+            response_text=f"BREAKDOWN_DIR: {breakdown_dir}",
+        )
+        github_client = MagicMock()
+        github_client.create_issue.return_value = _make_github_issue()
+        github_client.create_issue_comment.side_effect = GitHubClientError("失敗")
+
+        _handle_breakdown_post_execution(tmp_path, ready, result, github_client)
+
+        github_client.add_sub_issue.assert_called_once_with("org/repo", 1, 1)
+        github_client.create_issue_comment.assert_called_once()
+        assert "サマリコメント投稿に失敗しました" in capsys.readouterr().err
 
 
 class TestImplementResponseComment:

@@ -8,10 +8,7 @@ from pathlib import Path
 
 from vv_ai.backends.github.client import GitHubClient, build_github_client
 from vv_ai.backends.github.models import GitHubPullRequest
-from vv_ai.commands.post_execution import (
-    _post_next_decision_history_comment,
-    handle_post_execution,
-)
+from vv_ai.commands.post_execution import handle_post_execution
 from vv_ai.commands.reactions import add_reaction_safely, finalize_reactions
 from vv_ai.executions.result import ExecutionResult, ExecutionStatus
 from vv_ai.git.operations import (
@@ -25,7 +22,7 @@ from vv_ai.git.operations import (
     setup_upstream_remote,
 )
 from vv_ai.workflow.preflight import ReadyExecution
-from vv_ai.next_decision import NextDecisionCommand, parse_next_decision_response
+from vv_ai.next_decision import parse_next_decision_response
 from vv_ai.prompts.build import build_next_decision_prompt, build_provider_prompt
 from vv_ai.providers.runner import execute_provider
 from vv_ai.inputs.resolve import ResolvedTarget
@@ -96,11 +93,9 @@ def run_command(
     execution_result: ExecutionResult | None = None
     created_pr: GitHubPullRequest | None = None
     finalize_status: ExecutionStatus = "failure"
-    next_decision_command: NextDecisionCommand | None = None
     primary_error: BaseException | None = None
     try:
         try:
-            requires_next_decision = command.command == "next"
             decision_result = _resolve_next_decision_command(
                 repo_root,
                 ready_execution,
@@ -115,10 +110,6 @@ def run_command(
 
             command = ready_execution.command
             target = command.target
-            if requires_next_decision and (
-                command.command == "breakdown" or command.command == "implement"
-            ):
-                next_decision_command = command.command
             _validate_command_target(command.command, target)
 
             if command.command == "sync":
@@ -239,12 +230,6 @@ def run_command(
                 env,
             )
             assert execution_result is not None
-            _post_next_decision_history_comment(
-                ready_execution,
-                execution_result,
-                github_client,
-                next_decision_command,
-            )
             finalize_status = execution_result.status
         except BaseException as exc:
             primary_error = exc

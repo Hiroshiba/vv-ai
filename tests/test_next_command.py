@@ -10,7 +10,6 @@ import pytest
 
 from vv_ai.config import VVAIConfig
 from vv_ai.backends.github.models import GitHubActor, GitHubIssueTimelineEvent
-from vv_ai.next_decision import format_next_decision_history_comment
 from vv_ai.commands.next import NextResolutionError, resolve_next_command
 from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
@@ -113,7 +112,8 @@ def _make_next_decision_comment(
 ) -> GitHubIssueTimelineEvent:
     return _make_comment(
         comment_id,
-        format_next_decision_history_comment(command),
+        f"`next` は `{command}` を選択しました。\n\n"
+        f"<!-- vv-ai-next-decision: command={command} -->",
         "vv-ai-public-read-github-app[bot]",
         created_at,
     )
@@ -307,42 +307,44 @@ def test_過去nextがAI判断対象なら履歴を更新しない() -> None:
     assert result.command == "requirements"
 
 
-def test_過去nextのbreakdown判断結果は履歴として再生される() -> None:
+def test_過去nextのbreakdown判断コメントは履歴として読まない() -> None:
     target = _make_target("issue", "github")
 
-    with pytest.raises(NextResolutionError, match="breakdown 後"):
-        _resolve_github_timeline(
-            target,
-            [
-                *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
-                _make_next_decision_comment(
-                    100,
-                    "breakdown",
-                    "2026-05-15T00:06:00Z",
-                ),
-            ],
-            None,
-            _make_next_command(target, None),
-        )
+    result = _resolve_github_timeline(
+        target,
+        [
+            *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
+            _make_next_decision_comment(
+                100,
+                "breakdown",
+                "2026-05-15T00:06:00Z",
+            ),
+        ],
+        None,
+        _make_next_command(target, None),
+    )
+
+    assert result.command == "next"
 
 
-def test_過去nextのimplement判断結果は履歴として再生される() -> None:
+def test_過去nextのimplement判断コメントは履歴として読まない() -> None:
     target = _make_target("issue", "github")
 
-    with pytest.raises(NextResolutionError, match="implement 後"):
-        _resolve_github_timeline(
-            target,
-            [
-                *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
-                _make_next_decision_comment(
-                    100,
-                    "implement",
-                    "2026-05-15T00:06:00Z",
-                ),
-            ],
-            None,
-            _make_next_command(target, None),
-        )
+    result = _resolve_github_timeline(
+        target,
+        [
+            *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
+            _make_next_decision_comment(
+                100,
+                "implement",
+                "2026-05-15T00:06:00Z",
+            ),
+        ],
+        None,
+        _make_next_command(target, None),
+    )
+
+    assert result.command == "next"
 
 
 def test_humanのnext判断履歴コメントは無視される() -> None:
@@ -354,7 +356,8 @@ def test_humanのnext判断履歴コメントは無視される() -> None:
             *_make_comments(["confirm", "requirements", "arch", "detail", "next"]),
             _make_comment(
                 100,
-                format_next_decision_history_comment("breakdown"),
+                "`next` は `breakdown` を選択しました。\n\n"
+                "<!-- vv-ai-next-decision: command=breakdown -->",
                 "Hiroshiba",
                 "2026-05-15T00:06:00Z",
             ),
