@@ -118,23 +118,6 @@ def _make_requirements_ready_execution() -> ReadyExecution:
     )
 
 
-def _make_review_ready_execution() -> ReadyExecution:
-    """review 用の ReadyExecution を生成する。"""
-    return ReadyExecution(
-        command=ResolvedCommand(
-            event_name="issue_comment",
-            command="review",
-            has_target=True,
-            dry_run=False,
-            repository_full_name="org/repo",
-            target=_make_target("pr", 1),
-        ),
-        config=VVAIConfig(allowed_users=["Hiroshiba"]),
-        resolved_provider=_make_provider(),
-        workflow_id="test-run-1",
-    )
-
-
 def _make_next_ready_execution() -> ReadyExecution:
     """next 用の ReadyExecution を生成する。"""
     return ReadyExecution(
@@ -190,16 +173,6 @@ def _build_requirements_prompt() -> str:
     """requirements の provider prompt を生成する。"""
     return build_provider_prompt(
         ready_execution=_make_requirements_ready_execution(),
-        target_context_block="テストコンテキスト",
-        implement_branch_name=None,
-        worktree_ref=None,
-    )
-
-
-def _build_review_prompt() -> str:
-    """review の provider prompt を生成する。"""
-    return build_provider_prompt(
-        ready_execution=_make_review_ready_execution(),
         target_context_block="テストコンテキスト",
         implement_branch_name=None,
         worktree_ref=None,
@@ -380,32 +353,6 @@ class TestAddressPrompt:
         prompt = _build_prompt("pr", "address")
 
         assert "追加実装してください。" not in prompt
-
-
-class TestReviewPrompt:
-    """review の provider prompt を検証する。"""
-
-    def test_prompt_requests_current_whole_pr_diff(self) -> None:
-        prompt = _build_review_prompt()
-
-        assert "この PR の現時点の全体 diff をレビューしてください。" in prompt
-
-    def test_prompt_forbids_narrow_review_scope(self) -> None:
-        prompt = _build_review_prompt()
-
-        assert (
-            "前回レビュー、最新コミット、前回指摘の修正だけに限定しないでください。"
-            in prompt
-        )
-
-    def test_prompt_forbids_incremental_findings(self) -> None:
-        prompt = _build_review_prompt()
-
-        assert (
-            "途中レビューや小出しの指摘を出さず、全変更ファイルと全 hunk の確認を終えてから"
-            "最終結果だけを出してください。"
-            in prompt
-        )
 
 
 class TestBreakdownPrompt:
