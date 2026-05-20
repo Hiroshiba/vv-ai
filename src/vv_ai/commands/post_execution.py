@@ -363,12 +363,12 @@ def _handle_breakdown_post_execution(
 
     repo = target.repository_full_name
 
-    created: list[GitHubIssue] = []
-    for title, body in tasks:
-        issue = github_client.create_issue(repo, title, body)
-        github_client.add_sub_issue(repo, target.number, issue.id)
-        created.append(issue)
-        print(f"サブ Issue を作成しました: {issue.url}")
+    created = _create_breakdown_sub_issues(
+        github_client,
+        repo,
+        target.number,
+        tasks,
+    )
 
     if command.comment_id is not None and target.repository_full_name is not None:
         links = "\n".join(f"- {issue.url}" for issue in created)
@@ -381,6 +381,42 @@ def _handle_breakdown_post_execution(
             )
         except GitHubClientError as exc:
             print(f"サマリコメント投稿に失敗しました: {exc}", file=sys.stderr)
+
+
+def _create_breakdown_sub_issues(
+    github_client: GitHubClient,
+    repo: str,
+    parent_number: int,
+    tasks: list[tuple[str, str]],
+) -> list[GitHubIssue]:
+    created: list[GitHubIssue] = []
+    linked_issue_ids: list[int] = []
+    try:
+        for title, body in tasks:
+            issue = github_client.create_issue(repo, title, body)
+            github_client.add_sub_issue(repo, parent_number, issue.id)
+            linked_issue_ids.append(issue.id)
+            created.append(issue)
+            print(f"サブ Issue を作成しました: {issue.url}")
+    except GitHubClientError:
+        _rollback_breakdown_sub_issues(
+            github_client,
+            repo,
+            parent_number,
+            linked_issue_ids,
+        )
+        raise
+    return created
+
+
+def _rollback_breakdown_sub_issues(
+    github_client: GitHubClient,
+    repo: str,
+    parent_number: int,
+    linked_issue_ids: list[int],
+) -> None:
+    for child_issue_id in reversed(linked_issue_ids):
+        github_client.remove_sub_issue(repo, parent_number, child_issue_id)
 
 
 def _post_response_comment(

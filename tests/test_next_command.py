@@ -242,9 +242,26 @@ def _resolve_github_timeline(
     parent_number: int | None,
     command: ResolvedCommand,
 ) -> ResolvedCommand:
+    return _resolve_github_timeline_with_sub_issues(
+        target,
+        timeline_events,
+        parent_number,
+        False,
+        command,
+    )
+
+
+def _resolve_github_timeline_with_sub_issues(
+    target: ResolvedTarget,
+    timeline_events: list[GitHubIssueTimelineEvent],
+    parent_number: int | None,
+    has_sub_issues: bool,
+    command: ResolvedCommand,
+) -> ResolvedCommand:
     github_client = MagicMock()
     github_client.list_issue_timeline_events.return_value = timeline_events
     github_client.get_issue_parent_number.return_value = parent_number
+    github_client.has_issue_sub_issues.return_value = has_sub_issues
     with patch("vv_ai.commands.next.build_github_client", return_value=github_client):
         return resolve_next_command(Path("/dummy"), command, _make_config())
 
@@ -392,23 +409,37 @@ def test_issueのimplement後のnextは失敗する() -> None:
         )
 
 
-def test_issueのsub_issue_added後のnextはbreakdown後として失敗する() -> None:
+def test_issueが現在サブissueを持つnextはbreakdown後として失敗する() -> None:
     target = _make_target("issue", "github")
 
     with pytest.raises(NextResolutionError, match="breakdown 後"):
-        _resolve_github_timeline(
+        _resolve_github_timeline_with_sub_issues(
             target,
-            [
-                *_make_comments(["confirm", "requirements", "arch", "detail"]),
-                _make_sub_issue_added_event(
-                    10,
-                    "2026-05-15T00:05:00Z",
-                    "other-user",
-                ),
-            ],
+            _make_comments(["confirm", "requirements", "arch", "detail"]),
             None,
+            True,
             _make_next_command(target, None),
         )
+
+
+def test_issueのsub_issue_added履歴だけではbreakdown後として扱わない() -> None:
+    target = _make_target("issue", "github")
+
+    result = _resolve_github_timeline(
+        target,
+        [
+            *_make_comments(["confirm", "requirements", "arch", "detail"]),
+            _make_sub_issue_added_event(
+                10,
+                "2026-05-15T00:05:00Z",
+                "other-user",
+            ),
+        ],
+        None,
+        _make_next_command(target, None),
+    )
+
+    assert result.command == "next"
 
 
 def test_issueの同一repo_pr_cross_reference後のnextはimplement後として失敗する() -> None:

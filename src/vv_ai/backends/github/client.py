@@ -122,6 +122,26 @@ query($owner: String!, $repo: String!, $number: Int!) {
             raise GitHubClientError("Issue 親番号取得結果の JSON 形式が不正です")
         return _build_issue_parent_number(payload)
 
+    def has_issue_sub_issues(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> bool:
+        """Issue が現在サブ Issue を持つかを返す。"""
+        payload = self._run_json(
+            [
+                "api",
+                (
+                    f"repos/{_require_repository_full_name(repository_full_name)}"
+                    f"/issues/{_require_positive_id(number, 'number')}/sub_issues"
+                    "?per_page=1"
+                ),
+            ]
+        )
+        if not isinstance(payload, list):
+            raise GitHubClientError("サブ Issue 一覧取得結果の JSON 形式が不正です")
+        return len(payload) > 0
+
     def get_pull_request(
         self,
         repository_full_name: str,
@@ -387,6 +407,28 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
                 (
                     f"repos/{_require_repository_full_name(repository_full_name)}"
                     f"/issues/{_require_positive_id(parent_number, 'parent_number')}/sub_issues"
+                ),
+                "-F",
+                f"sub_issue_id={_require_positive_id(child_issue_id, 'child_issue_id')}",
+            ]
+        )
+
+    def remove_sub_issue(
+        self,
+        repository_full_name: str,
+        parent_number: int,
+        child_issue_id: int,
+    ) -> None:
+        """親 Issue からサブ Issue の紐付けを解除する。"""
+        self._text_runner(
+            [
+                "gh",
+                "api",
+                "--method",
+                "DELETE",
+                (
+                    f"repos/{_require_repository_full_name(repository_full_name)}"
+                    f"/issues/{_require_positive_id(parent_number, 'parent_number')}/sub_issue"
                 ),
                 "-F",
                 f"sub_issue_id={_require_positive_id(child_issue_id, 'child_issue_id')}",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -153,6 +153,20 @@ def _make_github_issue() -> GitHubIssue:
     )
 
 
+def _make_github_issue_with_id(issue_id: int, number: int) -> GitHubIssue:
+    """テスト用の GitHubIssue を ID と番号指定で生成する。"""
+    return GitHubIssue(
+        id=issue_id,
+        repository_full_name="org/repo",
+        number=number,
+        title=f"テスト Issue {number}",
+        body="テスト本文",
+        state="OPEN",
+        author=GitHubActor(login="Hiroshiba"),
+        url=f"https://github.com/org/repo/issues/{number}",
+    )
+
+
 def _make_github_pr(
     number: int,
     is_cross_repository: bool,
@@ -295,11 +309,18 @@ class TestDryRunSuppression:
 
 
 class TestBreakdownPostExecution:
-    def test_add_sub_issue失敗時は例外を伝播する(self, tmp_path: Path) -> None:
+    def test_add_sub_issue失敗時は紐付け済みサブissueを解除する(
+        self,
+        tmp_path: Path,
+    ) -> None:
         breakdown_dir = tmp_path / "hiho_temp" / "tasks"
         breakdown_dir.mkdir(parents=True)
         (breakdown_dir / "01.md").write_text(
-            "TITLE: テストタスク\nBODY:\n本文",
+            "TITLE: テストタスク1\nBODY:\n本文",
+            encoding="utf-8",
+        )
+        (breakdown_dir / "02.md").write_text(
+            "TITLE: テストタスク2\nBODY:\n本文",
             encoding="utf-8",
         )
         ready = _make_ready_execution(
@@ -310,13 +331,20 @@ class TestBreakdownPostExecution:
             response_text=f"BREAKDOWN_DIR: {breakdown_dir}",
         )
         github_client = MagicMock()
-        github_client.create_issue.return_value = _make_github_issue()
-        github_client.add_sub_issue.side_effect = GitHubClientError("失敗")
+        github_client.create_issue.side_effect = [
+            _make_github_issue_with_id(11, 2),
+            _make_github_issue_with_id(12, 3),
+        ]
+        github_client.add_sub_issue.side_effect = [None, GitHubClientError("失敗")]
 
         with pytest.raises(GitHubClientError, match="失敗"):
             _handle_breakdown_post_execution(tmp_path, ready, result, github_client)
 
-        github_client.add_sub_issue.assert_called_once_with("org/repo", 1, 1)
+        assert github_client.add_sub_issue.call_args_list == [
+            call("org/repo", 1, 11),
+            call("org/repo", 1, 12),
+        ]
+        github_client.remove_sub_issue.assert_called_once_with("org/repo", 1, 11)
         github_client.create_issue_comment.assert_not_called()
 
     def test_サマリコメント投稿失敗時は続行する(
