@@ -5,4 +5,4 @@
 | 用語 | 説明 | 避けたい言い方 |
 | --- | --- | --- |
 | vv-ai | GitHub Issue や PR から AI 作業を起動するツール。 |  |
-| AIクライアント | Codex CLI や Claude Code などの実行ツール。 | provider |
+| AIクライアント | Codex CLI などの AI 作業をするツール。 | provider |
