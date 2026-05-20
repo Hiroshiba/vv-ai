@@ -304,6 +304,9 @@ def test_build_codex_provider_prompt_mentions_work_dir() -> None:
     assert "skills/" in prompt
     assert "agents/" in prompt
     assert "直接編集しない" in prompt
+    assert "作業用 mirror" in prompt
+    assert "未追跡のままで問題ありません" in prompt
+    assert ".gitignore" not in prompt
 
 
 def test_resolve_codex_session_dir_copies_only_sessions(tmp_path: Path) -> None:
