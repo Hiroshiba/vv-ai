@@ -156,7 +156,10 @@ def _resolve_current_comment_index(
     timeline_events: list[GitHubIssueTimelineEvent],
 ) -> int:
     for index, timeline_event in enumerate(timeline_events):
-        if timeline_event.event == "commented" and timeline_event.id == command.comment_id:
+        if (
+            timeline_event.event == "commented"
+            and timeline_event.comment_database_id == command.comment_id
+        ):
             return index
     raise NextResolutionError("現在処理中のコメントが履歴内に見つかりません")
 
@@ -199,9 +202,12 @@ def _build_github_history_entry(
         return NextHistoryEntry(
             command=bot_decision_command,
             created_at=timeline_event.created_at,
-            id=timeline_event.id,
+            id=timeline_event.comment_database_id,
             source="comment",
         )
+
+    if timeline_event.event not in {"commented", "labeled"}:
+        return None
 
     if timeline_event.actor.login not in config.allowed_users:
         return None
@@ -213,7 +219,9 @@ def _build_github_history_entry(
     return NextHistoryEntry(
         command=command,
         created_at=timeline_event.created_at,
-        id=timeline_event.id,
+        id=timeline_event.comment_database_id
+        if timeline_event.event == "commented"
+        else None,
         source="comment" if timeline_event.event == "commented" else "label",
     )
 

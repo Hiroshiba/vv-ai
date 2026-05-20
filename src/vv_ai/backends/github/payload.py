@@ -309,51 +309,139 @@ def _build_comment(raw_comment: object) -> GitHubComment:
 
 
 def _build_issue_timeline_event_list(
-    raw_events: list[object],
+    raw_pages: list[object],
 ) -> list[GitHubIssueTimelineEvent]:
-    """timeline event 配列 JSON を next 履歴用 model 配列へ変換する。"""
+    """GraphQL timelineItems JSON を next 履歴用 model 配列へ変換する。"""
     events: list[GitHubIssueTimelineEvent] = []
-    for raw_event in raw_events:
-        if not isinstance(raw_event, dict):
-            raise GitHubClientError("timeline event 要素の JSON 形式が不正です")
-        event_name = raw_event.get("event")
-        if event_name == "commented":
-            events.append(_build_issue_commented_timeline_event(raw_event))
-            continue
-        if event_name == "labeled":
-            events.append(_build_issue_labeled_timeline_event(raw_event))
+    for raw_page in raw_pages:
+        raw_nodes = _extract_timeline_item_nodes(raw_page)
+        for raw_event in raw_nodes:
+            events.append(_build_issue_timeline_event(raw_event))
     return events
+
+
+def _extract_timeline_item_nodes(raw_page: object) -> list[object]:
+    """GraphQL timelineItems ページから nodes を返す。"""
+    page = _require_mapping(raw_page, "timeline 取得結果のページ")
+    data = _require_mapping(page.get("data"), "data")
+    repository = _require_mapping(data.get("repository"), "repository")
+    issue_or_pull_request = _require_mapping(
+        repository.get("issueOrPullRequest"),
+        "issueOrPullRequest",
+    )
+    timeline_items = _require_mapping(
+        issue_or_pull_request.get("timelineItems"),
+        "timelineItems",
+    )
+    raw_nodes = timeline_items.get("nodes")
+    if not isinstance(raw_nodes, list):
+        raise GitHubClientError("timelineItems.nodes の JSON 形式が不正です")
+    return raw_nodes
+
+
+def _build_issue_timeline_event(raw_event: object) -> GitHubIssueTimelineEvent:
+    """GraphQL timeline item JSON を next 履歴用 model へ変換する。"""
+    if not isinstance(raw_event, dict):
+        raise GitHubClientError("timeline event 要素の JSON 形式が不正です")
+    type_name = raw_event.get("__typename")
+    if type_name == "IssueComment":
+        return _build_issue_commented_timeline_event(raw_event)
+    if type_name == "LabeledEvent":
+        return _build_issue_labeled_timeline_event(raw_event)
+    if type_name == "SubIssueAddedEvent":
+        return _build_sub_issue_added_timeline_event(raw_event)
+    if type_name == "CrossReferencedEvent":
+        return _build_cross_referenced_timeline_event(raw_event)
+    raise GitHubClientError(f"未対応の timeline event です: {type_name}")
 
 
 def _build_issue_commented_timeline_event(
     raw_event: dict[str, object],
 ) -> GitHubIssueTimelineEvent:
-    """commented event JSON を next 履歴用 model へ変換する。"""
+    """IssueComment JSON を next 履歴用 model へ変換する。"""
+    database_id = _require_int(raw_event.get("databaseId"), "IssueComment.databaseId")
     payload = {
-        "id": raw_event.get("id"),
+        "id": database_id,
         "event": "commented",
-        "actor": _build_rest_user(raw_event.get("user")),
-        "created_at": raw_event.get("created_at"),
+        "actor": _build_actor(raw_event.get("author")),
+        "created_at": raw_event.get("createdAt"),
         "body": _coerce_text(raw_event.get("body")),
         "label_name": None,
+        "comment_database_id": database_id,
+        "source_kind": None,
+        "source_number": None,
+        "source_repository_full_name": None,
     }
-    return _validate_model(GitHubIssueTimelineEvent, payload, "commented event")
+    return _validate_model(GitHubIssueTimelineEvent, payload, "IssueComment")
 
 
 def _build_issue_labeled_timeline_event(
     raw_event: dict[str, object],
 ) -> GitHubIssueTimelineEvent:
-    """labeled event JSON を next 履歴用 model へ変換する。"""
+    """LabeledEvent JSON を next 履歴用 model へ変換する。"""
     label = _require_mapping(raw_event.get("label"), "label")
     payload = {
-        "id": raw_event.get("id"),
+        "id": None,
         "event": "labeled",
-        "actor": _build_rest_user(raw_event.get("actor")),
-        "created_at": raw_event.get("created_at"),
+        "actor": _build_actor(raw_event.get("actor")),
+        "created_at": raw_event.get("createdAt"),
         "body": None,
         "label_name": label.get("name"),
+        "comment_database_id": None,
+        "source_kind": None,
+        "source_number": None,
+        "source_repository_full_name": None,
     }
-    return _validate_model(GitHubIssueTimelineEvent, payload, "labeled event")
+    return _validate_model(GitHubIssueTimelineEvent, payload, "LabeledEvent")
+
+
+def _build_sub_issue_added_timeline_event(
+    raw_event: dict[str, object],
+) -> GitHubIssueTimelineEvent:
+    """SubIssueAddedEvent JSON を next 履歴用 model へ変換する。"""
+    sub_issue = _require_mapping(raw_event.get("subIssue"), "subIssue")
+    repository = _require_mapping(sub_issue.get("repository"), "subIssue.repository")
+    payload = {
+        "id": None,
+        "event": "sub_issue_added",
+        "actor": _build_actor(raw_event.get("actor")),
+        "created_at": raw_event.get("createdAt"),
+        "body": None,
+        "label_name": None,
+        "comment_database_id": None,
+        "source_kind": "issue",
+        "source_number": sub_issue.get("number"),
+        "source_repository_full_name": repository.get("nameWithOwner"),
+    }
+    return _validate_model(GitHubIssueTimelineEvent, payload, "SubIssueAddedEvent")
+
+
+def _build_cross_referenced_timeline_event(
+    raw_event: dict[str, object],
+) -> GitHubIssueTimelineEvent:
+    """CrossReferencedEvent JSON を next 履歴用 model へ変換する。"""
+    source = _require_mapping(raw_event.get("source"), "source")
+    source_type = source.get("__typename")
+    if source_type == "Issue":
+        source_kind = "issue"
+    elif source_type == "PullRequest":
+        source_kind = "pull_request"
+    else:
+        raise GitHubClientError(f"未対応の cross reference source です: {source_type}")
+    repository = _require_mapping(source.get("repository"), "source.repository")
+    payload = {
+        "id": None,
+        "event": "cross_referenced",
+        "actor": _build_actor(raw_event.get("actor")),
+        "created_at": raw_event.get("createdAt"),
+        "body": None,
+        "label_name": None,
+        "comment_database_id": None,
+        "source_kind": source_kind,
+        "source_number": source.get("number"),
+        "source_repository_full_name": repository.get("nameWithOwner"),
+    }
+    return _validate_model(GitHubIssueTimelineEvent, payload, "CrossReferencedEvent")
 
 
 def _build_reaction(raw_reaction: dict[str, object]) -> GitHubReaction:
@@ -370,11 +458,21 @@ def _build_actor(raw_actor: object) -> GitHubActor:
     """`gh issue view` 系の actor を変換する。"""
     if not isinstance(raw_actor, dict):
         raise GitHubClientError("author の JSON 形式が不正です")
+    login = raw_actor.get("login")
+    if raw_actor.get("__typename") == "Bot" and isinstance(login, str):
+        login = f"{login}[bot]"
     return _validate_model(
         GitHubActor,
-        {"login": raw_actor.get("login")},
+        {"login": login},
         "author",
     )
+
+
+def _require_int(value: object, field_name: str) -> int:
+    """整数項目を返す。"""
+    if type(value) is not int:
+        raise GitHubClientError(f"{field_name} が不正です")
+    return value
 
 
 def _build_rest_user(raw_user: object) -> GitHubActor:

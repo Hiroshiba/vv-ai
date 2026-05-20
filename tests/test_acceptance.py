@@ -147,6 +147,7 @@ def _make_github_timeline_comment(
         created_at="2026-05-08T00:00:00Z",
         body=body,
         label_name=None,
+        comment_database_id=event_id,
     )
 
 

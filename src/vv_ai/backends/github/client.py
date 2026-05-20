@@ -27,7 +27,6 @@ from vv_ai.backends.github.paths import (
     _build_issue_comment_reactions_path,
     _build_issue_comments_path,
     _build_issue_label_path,
-    _build_issue_timeline_path,
     _build_issues_path,
     _build_pulls_path,
     _build_repository_path,
@@ -219,23 +218,115 @@ query($owner: String!, $repo: String!, $number: Int!) {
         number: int,
     ) -> list[GitHubIssueTimelineEvent]:
         """Issue timeline の next 履歴用 event 一覧を取得する。"""
+        owner, repo = _require_repository_full_name(repository_full_name).split("/")
+        timeline_items_query = """
+timelineItems(
+  first: 100
+  after: $endCursor
+  itemTypes: [
+    ISSUE_COMMENT
+    LABELED_EVENT
+    SUB_ISSUE_ADDED_EVENT
+    CROSS_REFERENCED_EVENT
+  ]
+) {
+  nodes {
+    __typename
+    ... on IssueComment {
+      databaseId
+      author {
+        __typename
+        login
+      }
+      createdAt
+      body
+    }
+    ... on LabeledEvent {
+      actor {
+        __typename
+        login
+      }
+      createdAt
+      label {
+        name
+      }
+    }
+    ... on SubIssueAddedEvent {
+      actor {
+        __typename
+        login
+      }
+      createdAt
+      subIssue {
+        number
+        repository {
+          nameWithOwner
+        }
+      }
+    }
+    ... on CrossReferencedEvent {
+      actor {
+        __typename
+        login
+      }
+      createdAt
+      source {
+        __typename
+        ... on Issue {
+          number
+          repository {
+            nameWithOwner
+          }
+        }
+        ... on PullRequest {
+          number
+          repository {
+            nameWithOwner
+          }
+        }
+      }
+    }
+  }
+  pageInfo {
+    hasNextPage
+    endCursor
+  }
+}
+""".strip()
+        query = """
+query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    issueOrPullRequest(number: $number) {
+      ... on Issue {
+        __TIMELINE_ITEMS__
+      }
+      ... on PullRequest {
+        __TIMELINE_ITEMS__
+      }
+    }
+  }
+}
+""".strip().replace("__TIMELINE_ITEMS__", timeline_items_query)
         payload = self._run_json(
             [
                 "api",
+                "graphql",
                 "--paginate",
                 "--slurp",
-                _build_issue_timeline_path(repository_full_name, number),
+                "-f",
+                f"query={query}",
+                "-f",
+                f"owner={owner}",
+                "-f",
+                f"repo={repo}",
+                "-F",
+                f"number={_require_positive_id(number, 'number')}",
             ]
         )
         if not isinstance(payload, list):
             raise GitHubClientError("timeline 取得結果の JSON 形式が不正です")
 
-        events: list[GitHubIssueTimelineEvent] = []
-        for page in payload:
-            if not isinstance(page, list):
-                raise GitHubClientError("timeline 取得結果のページ形式が不正です")
-            events.extend(_build_issue_timeline_event_list(page))
-        return events
+        return _build_issue_timeline_event_list(payload)
 
     def create_issue_comment(
         self,
