@@ -21,7 +21,7 @@ from vv_ai.inputs.models import (
 )
 from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 
-HistorySource = Literal["comment", "label"]
+HistorySource = Literal["comment", "label", "artifact"]
 
 
 class NextResolutionError(Exception):
@@ -195,6 +195,15 @@ def _build_github_history_entry(
     config: VVAIConfig,
     timeline_event: GitHubIssueTimelineEvent,
 ) -> NextHistoryEntry | None:
+    artifact_command = _parse_artifact_history_command(target, timeline_event)
+    if artifact_command is not None:
+        return NextHistoryEntry(
+            command=artifact_command,
+            created_at=timeline_event.created_at,
+            id=None,
+            source="artifact",
+        )
+
     bot_decision_command = _parse_bot_next_decision_history_command(timeline_event)
     if bot_decision_command is not None:
         if _should_ignore_command(target, bot_decision_command):
@@ -224,6 +233,25 @@ def _build_github_history_entry(
         else None,
         source="comment" if timeline_event.event == "commented" else "label",
     )
+
+
+def _parse_artifact_history_command(
+    target: ResolvedTarget,
+    timeline_event: GitHubIssueTimelineEvent,
+) -> CommandName | None:
+    if target.kind == "pr":
+        return None
+    if target.kind != "issue":
+        raise NextResolutionError("未対応の target 種別です")
+    if timeline_event.event == "sub_issue_added":
+        return "breakdown"
+    if timeline_event.event != "cross_referenced":
+        return None
+    if timeline_event.source_kind != "pull_request":
+        return None
+    if timeline_event.source_repository_full_name != target.repository_full_name:
+        return None
+    return "implement"
 
 
 def _parse_bot_next_decision_history_command(
