@@ -1,4 +1,11 @@
-.vv-ai/
+.vv-ai/*
+!.vv-ai/codex-work/
+.vv-ai/codex-work/*
+!.vv-ai/codex-work/skills/
+.vv-ai/codex-work/skills/*
+!.vv-ai/codex-work/skills/address-review/
+.vv-ai/codex-work/skills/address-review/*
+!.vv-ai/codex-work/skills/address-review/SKILL.md
 hiho_temp/
 
 # Byte-compiled / optimized / DLL files
