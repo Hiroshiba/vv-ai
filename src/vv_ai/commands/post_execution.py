@@ -32,7 +32,6 @@ from vv_ai.git.operations import (
     try_push_current_branch,
 )
 from vv_ai.inputs.resolve import ResolvedTarget
-from vv_ai.next_decision import NextDecisionCommand, format_next_decision_history_comment
 from vv_ai.workflow.preflight import ReadyExecution
 
 _PR_CHANGE_COMMANDS = frozenset({"implement", "address"})
@@ -364,15 +363,12 @@ def _handle_breakdown_post_execution(
 
     repo = target.repository_full_name
 
-    created: list[GitHubIssue] = []
-    for title, body in tasks:
-        issue = github_client.create_issue(repo, title, body)
-        try:
-            github_client.add_sub_issue(repo, target.number, issue.id)
-        except GitHubClientError as exc:
-            print(f"サブ Issue 紐付けに失敗しました（続行）: {exc}", file=sys.stderr)
-        created.append(issue)
-        print(f"サブ Issue を作成しました: {issue.url}")
+    created = _create_breakdown_sub_issues(
+        github_client,
+        repo,
+        target.number,
+        tasks,
+    )
 
     if command.comment_id is not None and target.repository_full_name is not None:
         links = "\n".join(f"- {issue.url}" for issue in created)
@@ -385,6 +381,42 @@ def _handle_breakdown_post_execution(
             )
         except GitHubClientError as exc:
             print(f"サマリコメント投稿に失敗しました: {exc}", file=sys.stderr)
+
+
+def _create_breakdown_sub_issues(
+    github_client: GitHubClient,
+    repo: str,
+    parent_number: int,
+    tasks: list[tuple[str, str]],
+) -> list[GitHubIssue]:
+    created: list[GitHubIssue] = []
+    linked_issue_ids: list[int] = []
+    try:
+        for title, body in tasks:
+            issue = github_client.create_issue(repo, title, body)
+            github_client.add_sub_issue(repo, parent_number, issue.id)
+            linked_issue_ids.append(issue.id)
+            created.append(issue)
+            print(f"サブ Issue を作成しました: {issue.url}")
+    except GitHubClientError:
+        _rollback_breakdown_sub_issues(
+            github_client,
+            repo,
+            parent_number,
+            linked_issue_ids,
+        )
+        raise
+    return created
+
+
+def _rollback_breakdown_sub_issues(
+    github_client: GitHubClient,
+    repo: str,
+    parent_number: int,
+    linked_issue_ids: list[int],
+) -> None:
+    for child_issue_id in reversed(linked_issue_ids):
+        github_client.remove_sub_issue(repo, parent_number, child_issue_id)
 
 
 def _post_response_comment(
@@ -413,32 +445,3 @@ def _post_response_comment(
         )
     except GitHubClientError as exc:
         print(f"コメント投稿に失敗しました: {exc}", file=sys.stderr)
-
-
-def _post_next_decision_history_comment(
-    ready_execution: ReadyExecution,
-    execution_result: ExecutionResult,
-    github_client: GitHubClient | None,
-    command: NextDecisionCommand | None,
-) -> None:
-    if command is None:
-        return
-    if execution_result.status != "success":
-        return
-
-    target = ready_execution.command.target
-    if (
-        ready_execution.command.dry_run
-        or github_client is None
-        or not _is_github_target(target)
-    ):
-        return
-
-    assert target is not None
-    assert target.repository_full_name is not None
-    assert target.number is not None
-    github_client.create_issue_comment(
-        target.repository_full_name,
-        target.number,
-        format_next_decision_history_comment(command),
-    )

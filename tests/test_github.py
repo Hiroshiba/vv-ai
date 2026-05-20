@@ -512,6 +512,49 @@ def test_list_issue_labeled_events_rejects_invalid_event(
         client.list_issue_labeled_events("org/repo", 1)
 
 
+def test_has_issue_sub_issues_uses_sub_issues_endpoint() -> None:
+    """has_issue_sub_issues は現在のサブ Issue 一覧を確認する。"""
+    captured_args: list[Sequence[str]] = []
+    client = GitHubClient(
+        lambda args: captured_args.append(args) or json.dumps([{"number": 2}]),
+        lambda args: b"",
+    )
+
+    result = client.has_issue_sub_issues("org/repo", 1)
+
+    assert result
+    assert captured_args == [
+        [
+            "gh",
+            "api",
+            "repos/org/repo/issues/1/sub_issues?per_page=1",
+        ]
+    ]
+
+
+def test_remove_sub_issue_uses_delete_method() -> None:
+    """remove_sub_issue は sub_issue_id を指定して DELETE する。"""
+    captured_args: list[Sequence[str]] = []
+    client = GitHubClient(
+        lambda args: captured_args.append(args) or "",
+        lambda args: b"",
+    )
+
+    client.remove_sub_issue("org/repo", 1, 2)
+
+    assert captured_args == [
+        [
+            "gh",
+            "api",
+            "--method",
+            "DELETE",
+            "repos/org/repo/issues/1/sub_issue",
+            "-F",
+            "sub_issue_id=2",
+        ]
+    ]
+
+
 def test_remove_issue_label_uses_delete_method_with_encoded_label() -> None:
     """remove_issue_label は encode 済み label path を DELETE する。"""
     captured_args: list[Sequence[str]] = []

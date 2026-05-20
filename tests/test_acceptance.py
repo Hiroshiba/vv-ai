@@ -167,19 +167,6 @@ def _make_github_labeled_event(
     )
 
 
-def _make_github_sub_issue_added_event(event_id: int) -> GitHubIssueTimelineEvent:
-    """テスト用 GitHubIssueTimelineEvent sub_issue_added を生成する。"""
-    return GitHubIssueTimelineEvent(
-        id=event_id,
-        event="sub_issue_added",
-        actor=GitHubActor(login="other-user"),
-        created_at="2026-05-08T00:00:00Z",
-        source_kind="issue",
-        source_number=2,
-        source_repository_full_name="org/repo",
-    )
-
-
 def _make_github_cross_referenced_event(
     event_id: int,
     source_kind: Literal["issue", "pull_request"],
@@ -258,6 +245,7 @@ def _enter_common_patches(
             is_fork=False, parent_full_name=None, parent_default_branch=None
         )
         github_client.get_issue.return_value = _make_github_issue("org/repo", 1)
+        github_client.has_issue_sub_issues.return_value = False
         github_client.list_issue_comments.return_value = []
         github_client.list_issue_timeline_events.return_value = []
     return execute_provider
@@ -297,6 +285,7 @@ def _enter_next_patches(
         parent_default_branch=None,
     )
     github_client.get_issue.return_value = _make_github_issue("org/repo", 1)
+    github_client.has_issue_sub_issues.return_value = False
     github_client.list_issue_comments.return_value = []
     github_client.list_issue_timeline_events.return_value = []
     return resolve_session, execute_provider
@@ -640,7 +629,7 @@ class TestNextDryRun:
         resolve_session.assert_not_called()
         execute_provider.assert_not_called()
 
-    def test_issue_after_sub_issue_added_exits_two_without_provider(
+    def test_issue_with_current_sub_issues_exits_two_without_provider(
         self,
         tmp_path: Path,
     ) -> None:
@@ -665,12 +654,12 @@ class TestNextDryRun:
                 result,
                 mock_gh,
             )
+            mock_gh.has_issue_sub_issues.return_value = True
             mock_gh.list_issue_timeline_events.return_value = [
                 _make_github_timeline_comment(1000, "@vv-ai confirm"),
                 _make_github_timeline_comment(1001, "@vv-ai requirements"),
                 _make_github_timeline_comment(1002, "@vv-ai arch"),
                 _make_github_timeline_comment(1003, "@vv-ai detail"),
-                _make_github_sub_issue_added_event(1004),
             ]
             exit_code = main(argv)
 

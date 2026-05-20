@@ -14,7 +14,6 @@ from vv_ai.inputs.build import (
     parse_comment_invocation,
     parse_label_invocation,
 )
-from vv_ai.next_decision import NextDecisionError, parse_next_decision_history_marker
 from vv_ai.inputs.models import (
     CommandName,
     InputError,
@@ -55,9 +54,15 @@ def resolve_next_command(
     target = _require_target(command)
     github_client = _build_history_github_client(target)
     is_sub_issue = _resolve_is_sub_issue(target, github_client)
+    has_sub_issues = _resolve_has_sub_issues(target, github_client)
     history = _load_history(repo_root, command, target, config, github_client)
     try:
-        resolved_command = _resolve_next_from_history(history, target, is_sub_issue)
+        resolved_command = _resolve_next_from_history(
+            history,
+            target,
+            is_sub_issue,
+            has_sub_issues,
+        )
     except NextAiDecisionRequired:
         return command
     return command.model_copy(update={"command": resolved_command})
@@ -96,6 +101,24 @@ def _resolve_is_sub_issue(
         )
     except Exception as exc:
         raise NextResolutionError("Issue の親番号取得に失敗しました") from exc
+
+
+def _resolve_has_sub_issues(
+    target: ResolvedTarget,
+    github_client: GitHubClient | None,
+) -> bool:
+    if target.backend == "local":
+        return False
+    if target.kind == "pr":
+        return False
+    if github_client is None:
+        raise NextResolutionError("GitHub client がありません")
+
+    repository_full_name, number = _require_github_target_fields(target)
+    try:
+        return github_client.has_issue_sub_issues(repository_full_name, number)
+    except Exception as exc:
+        raise NextResolutionError("Issue のサブ Issue 取得に失敗しました") from exc
 
 
 def _load_history(
@@ -204,17 +227,6 @@ def _build_github_history_entry(
             source="artifact",
         )
 
-    bot_decision_command = _parse_bot_next_decision_history_command(timeline_event)
-    if bot_decision_command is not None:
-        if _should_ignore_command(target, bot_decision_command):
-            return None
-        return NextHistoryEntry(
-            command=bot_decision_command,
-            created_at=timeline_event.created_at,
-            id=timeline_event.comment_database_id,
-            source="comment",
-        )
-
     if timeline_event.event not in {"commented", "labeled"}:
         return None
 
@@ -243,8 +255,6 @@ def _parse_artifact_history_command(
         return None
     if target.kind != "issue":
         raise NextResolutionError("未対応の target 種別です")
-    if timeline_event.event == "sub_issue_added":
-        return "breakdown"
     if timeline_event.event != "cross_referenced":
         return None
     if timeline_event.source_kind != "pull_request":
@@ -252,21 +262,6 @@ def _parse_artifact_history_command(
     if timeline_event.source_repository_full_name != target.repository_full_name:
         return None
     return "implement"
-
-
-def _parse_bot_next_decision_history_command(
-    timeline_event: GitHubIssueTimelineEvent,
-) -> CommandName | None:
-    if timeline_event.event != "commented":
-        return None
-    if not timeline_event.actor.login.endswith("[bot]"):
-        return None
-    if timeline_event.body is None:
-        return None
-    try:
-        return parse_next_decision_history_marker(timeline_event.body)
-    except NextDecisionError as exc:
-        raise NextResolutionError("AI 判断済み `next` 履歴の解析に失敗しました") from exc
 
 
 def _load_local_history(repo_root: Path, target: ResolvedTarget) -> list[NextHistoryEntry]:
@@ -340,6 +335,7 @@ def _resolve_next_from_history(
     history: list[NextHistoryEntry],
     target: ResolvedTarget,
     is_sub_issue: bool,
+    has_sub_issues: bool,
 ) -> CommandName:
     resolved_history: list[CommandName] = []
     for entry in history:
@@ -348,20 +344,35 @@ def _resolve_next_from_history(
             continue
         try:
             resolved_history.append(
-                _resolve_next_command_name(resolved_history, target, is_sub_issue)
+                _resolve_next_command_name(
+                    resolved_history,
+                    target,
+                    is_sub_issue,
+                    has_sub_issues,
+                )
             )
         except NextResolutionError:
             continue
-    return _resolve_next_command_name(resolved_history, target, is_sub_issue)
+    return _resolve_next_command_name(
+        resolved_history,
+        target,
+        is_sub_issue,
+        has_sub_issues,
+    )
 
 
 def _resolve_next_command_name(
     resolved_history: list[CommandName],
     target: ResolvedTarget,
     is_sub_issue: bool,
+    has_sub_issues: bool,
 ) -> CommandName:
     if target.kind == "issue":
-        return _resolve_issue_next_command(resolved_history, is_sub_issue)
+        return _resolve_issue_next_command(
+            resolved_history,
+            is_sub_issue,
+            has_sub_issues,
+        )
     if target.kind == "pr":
         return _resolve_pr_next_command(resolved_history)
     raise NextResolutionError("未対応の target 種別です")
@@ -370,7 +381,11 @@ def _resolve_next_command_name(
 def _resolve_issue_next_command(
     resolved_history: list[CommandName],
     is_sub_issue: bool,
+    has_sub_issues: bool,
 ) -> CommandName:
+    if has_sub_issues:
+        raise NextResolutionError("Issue の breakdown 後に進めるコマンドがありません")
+
     if len(resolved_history) == 0:
         if is_sub_issue:
             return "implement"
