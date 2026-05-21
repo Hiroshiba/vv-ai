@@ -305,7 +305,8 @@ def test_build_codex_provider_prompt_mentions_work_dir() -> None:
     assert "agents/" in prompt
     assert "直接編集しない" in prompt
     assert "作業用 mirror" in prompt
-    assert "未追跡のままで問題ありません" in prompt
+    assert "PR に残すための追加作業は不要です" in prompt
+    assert "未追跡" not in prompt
     assert ".gitignore" not in prompt
 
 
