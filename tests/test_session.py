@@ -18,6 +18,7 @@ from vv_ai.sessions.models import (
 from vv_ai.sessions.resolve import (
     SessionResolutionError,
     _build_manifest_from_restored_artifact,
+    _resolve_scope,
     _resolve_restore_state,
 )
 from vv_ai.artifacts.session import (
@@ -61,6 +62,19 @@ def _make_github_command() -> ResolvedCommand:
                 number=1,
                 url="https://github.com/org/repo/issues/1",
             ),
+        }
+    )
+
+
+def _make_issue_command_without_target() -> ResolvedCommand:
+    """target なし issue コマンドの ResolvedCommand を返す。"""
+    return ResolvedCommand.model_validate(
+        {
+            "event_name": "workflow_dispatch",
+            "command": "issue",
+            "repo": "org/repo",
+            "has_target": False,
+            "session_mode": "new",
         }
     )
 
@@ -153,6 +167,13 @@ def _make_restored_artifact(
             provider_session_id=provider_session_id,
         ),
     )
+
+
+def test_issue_without_target_uses_repository_scope() -> None:
+    backend, target_key = _resolve_scope(_make_issue_command_without_target())
+
+    assert backend == "github"
+    assert target_key == "repo:org/repo"
 
 
 class FakeGitHubClient:

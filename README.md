@@ -182,6 +182,14 @@ gh workflow run vv-ai.yml \
   -f instruction="実装方針を3案ください"
 ```
 
+Issue を作成する場合は target と repo を省略できます。repo を省略すると workflow のリポジトリに作成します。
+
+```sh
+gh workflow run vv-ai.yml \
+  -f command=issue \
+  -f instruction="この不具合をIssue化して"
+```
+
 入力項目: `command`, `target_type`, `target_number`, `target_url`, `instruction`, `provider`, `session_mode`, `dry_run`, `repo`
 
 ### 導入手順
