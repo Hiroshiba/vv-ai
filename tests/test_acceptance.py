@@ -473,6 +473,53 @@ class TestIssueDryRun:
         assert exit_code == 0
 
 
+class TestWorkflowDispatchIssue:
+    """workflow_dispatch の issue コマンド実行シナリオ。"""
+
+    def _write_event_file(self, tmp_path: Path) -> Path:
+        """workflow_dispatch event payload を JSON ファイルとして書き出す。"""
+        payload = {
+            "inputs": {
+                "command": "issue",
+                "instruction": "Issue 化して",
+            },
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        }
+        event_path = tmp_path / "event.json"
+        event_path.write_text(json.dumps(payload), encoding="utf-8")
+        return event_path
+
+    def test_issue_command_without_target_and_repo_exits_zero(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_event_file(tmp_path)
+        argv = [
+            "--event", "workflow_dispatch",
+            "--event-file", str(event_path),
+        ]
+        session = _make_resolved_session("github", "repo:org/repo", "codex")
+        ai_response = "TITLE: テスト Issue\nBODY:\nこれはテスト本文です。"
+        result = _make_execution_result("success", ai_response)
+        github_client = MagicMock()
+        github_client.create_issue.return_value = _make_github_issue("org/repo", 123)
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack, tmp_path, session, result, github_client
+            )
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        execute_provider.assert_called_once()
+        github_client.create_issue.assert_called_once_with(
+            "org/repo", "テスト Issue", "これはテスト本文です。"
+        )
+        github_client.create_issue_comment.assert_not_called()
+
+
 class TestNextDryRun:
     """next コマンド dry-run のシナリオ。"""
 

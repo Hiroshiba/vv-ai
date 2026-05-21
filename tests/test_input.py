@@ -489,6 +489,24 @@ class TestBuildRawInputFromWorkflowDispatchEvent:
         assert raw.target_type == "pr"
         assert raw.target_number == 10
 
+    def test_issue_without_target_and_repo(self) -> None:
+        event = WorkflowDispatchEvent.model_validate({
+            "inputs": {
+                "command": "issue",
+                "instruction": "Issue 化して",
+            },
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba"},
+        })
+        raw = build_raw_input_from_workflow_dispatch_event(event)
+        assert raw.command == "issue"
+        assert raw.instruction == "Issue 化して"
+        assert raw.target_url is None
+        assert raw.target_type is None
+        assert raw.target_number is None
+        assert raw.repo is None
+        assert raw.repository_full_name == "org/repo"
+
     def test_empty_string_becomes_none(self) -> None:
         event = WorkflowDispatchEvent.model_validate({
             "inputs": {
@@ -600,6 +618,19 @@ class TestResolveRawInput:
         )
         resolved = resolve_raw_input(raw)
         assert resolved.command == "issue"
+        assert resolved.has_target is False
+        assert resolved.repo == "org/repo"
+
+    def test_workflow_dispatch_issue_uses_event_repository_without_target(self) -> None:
+        raw = RawInput(
+            event_name="workflow_dispatch",
+            command="issue",
+            repository_full_name="org/repo",
+            actor="Hiroshiba",
+        )
+        resolved = resolve_raw_input(raw)
+        assert resolved.command == "issue"
+        assert resolved.instruction is None
         assert resolved.has_target is False
         assert resolved.repo == "org/repo"
 
