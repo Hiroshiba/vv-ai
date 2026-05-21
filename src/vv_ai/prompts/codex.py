@@ -19,6 +19,8 @@ def build_codex_provider_prompt(provider_prompt: str, work_dir: Path) -> str:
                     "- Codex 用 provider asset を変更する場合は "
                     f"`{work_dir_text}/AGENTS.md`、`{work_dir_text}/skills/`、"
                     f"`{work_dir_text}/agents/` を編集してください。",
+                    f"- `{work_dir_text}/` は作業用 mirror です。"
+                    "この配下のファイルは git に追加しなくて大丈夫です。",
                     f"- 実行後に vv-ai が `{work_dir_text}/` から `.codex/` へ同期します。",
                 ]
             ),
