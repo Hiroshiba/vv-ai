@@ -8,6 +8,10 @@ GitHub Actions ワークフロー + Python CLI ツール（Codex CLI / Claude Co
 
 GitHub の Issue / PR に対してコメント、ラベル、ワークフローディスパッチで AI（Codex CLI / Claude Code CLI）を起動し、計画・実装・レビュー・Issue 作成などのタスクを自動実行する仕組み。ローカル実行は GitHub Actions の再現実行やローカル Issue / PR を使ったデバッグ補助として扱う。各リポジトリにソースをコピーして導入するプロトタイプとして開始し、将来的に Reusable Workflow への切り出しを見据える。
 
+## ユーザー向け文章方針
+
+コメント、要件定義、設計、レビューなどのユーザー向け文章を書くときは、英字語を避けて自然な日本語を使う。コードシンボル、ファイルパス、コマンド、設定値、API 名など実装詳細を指す場合は、英字語を使ってよい。
+
 ---
 
 ## COMMAND SYSTEM
