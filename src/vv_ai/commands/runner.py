@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from vv_ai.backends.github.client import GitHubClient, build_github_client
@@ -25,7 +26,7 @@ from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.next_decision import parse_next_decision_response
 from vv_ai.prompts.build import build_next_decision_prompt, build_provider_prompt
 from vv_ai.providers.runner import execute_provider
-from vv_ai.inputs.resolve import ResolvedTarget
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
 from vv_ai.sessions.models import SessionStateRef, TargetContextState
 from vv_ai.commands.sync import run_sync_command
 from vv_ai.prompts.target_context import (
@@ -38,6 +39,7 @@ _ISSUE_CONTEXT_COMMANDS = frozenset(
     {"confirm", "reply", "requirements", "arch", "detail", "breakdown"}
 )
 _PR_CHANGE_COMMANDS = frozenset({"implement", "address"})
+_AUTO_LABEL_NAME = "vv-ai:auto"
 
 
 class CommandCleanupError(RuntimeError):
@@ -52,12 +54,21 @@ class CommandCleanupError(RuntimeError):
         self.created_pr = created_pr
 
 
+@dataclass(frozen=True)
+class CommandRunResult:
+    """コマンド実行結果と後段処理へ渡す情報。"""
+
+    execution_result: ExecutionResult
+    created_pr: GitHubPullRequest | None
+    auto_continuation_enabled: bool
+
+
 def run_command(
     repo_root: Path,
     ready_execution: ReadyExecution,
     env: Mapping[str, str],
     preflight_duration_seconds: float,
-) -> tuple[ExecutionResult, GitHubPullRequest | None]:
+) -> CommandRunResult:
     """コマンド固有の前処理・provider 実行・後処理を行って実行結果と作成された PR を返す。"""
     command = ready_execution.command
     target = command.target
@@ -94,8 +105,14 @@ def run_command(
     created_pr: GitHubPullRequest | None = None
     finalize_status: ExecutionStatus = "failure"
     primary_error: BaseException | None = None
+    auto_continuation_requested = False
     try:
         try:
+            auto_continuation_requested = _has_auto_continuation_label(
+                github_client,
+                command,
+                target,
+            )
             decision_result = _resolve_next_decision_command(
                 repo_root,
                 ready_execution,
@@ -106,7 +123,14 @@ def run_command(
             if decision_result is not None:
                 execution_result = decision_result
                 finalize_status = execution_result.status
-                return execution_result, None
+                return CommandRunResult(
+                    execution_result=execution_result,
+                    created_pr=None,
+                    auto_continuation_enabled=_should_defer_label_cleanup(
+                        auto_continuation_requested,
+                        execution_result,
+                    ),
+                )
 
             command = ready_execution.command
             target = command.target
@@ -123,7 +147,14 @@ def run_command(
                     preflight_duration_seconds,
                 )
                 finalize_status = execution_result.status
-                return execution_result, None
+                return CommandRunResult(
+                    execution_result=execution_result,
+                    created_pr=None,
+                    auto_continuation_enabled=_should_defer_label_cleanup(
+                        auto_continuation_requested,
+                        execution_result,
+                    ),
+                )
 
             if (
                 command.command == "implement"
@@ -253,6 +284,10 @@ def run_command(
             github_client is not None
             and not command.dry_run
             and command.trigger_label_name is not None
+            and not _should_defer_label_cleanup(
+                auto_continuation_requested,
+                execution_result,
+            )
         ):
             try:
                 assert target is not None
@@ -274,7 +309,14 @@ def run_command(
                     raise CommandCleanupError(message, created_pr) from exc
 
     assert execution_result is not None
-    return execution_result, created_pr
+    return CommandRunResult(
+        execution_result=execution_result,
+        created_pr=created_pr,
+        auto_continuation_enabled=_should_defer_label_cleanup(
+            auto_continuation_requested,
+            execution_result,
+        ),
+    )
 
 
 def _validate_command_target(command_name: str, target: ResolvedTarget | None) -> None:
@@ -354,6 +396,38 @@ def _remember_next_decision_state(
 
 def _is_github_target(target: ResolvedTarget | None) -> bool:
     return target is not None and target.backend == "github"
+
+
+def _has_auto_continuation_label(
+    github_client: GitHubClient | None,
+    command: ResolvedCommand,
+    target: ResolvedTarget | None,
+) -> bool:
+    if github_client is None:
+        return False
+    if command.dry_run:
+        return False
+    if command.trigger_label_name is None:
+        return False
+    if target is None or target.backend != "github":
+        return False
+    if target.repository_full_name is None or target.number is None:
+        return False
+    return _AUTO_LABEL_NAME in github_client.list_issue_label_names(
+        target.repository_full_name,
+        target.number,
+    )
+
+
+def _should_defer_label_cleanup(
+    auto_continuation_requested: bool,
+    execution_result: ExecutionResult | None,
+) -> bool:
+    return (
+        auto_continuation_requested
+        and execution_result is not None
+        and execution_result.status == "success"
+    )
 
 
 def _has_primary_failure(

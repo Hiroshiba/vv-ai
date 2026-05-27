@@ -610,6 +610,89 @@ def test_remove_issue_label_uses_delete_method_with_encoded_label() -> None:
     ]
 
 
+def test_list_issue_label_names_returns_paginated_names() -> None:
+    """list_issue_label_names は label 名を page から抽出する。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            [
+                [
+                    {"name": "vv-ai:auto"},
+                    {"name": "vv-ai:confirm"},
+                ],
+                [
+                    {"name": "bug"},
+                ],
+            ]
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    label_names = client.list_issue_label_names("org/repo", 1)
+
+    assert label_names == ["vv-ai:auto", "vv-ai:confirm", "bug"]
+    assert captured_args == [
+        "gh",
+        "api",
+        "--paginate",
+        "--slurp",
+        "repos/org/repo/issues/1/labels?per_page=100",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({}, "JSON 形式"),
+        ([{}], "ページ形式"),
+        ([[{}]], "label.name"),
+        ([[{"name": ""}]], "label.name"),
+    ],
+)
+def test_list_issue_label_names_rejects_invalid_payload(
+    payload: object,
+    message: str,
+) -> None:
+    """list_issue_label_names は不正な payload を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps(payload), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match=message):
+        client.list_issue_label_names("org/repo", 1)
+
+
+def test_add_issue_label_posts_label_array() -> None:
+    """add_issue_label は labels 配列を POST する。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps([{"name": "vv-ai:next"}])
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    client.add_issue_label("org/repo", 1, "vv-ai:next")
+
+    assert captured_args == [
+        "gh",
+        "api",
+        "--method",
+        "POST",
+        "repos/org/repo/issues/1/labels",
+        "-f",
+        "labels[]=vv-ai:next",
+    ]
+
+
+def test_add_issue_label_rejects_invalid_payload() -> None:
+    """add_issue_label は不正な payload を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps({}), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match="label 追加"):
+        client.add_issue_label("org/repo", 1, "vv-ai:next")
+
+
 def test_get_pull_request_sync_state_builds_model() -> None:
     """get_pull_request_sync_state は PR 状態を model に変換する。"""
     captured_args: list[str] = []

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from vv_ai.cli import _run_ready_execution
+from vv_ai.commands.runner import CommandRunResult
 from vv_ai.commands.post_execution import (
     _handle_breakdown_post_execution,
     _handle_implement_issue_post_execution,
@@ -951,7 +952,11 @@ class TestFinallySaveGuarantee:
         mock_run_command: MagicMock,
         mock_save: MagicMock,
     ) -> None:
-        mock_run_command.return_value = (_make_execution_result("success"), None)
+        mock_run_command.return_value = CommandRunResult(
+            execution_result=_make_execution_result("success"),
+            created_pr=None,
+            auto_continuation_enabled=False,
+        )
         mock_save.return_value = _make_saved_artifacts()
         ready = _make_ready_execution()
 

@@ -248,6 +248,7 @@ def _enter_common_patches(
         github_client.has_issue_sub_issues.return_value = False
         github_client.list_issue_comments.return_value = []
         github_client.list_issue_timeline_events.return_value = []
+        github_client.list_issue_label_names.return_value = []
     return execute_provider
 
 
@@ -288,6 +289,7 @@ def _enter_next_patches(
     github_client.has_issue_sub_issues.return_value = False
     github_client.list_issue_comments.return_value = []
     github_client.list_issue_timeline_events.return_value = []
+    github_client.list_issue_label_names.return_value = []
     return resolve_session, execute_provider
 
 
@@ -1116,6 +1118,39 @@ class TestLabelEvent:
             "vv-ai:confirm",
         )
 
+    def test_auto_issue_label_defers_trigger_label_and_saves_plan(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "## 要望確認\n\n確認しました")
+        mock_gh = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            _enter_common_patches(stack, tmp_path, session, result, mock_gh)
+            mock_gh.list_issue_label_names.return_value = [
+                "vv-ai:auto",
+                "vv-ai:confirm",
+            ]
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        mock_gh.remove_issue_label.assert_not_called()
+        plan_paths = list(
+            tmp_path.glob(".vv-ai/artifacts/*/auto-continuation/plan.json")
+        )
+        assert len(plan_paths) == 1
+        plan_path = plan_paths[0]
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        assert plan["repository_full_name"] == "org/repo"
+        assert plan["target_type"] == "issue"
+        assert plan["target_number"] == 1
+        assert plan["source_label_name"] == "vv-ai:confirm"
+        assert plan["next_label_name"] == "vv-ai:next"
+
     def test_issue_next_label_removes_trigger_label(self, tmp_path: Path) -> None:
         _write_config(tmp_path)
         event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:next")
@@ -1232,6 +1267,43 @@ class TestLabelEvent:
             1,
             "vv-ai:confirm",
         )
+
+    def test_auto_provider_failure_still_removes_trigger_label(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        result = _make_execution_result("success", "未使用")
+        mock_gh = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            execute_provider = _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                mock_gh,
+            )
+            mock_gh.list_issue_label_names.return_value = [
+                "vv-ai:auto",
+                "vv-ai:confirm",
+            ]
+            execute_provider.side_effect = RuntimeError("provider 失敗")
+            exit_code = main(argv)
+
+        assert exit_code == 1
+        mock_gh.remove_issue_label.assert_called_once_with(
+            "org/repo",
+            1,
+            "vv-ai:confirm",
+        )
+        plan_paths = list(
+            tmp_path.glob(".vv-ai/artifacts/*/auto-continuation/plan.json")
+        )
+        assert plan_paths == []
 
     def test_label_removal_failure_exits_one(self, tmp_path: Path) -> None:
         _write_config(tmp_path)
