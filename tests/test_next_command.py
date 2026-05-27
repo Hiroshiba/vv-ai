@@ -669,7 +669,7 @@ def test_issue履歴ではreviewを無視する() -> None:
     assert result.command == "confirm"
 
 
-def test_pr履歴では設計工程を無視する() -> None:
+def test_pr履歴ではissue段階のコマンドを無視する() -> None:
     result = _resolve_github(
         _make_target("pr", "github"),
         _make_comments(["confirm", "requirements", "arch", "detail", "breakdown"]),
