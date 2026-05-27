@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -10,6 +11,7 @@ from vv_ai.auto_continuation import (
     AUTO_LABEL_NAME,
     NEXT_LABEL_NAME,
     AutoContinuationError,
+    AutoContinuationApplyResult,
     AutoContinuationPlan,
     apply_auto_continuation_plan,
     load_auto_continuation_plan,
@@ -22,6 +24,7 @@ from vv_ai.backends.github.models import (
     GitHubIssueLabeledEvent,
     GitHubPullRequest,
 )
+from vv_ai.cli import main
 from vv_ai.inputs.resolve import ResolvedTarget
 
 
@@ -297,3 +300,25 @@ def test_apply_auto_continuation_plan_requires_auto_label_event(
 
     with pytest.raises(AutoContinuationError, match="自動継続 label"):
         apply_auto_continuation_plan(tmp_path, "test-workflow", client)
+
+
+def test_apply_auto_continuation_subcommand_accepts_repo_root(
+    tmp_path: Path,
+) -> None:
+    github_client = object()
+
+    with (
+        patch(
+            "vv_ai.cli.apply_auto_continuation_plan",
+            return_value=AutoContinuationApplyResult(status="no_plan"),
+        ) as apply_plan,
+        patch("vv_ai.cli.build_github_client", return_value=github_client),
+        patch.dict(
+            "os.environ",
+            {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2"},
+        ),
+    ):
+        exit_code = main(["apply-auto-continuation", "--repo-root", str(tmp_path)])
+
+    assert exit_code == 0
+    apply_plan.assert_called_once_with(tmp_path, "run-123-attempt-2", github_client)

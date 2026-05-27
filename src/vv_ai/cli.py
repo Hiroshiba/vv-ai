@@ -273,9 +273,17 @@ def _run_apply_auto_continuation_subcommand(argv: Sequence[str]) -> int:
         "--workflow-id",
         help="適用する自動継続計画の workflow_id を指定する。",
     )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        help="自動継続計画を読む repository root を指定する。",
+    )
     namespace = parser.parse_args(argv)
     try:
-        repo_root = find_repo_root(Path.cwd())
+        if namespace.repo_root is None:
+            repo_root = find_repo_root(Path.cwd())
+        else:
+            repo_root = namespace.repo_root
         workflow_id = _resolve_auto_continuation_workflow_id(
             namespace.workflow_id,
             os.environ,

@@ -342,8 +342,33 @@ jobs:
           path: ${{ steps.artifact_paths.outputs.report_path }}
           retention-days: 90
 
+      - name: Fetch trusted vv-ai runner
+        id: trusted-vv-ai-runner
+        env:
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          trusted_runner_dir="$(mktemp -d "$RUNNER_TEMP/vv-ai-runner.XXXXXX")"
+          git clone --depth 1 --branch "$DEFAULT_BRANCH" \
+            "https://github.com/$REPO.git" \
+            "$trusted_runner_dir"
+          echo "path=$trusted_runner_dir" >> "$GITHUB_OUTPUT"
+
       - name: Apply auto continuation
         env:
           GITHUB_TOKEN: ${{ steps.write-token.outputs.token }}
         run: |
-          uv run vv-ai apply-auto-continuation
+          cd "${{ steps.trusted-vv-ai-runner.outputs.path }}"
+          set +e
+          help_output="$(uv run vv-ai apply-auto-continuation --help 2>&1)"
+          help_status=$?
+          set -e
+          if [ "$help_status" -ne 0 ]; then
+            if printf '%s\n' "$help_output" | grep -q "unrecognized arguments: apply-auto-continuation"; then
+              echo "default branch の vv-ai に apply-auto-continuation がないためスキップします"
+              exit 0
+            fi
+            printf '%s\n' "$help_output" >&2
+            exit "$help_status"
+          fi
+          uv run vv-ai apply-auto-continuation --repo-root "$GITHUB_WORKSPACE"
