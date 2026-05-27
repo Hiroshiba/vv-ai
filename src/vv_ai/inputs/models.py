@@ -13,6 +13,7 @@ CommandName = Literal[
     "confirm", "reply", "implement", "address", "review", "issue", "next",
     "requirements", "arch", "detail", "breakdown", "sync",
 ]
+ControlLabelName = Literal["vv-ai:auto"]
 EventName = Literal[
     "issue_comment", "workflow_dispatch", "issues", "pull_request", "local",
 ]
@@ -37,6 +38,7 @@ _LABEL_COMMANDS: dict[str, CommandName] = {
     "vv-ai:next": "next",
     "vv-ai:sync": "sync",
 }
+_CONTROL_LABELS: set[ControlLabelName] = {"vv-ai:auto"}
 _ISSUE_LABEL_COMMANDS: set[CommandName] = {
     "reply", "confirm", "requirements", "arch", "detail",
     "breakdown", "implement", "issue", "next",
@@ -84,6 +86,7 @@ class GitHubUser(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     login: str
+    id: int | None = None
 
 
 class GitHubLabel(BaseModel):
@@ -176,6 +179,7 @@ class RawInput(BaseModel):
 
     event_name: EventName
     command: CommandName | None = None
+    control_label_name: ControlLabelName | None = None
     instruction: str | None = None
     target_url: str | None = None
     target_type: TargetType | None = None
@@ -187,6 +191,7 @@ class RawInput(BaseModel):
     skip_api_key_check: bool = False
     repository_full_name: str | None = None
     actor: str | None = None
+    actor_id: int | None = None
     comment_id: int | None = None
     comment_author: str | None = None
     comment_body: str | None = None

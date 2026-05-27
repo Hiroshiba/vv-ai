@@ -135,6 +135,26 @@ def _make_label_event(
     )
 
 
+def _make_bot_label_event(
+    event_id: int,
+    label_name: str,
+    database_id: int | None,
+    created_at: str,
+) -> GitHubIssueTimelineEvent:
+    return GitHubIssueTimelineEvent(
+        id=event_id,
+        event="labeled",
+        label_name=label_name,
+        actor=GitHubActor(
+            login="vv-ai-public-read-github-app[bot]",
+            actor_type="Bot",
+            database_id=database_id,
+        ),
+        created_at=created_at,
+        body=None,
+    )
+
+
 def _make_label_events(commands: list[str]) -> list[GitHubIssueTimelineEvent]:
     return [
         _make_label_event(
@@ -879,6 +899,89 @@ def test_allowed_users外のgithubラベルは履歴に入らない() -> None:
             "vv-ai:requirements",
             "other-user",
             "2026-05-15T00:01:00Z",
+        ),
+        _make_label_event(11, "vv-ai:next", "Hiroshiba", "2026-05-15T00:02:00Z"),
+    ]
+
+    result = _resolve_github_label(
+        _make_target("issue", "github"),
+        [],
+        labeled_events,
+        None,
+    )
+
+    assert result.command == "confirm"
+
+
+def test_内部botのgithubラベルは履歴に入る() -> None:
+    labeled_events = [
+        _make_bot_label_event(
+            10,
+            "vv-ai:requirements",
+            database_id=274163862,
+            created_at="2026-05-15T00:01:00Z",
+        ),
+        _make_label_event(
+            11,
+            "vv-ai:next",
+            "Hiroshiba",
+            "2026-05-15T00:02:00Z",
+        ),
+    ]
+
+    result = _resolve_github_label(
+        _make_target("issue", "github"),
+        [],
+        labeled_events,
+        None,
+    )
+
+    assert result.command == "arch"
+
+
+def test_内部botのgithubコメントは履歴に入らない() -> None:
+    comments = [
+        _make_comment(
+            1,
+            "@vv-ai requirements",
+            "vv-ai-public-read-github-app[bot]",
+            "2026-05-15T00:01:00Z",
+        ),
+    ]
+
+    result = _resolve_github(_make_target("issue", "github"), comments, [], None, None)
+
+    assert result.command == "confirm"
+
+
+def test_内部botのautoラベルは履歴に入らない() -> None:
+    labeled_events = [
+        _make_bot_label_event(
+            10,
+            "vv-ai:auto",
+            database_id=274163862,
+            created_at="2026-05-15T00:01:00Z",
+        ),
+        _make_label_event(11, "vv-ai:next", "Hiroshiba", "2026-05-15T00:02:00Z"),
+    ]
+
+    result = _resolve_github_label(
+        _make_target("issue", "github"),
+        [],
+        labeled_events,
+        None,
+    )
+
+    assert result.command == "confirm"
+
+
+def test_database_idなしのbotラベルは履歴に入らない() -> None:
+    labeled_events = [
+        _make_bot_label_event(
+            10,
+            "vv-ai:requirements",
+            database_id=None,
+            created_at="2026-05-15T00:01:00Z",
         ),
         _make_label_event(11, "vv-ai:next", "Hiroshiba", "2026-05-15T00:02:00Z"),
     ]

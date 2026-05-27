@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, ValidationError
 from yaml import YAMLError, safe_load
 
 from vv_ai.value_types import NonEmptyString
@@ -27,6 +27,9 @@ class VVAIConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     allowed_users: list[NonEmptyString] = Field(min_length=1)
+    internal_bot_ids: list[PositiveInt] = Field(
+        default_factory=lambda: [274163862],
+    )
     pull_request_target_branch: NonEmptyString | None = None
     provider_priority: list[ProviderName] = Field(
         default_factory=lambda: ["codex", "claude"],

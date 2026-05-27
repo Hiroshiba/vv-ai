@@ -257,6 +257,9 @@ timelineItems(
       author {
         __typename
         login
+        ... on Bot {
+          databaseId
+        }
       }
       createdAt
       body
@@ -265,6 +268,9 @@ timelineItems(
       actor {
         __typename
         login
+        ... on Bot {
+          databaseId
+        }
       }
       createdAt
       label {
@@ -275,6 +281,9 @@ timelineItems(
       actor {
         __typename
         login
+        ... on Bot {
+          databaseId
+        }
       }
       createdAt
       subIssue {
@@ -288,6 +297,9 @@ timelineItems(
       actor {
         __typename
         login
+        ... on Bot {
+          databaseId
+        }
       }
       createdAt
       source {

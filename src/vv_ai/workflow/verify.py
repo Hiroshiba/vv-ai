@@ -19,6 +19,7 @@ from vv_ai.inputs.models import (
     IssueCommentEvent,
     IssueLabeledEvent,
     PullRequestLabeledEvent,
+    RawInput,
     WorkflowDispatchEvent,
 )
 
@@ -61,9 +62,9 @@ def run_verify(
     if event == "workflow_dispatch":
         return _verify_workflow_dispatch(payload, config.allowed_users)
     if event == "issues":
-        return _verify_issue_labeled(payload, config.allowed_users)
+        return _verify_issue_labeled(payload, config)
     if event == "pull_request":
-        return _verify_pull_request_labeled(payload, config.allowed_users)
+        return _verify_pull_request_labeled(payload, config)
     raise AssertionError(f"未対応の event です: {event}")
 
 
@@ -117,7 +118,7 @@ def _verify_workflow_dispatch(
 
 
 def _verify_issue_labeled(
-    payload: dict[str, object], allowed_users: list[str]
+    payload: dict[str, object], config: VVAIConfig
 ) -> VerifyResult:
     try:
         parsed = IssueLabeledEvent.model_validate(payload)
@@ -126,7 +127,7 @@ def _verify_issue_labeled(
 
     actor = parsed.sender.login
     try:
-        build_raw_input_from_issue_labeled_event(parsed)
+        raw_input = build_raw_input_from_issue_labeled_event(parsed)
     except InputError:
         return VerifyResult(
             should_run=False,
@@ -135,7 +136,7 @@ def _verify_issue_labeled(
             reason="not_vv_ai_label",
         )
 
-    if actor not in allowed_users:
+    if not _is_labeled_input_authorized(raw_input, config):
         return VerifyResult(
             should_run=False,
             actor=actor,
@@ -147,7 +148,7 @@ def _verify_issue_labeled(
 
 
 def _verify_pull_request_labeled(
-    payload: dict[str, object], allowed_users: list[str]
+    payload: dict[str, object], config: VVAIConfig
 ) -> VerifyResult:
     try:
         parsed = PullRequestLabeledEvent.model_validate(payload)
@@ -156,7 +157,7 @@ def _verify_pull_request_labeled(
 
     actor = parsed.sender.login
     try:
-        build_raw_input_from_pull_request_labeled_event(parsed)
+        raw_input = build_raw_input_from_pull_request_labeled_event(parsed)
     except InputError:
         return VerifyResult(
             should_run=False,
@@ -165,7 +166,7 @@ def _verify_pull_request_labeled(
             reason="not_vv_ai_label",
         )
 
-    if actor not in allowed_users:
+    if not _is_labeled_input_authorized(raw_input, config):
         return VerifyResult(
             should_run=False,
             actor=actor,
@@ -174,3 +175,14 @@ def _verify_pull_request_labeled(
         )
 
     return VerifyResult(should_run=True, actor=actor, event="pull_request")
+
+
+def _is_labeled_input_authorized(raw_input: RawInput, config: VVAIConfig) -> bool:
+    """labeled event 入力の認可可否を返す。"""
+    if raw_input.actor in config.allowed_users:
+        return True
+    if raw_input.control_label_name is not None:
+        return False
+    if raw_input.actor_id is None:
+        return False
+    return raw_input.actor_id in config.internal_bot_ids

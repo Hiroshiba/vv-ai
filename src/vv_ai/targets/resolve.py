@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from vv_ai.inputs.models import TargetType
-from vv_ai.inputs.resolve import ResolvedCommand, ResolvedTarget
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedControlLabel, ResolvedTarget
 
 
 class TargetResolutionError(Exception):
@@ -23,7 +23,21 @@ def resolve_target(repo_root: Path, command: ResolvedCommand) -> ResolvedCommand
     return command.model_copy(update={"target": target})
 
 
-def _build_target(repo_root: Path, command: ResolvedCommand) -> ResolvedTarget | None:
+def resolve_control_label_target(
+    repo_root: Path,
+    control_label: ResolvedControlLabel,
+) -> ResolvedControlLabel:
+    """制御ラベル入力の target を GitHub / local の共通表現へ変換する。"""
+    target = _build_target(repo_root, control_label)
+    if target is None:
+        raise TargetResolutionError("制御ラベル入力の target を解決できません")
+    return control_label.model_copy(update={"target": target})
+
+
+def _build_target(
+    repo_root: Path,
+    command: ResolvedCommand | ResolvedControlLabel,
+) -> ResolvedTarget | None:
     """利用可能な入力から target を組み立てる。"""
     if command.target_url is not None:
         return _build_target_from_target_url(repo_root, command.target_url)

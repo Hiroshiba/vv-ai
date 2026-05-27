@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from vv_ai.config import ProviderName
 from vv_ai.inputs.models import (
     CommandName,
+    ControlLabelName,
     EventName,
     RawInput,
     SessionMode,
@@ -56,6 +57,7 @@ class ResolvedCommand(BaseModel):
     skip_api_key_check: bool = False
     repository_full_name: str | None = None
     actor: str | None = None
+    actor_id: int | None = None
     comment_id: int | None = None
     comment_author: str | None = None
     comment_body: str | None = None
@@ -64,9 +66,34 @@ class ResolvedCommand(BaseModel):
     target: ResolvedTarget | None = None
 
 
-def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
-    """`RawInput` を後続処理用の `ResolvedCommand` に変換する。"""
+class ResolvedControlLabel(BaseModel):
+    """実行可能な形へ確定した制御ラベル入力。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_name: EventName
+    control_label_name: ControlLabelName
+    target_type: TargetType
+    target_number: int
+    has_target: bool
+    repository_full_name: str
+    actor: str
+    actor_id: int | None = None
+    trigger_label_name: str
+    trigger_event_created_at: str
+    target: ResolvedTarget | None = None
+
+
+ResolvedInput = ResolvedCommand | ResolvedControlLabel
+
+
+def resolve_raw_input(raw_input: RawInput) -> ResolvedInput:
+    """`RawInput` を後続処理用の実行入力へ変換する。"""
+    if raw_input.command is not None and raw_input.control_label_name is not None:
+        raise ResolutionError("command と control_label_name は同時に指定できません")
     _validate_event_requirements(raw_input)
+    if raw_input.control_label_name is not None:
+        return _resolve_control_label_input(raw_input)
     command = raw_input.command or "reply"
     instruction = _resolve_instruction(raw_input.instruction)
     target_url, target_type, target_number, has_target = _resolve_target_fields(raw_input)
@@ -96,9 +123,56 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedCommand:
         skip_api_key_check=raw_input.skip_api_key_check,
         repository_full_name=raw_input.repository_full_name,
         actor=raw_input.actor,
+        actor_id=raw_input.actor_id,
         comment_id=raw_input.comment_id,
         comment_author=raw_input.comment_author,
         comment_body=raw_input.comment_body,
+        trigger_label_name=raw_input.trigger_label_name,
+        trigger_event_created_at=raw_input.trigger_event_created_at,
+    )
+
+
+def _resolve_control_label_input(raw_input: RawInput) -> ResolvedControlLabel:
+    """`RawInput` を制御ラベル入力へ変換する。"""
+    if raw_input.control_label_name is None:
+        raise ResolutionError("control_label_name がありません")
+    if raw_input.event_name not in {"issues", "pull_request"}:
+        raise ResolutionError("制御ラベルは labeled event でのみ使用できます")
+
+    required_fields = {
+        "repository_full_name": raw_input.repository_full_name,
+        "actor": raw_input.actor,
+        "target_type": raw_input.target_type,
+        "target_number": raw_input.target_number,
+        "trigger_label_name": raw_input.trigger_label_name,
+        "trigger_event_created_at": raw_input.trigger_event_created_at,
+    }
+    _raise_for_missing_fields(raw_input.event_name, required_fields)
+
+    if raw_input.target_type is None:
+        raise ResolutionError("制御ラベル入力に target_type がありません")
+    if raw_input.target_number is None:
+        raise ResolutionError("制御ラベル入力に target_number がありません")
+    if raw_input.repository_full_name is None:
+        raise ResolutionError("制御ラベル入力に repository_full_name がありません")
+    if raw_input.actor is None:
+        raise ResolutionError("制御ラベル入力に actor がありません")
+    if raw_input.trigger_label_name is None:
+        raise ResolutionError("制御ラベル入力に trigger_label_name がありません")
+    if raw_input.trigger_event_created_at is None:
+        raise ResolutionError("制御ラベル入力に trigger_event_created_at がありません")
+    if raw_input.target_number <= 0:
+        raise ResolutionError("`target_number` は 1 以上である必要があります")
+
+    return ResolvedControlLabel(
+        event_name=raw_input.event_name,
+        control_label_name=raw_input.control_label_name,
+        target_type=raw_input.target_type,
+        target_number=raw_input.target_number,
+        has_target=True,
+        repository_full_name=raw_input.repository_full_name,
+        actor=raw_input.actor,
+        actor_id=raw_input.actor_id,
         trigger_label_name=raw_input.trigger_label_name,
         trigger_event_created_at=raw_input.trigger_event_created_at,
     )

@@ -80,6 +80,8 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 ### next の解決
 
 - `next` は原則として履歴から次の既存コマンドへ解決するショートカット
+- `next` の履歴には、許可ユーザーのコメントと command label に加えて、内部 bot が付けた command label を含める
+- 内部 bot のコメントと制御ラベルは `next` の履歴に含めない
 - 通常 Issue の履歴なし `next` は `confirm`
 - サブ Issue の履歴なし `next` は `implement`
 - Issue では `confirm` → `requirements` → `arch` → `detail` の順に進む
@@ -106,6 +108,10 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 - Issue または PR に `vv-ai:<command>` label を付けると起動
 - 許可ユーザーの label 付与のみ反応。未許可は**完全サイレント**（何も返さない）
 - label 名から command を決め、`instruction` はなしとして扱う
+- `vv-ai:auto` は command label ではなく制御ラベルとして扱う
+- 許可ユーザーが `vv-ai:auto` を付けた場合は本体処理まで到達し、工程実行を行わず成功終了する
+- `vv-ai:auto` は起動後も削除しない
+- `internal_bot_ids` に含まれる GitHub App bot が付けた command label は内部起動として許可する
 
 ### 3. GitHub workflow_dispatch
 
@@ -280,6 +286,8 @@ Codex 実行時は `.codex/` を直接編集させず、作業用 mirror を編�
 ```yaml
 allowed_users:
   - Hiroshiba
+internal_bot_ids:
+  - 274163862
 
 provider_priority:
   - codex
@@ -291,6 +299,7 @@ provider_priority:
 | 項目                | 説明                                    |
 | ------------------- | --------------------------------------- |
 | `allowed_users`     | コマンド実行を許可する GitHub ユーザー  |
+| `internal_bot_ids`  | 内部起動を許可する GitHub App bot の user ID |
 | `provider_priority` | プロバイダの優先順                      |
 
 ---

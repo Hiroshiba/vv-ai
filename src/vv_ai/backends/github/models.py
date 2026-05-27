@@ -42,6 +42,8 @@ class GitHubActor(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     login: str
+    database_id: int | None = None
+    actor_type: str | None = None
 
 
 class GitHubComment(BaseModel):

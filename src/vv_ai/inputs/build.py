@@ -14,6 +14,7 @@ from vv_ai.inputs.models import (
     CLIInput,
     CommandName,
     CommentInvocation,
+    ControlLabelName,
     EventName,
     InputError,
     IssueCommentEvent,
@@ -24,6 +25,7 @@ from vv_ai.inputs.models import (
     TargetType,
     WorkflowDispatchEvent,
     _COMMAND_NAMES,
+    _CONTROL_LABELS,
     _ISSUE_LABEL_COMMANDS,
     _LABEL_COMMANDS,
     _PULL_REQUEST_LABEL_COMMANDS,
@@ -148,15 +150,29 @@ def build_raw_input_from_workflow_dispatch_event(
 def build_raw_input_from_issue_labeled_event(event: IssueLabeledEvent) -> RawInput:
     """`issues` labeled payload から `RawInput` を構築する。"""
     _ensure_labeled_action(event.action, "issues")
-    command = parse_label_invocation(event.label.name)
-    _ensure_label_command_allowed(command, "issue")
+    command = _parse_label_invocation_or_none(event.label.name)
+    if command is not None:
+        _ensure_label_command_allowed(command, "issue")
+        return RawInput(
+            event_name="issues",
+            command=command,
+            target_type="issue",
+            target_number=event.issue.number,
+            repository_full_name=event.repository.full_name,
+            actor=event.sender.login,
+            actor_id=event.sender.id,
+            trigger_label_name=event.label.name,
+            trigger_event_created_at=event.issue.updated_at,
+        )
+    control_label_name = parse_control_label_invocation(event.label.name)
     return RawInput(
         event_name="issues",
-        command=command,
+        control_label_name=control_label_name,
         target_type="issue",
         target_number=event.issue.number,
         repository_full_name=event.repository.full_name,
         actor=event.sender.login,
+        actor_id=event.sender.id,
         trigger_label_name=event.label.name,
         trigger_event_created_at=event.issue.updated_at,
     )
@@ -167,15 +183,29 @@ def build_raw_input_from_pull_request_labeled_event(
 ) -> RawInput:
     """`pull_request` labeled payload から `RawInput` を構築する。"""
     _ensure_labeled_action(event.action, "pull_request")
-    command = parse_label_invocation(event.label.name)
-    _ensure_label_command_allowed(command, "pr")
+    command = _parse_label_invocation_or_none(event.label.name)
+    if command is not None:
+        _ensure_label_command_allowed(command, "pr")
+        return RawInput(
+            event_name="pull_request",
+            command=command,
+            target_type="pr",
+            target_number=event.pull_request.number,
+            repository_full_name=event.repository.full_name,
+            actor=event.sender.login,
+            actor_id=event.sender.id,
+            trigger_label_name=event.label.name,
+            trigger_event_created_at=event.pull_request.updated_at,
+        )
+    control_label_name = parse_control_label_invocation(event.label.name)
     return RawInput(
         event_name="pull_request",
-        command=command,
+        control_label_name=control_label_name,
         target_type="pr",
         target_number=event.pull_request.number,
         repository_full_name=event.repository.full_name,
         actor=event.sender.login,
+        actor_id=event.sender.id,
         trigger_label_name=event.label.name,
         trigger_event_created_at=event.pull_request.updated_at,
     )
@@ -257,6 +287,21 @@ def parse_label_invocation(label_name: str) -> CommandName:
     if command is None:
         raise InputError(f"対象外のラベルです: {label_name}")
     return command
+
+
+def parse_control_label_invocation(label_name: str) -> ControlLabelName:
+    """`vv-ai:*` ラベル名を制御ラベルとして解釈する。"""
+    if label_name not in _CONTROL_LABELS:
+        raise InputError(f"対象外の制御ラベルです: {label_name}")
+    return label_name
+
+
+def _parse_label_invocation_or_none(label_name: str) -> CommandName | None:
+    """command label であれば command を返す。"""
+    try:
+        return parse_label_invocation(label_name)
+    except InputError:
+        return None
 
 
 def _ensure_labeled_action(action: str | None, event_name: EventName) -> None:

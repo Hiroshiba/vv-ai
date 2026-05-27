@@ -201,16 +201,32 @@ def _resolve_current_label_index(
     current_indexes = [
         index
         for index, timeline_event in enumerate(timeline_events)
-        if timeline_event.event == "labeled"
-        and timeline_event.label_name == command.trigger_label_name
-        and timeline_event.actor.login == command.actor
-        and timeline_event.created_at == command.trigger_event_created_at
+        if _is_current_label_event(command, timeline_event)
     ]
     if len(current_indexes) == 0:
         raise NextResolutionError("現在処理中のラベル event が履歴内に見つかりません")
     if len(current_indexes) > 1:
         raise NextResolutionError("現在処理中のラベル event が一意に見つかりません")
     return current_indexes[0]
+
+
+def _is_current_label_event(
+    command: ResolvedCommand,
+    timeline_event: GitHubIssueTimelineEvent,
+) -> bool:
+    """現在処理中の label event かを返す。"""
+    if timeline_event.event != "labeled":
+        return False
+    if timeline_event.label_name != command.trigger_label_name:
+        return False
+    if timeline_event.created_at != command.trigger_event_created_at:
+        return False
+    if (
+        command.actor_id is not None
+        and timeline_event.actor.database_id is not None
+    ):
+        return timeline_event.actor.database_id == command.actor_id
+    return timeline_event.actor.login == command.actor
 
 
 def _build_github_history_entry(
@@ -227,16 +243,57 @@ def _build_github_history_entry(
             source="artifact",
         )
 
-    if timeline_event.event not in {"commented", "labeled"}:
-        return None
-
-    if timeline_event.actor.login not in config.allowed_users:
-        return None
-    command = _parse_timeline_history_command(timeline_event)
+    command = _parse_authorized_timeline_history_command(config, timeline_event)
     if command is None:
         return None
     if _should_ignore_command(target, command):
         return None
+    return _build_next_history_entry(command, timeline_event)
+
+
+def _parse_authorized_timeline_history_command(
+    config: VVAIConfig,
+    timeline_event: GitHubIssueTimelineEvent,
+) -> CommandName | None:
+    """認可済み timeline event から履歴 command を返す。"""
+    if timeline_event.event == "commented":
+        if timeline_event.actor.login not in config.allowed_users:
+            return None
+        return _parse_timeline_history_command(timeline_event)
+
+    if timeline_event.event != "labeled":
+        return None
+
+    command = _parse_timeline_history_command(timeline_event)
+    if command is None:
+        return None
+    if timeline_event.actor.login in config.allowed_users:
+        return command
+    if _is_internal_bot_actor(timeline_event, config):
+        return command
+    return None
+
+
+def _is_internal_bot_actor(
+    timeline_event: GitHubIssueTimelineEvent,
+    config: VVAIConfig,
+) -> bool:
+    """timeline event の actor が内部 bot かを返す。"""
+    if timeline_event.actor.actor_type != "Bot":
+        return False
+    database_id = timeline_event.actor.database_id
+    if database_id is None:
+        return False
+    return database_id in config.internal_bot_ids
+
+
+def _build_next_history_entry(
+    command: CommandName,
+    timeline_event: GitHubIssueTimelineEvent,
+) -> NextHistoryEntry:
+    """timeline event から履歴 entry を組み立てる。"""
+    if timeline_event.event not in {"commented", "labeled"}:
+        raise NextResolutionError("未対応の timeline event です")
     return NextHistoryEntry(
         command=command,
         created_at=timeline_event.created_at,

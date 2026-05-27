@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 from vv_ai.config import VVAIConfig, load_vv_ai_config
 from vv_ai.backends.local.store import generate_local_workflow_id
 from vv_ai.providers.selection import ResolvedProvider, resolve_provider
-from vv_ai.inputs.resolve import ResolvedCommand
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedControlLabel, ResolvedInput
 from vv_ai.sessions.models import ResolvedSession
 
 
@@ -53,50 +53,88 @@ class ReadyExecution(BaseModel):
         return self.resolved_provider.source
 
 
+class ReadyControlExecution(BaseModel):
+    """制御ラベル処理へ進める状態。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    control: ResolvedControlLabel
+    config: VVAIConfig
+    workflow_id: str
+
+
 def run_preflight(
     repo_root: Path,
-    resolved_command: ResolvedCommand,
+    resolved_input: ResolvedInput,
     env: Mapping[str, str],
-) -> ReadyExecution | SilentSkip:
+) -> ReadyExecution | ReadyControlExecution | SilentSkip:
     """設定読込・認可・provider 解決を行う。"""
     config = load_vv_ai_config(repo_root)
 
-    authorization_result = _authorize_actor(resolved_command, config)
+    authorization_result = _authorize_actor(resolved_input, config)
     if authorization_result is not None:
         return authorization_result
 
+    if isinstance(resolved_input, ResolvedControlLabel):
+        return ReadyControlExecution(
+            control=resolved_input,
+            config=config,
+            workflow_id=_resolve_workflow_id(resolved_input, env),
+        )
+
     return ReadyExecution(
-        command=resolved_command,
+        command=resolved_input,
         config=config,
-        resolved_provider=resolve_provider(resolved_command, config, env),
-        workflow_id=_resolve_workflow_id(resolved_command, env),
+        resolved_provider=resolve_provider(resolved_input, config, env),
+        workflow_id=_resolve_workflow_id(resolved_input, env),
     )
 
 
 def _authorize_actor(
-    resolved_command: ResolvedCommand,
+    resolved_input: ResolvedInput,
     config: VVAIConfig,
 ) -> SilentSkip | None:
     """event に応じた認可を行う。"""
-    if resolved_command.event_name == "local":
+    if resolved_input.event_name == "local":
         return None
 
-    actor = resolved_command.actor
+    actor = resolved_input.actor
     if actor is None:
         raise AuthorizationError("認可に必要な actor が見つかりません")
 
-    if actor not in config.allowed_users:
-        if resolved_command.event_name == "issue_comment":
-            return SilentSkip(reason="unauthorized_comment")
-        if resolved_command.event_name in {"issues", "pull_request"}:
-            return SilentSkip(reason="unauthorized_label")
-        raise AuthorizationError("この workflow は許可されたユーザーのみ実行できます")
+    if actor in config.allowed_users:
+        return None
 
-    return None
+    if isinstance(resolved_input, ResolvedCommand) and _is_internal_bot_label(
+        resolved_input,
+        config,
+    ):
+        return None
+
+    if resolved_input.event_name == "issue_comment":
+        return SilentSkip(reason="unauthorized_comment")
+    if resolved_input.event_name in {"issues", "pull_request"}:
+        return SilentSkip(reason="unauthorized_label")
+    raise AuthorizationError("この workflow は許可されたユーザーのみ実行できます")
+
+
+def _is_internal_bot_label(
+    resolved_command: ResolvedCommand,
+    config: VVAIConfig,
+) -> bool:
+    """内部 bot による command label 起動かを返す。"""
+    if resolved_command.event_name not in {"issues", "pull_request"}:
+        return False
+    if resolved_command.trigger_label_name is None:
+        return False
+    actor_id = resolved_command.actor_id
+    if actor_id is None:
+        return False
+    return actor_id in config.internal_bot_ids
 
 
 def _resolve_workflow_id(
-    resolved_command: ResolvedCommand,
+    resolved_command: ResolvedInput,
     env: Mapping[str, str],
 ) -> str:
     """全 event で使う workflow_id を解決する。"""

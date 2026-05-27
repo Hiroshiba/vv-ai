@@ -13,12 +13,14 @@ from tools.create_vv_ai_labels import (
     _resolve_repository_full_name,
     _sync_labels,
 )
-from vv_ai.inputs.models import _LABEL_COMMANDS
+from vv_ai.inputs.models import _CONTROL_LABELS, _LABEL_COMMANDS
 
 
 def test_label_names_match_label_invocation() -> None:
-    """作成対象ラベル名はラベル起動対象と一致する。"""
-    assert {label.name for label in VV_AI_LABELS} == set(_LABEL_COMMANDS)
+    """作成対象ラベル名はコマンドラベルと制御ラベルに一致する。"""
+    assert {label.name for label in VV_AI_LABELS} == (
+        set(_LABEL_COMMANDS) | set(_CONTROL_LABELS)
+    )
 
 
 def test_label_names_include_next() -> None:
@@ -34,6 +36,11 @@ def test_label_names_include_address() -> None:
 def test_label_names_include_sync() -> None:
     """作成対象ラベル名に sync ラベルを含む。"""
     assert "vv-ai:sync" in {label.name for label in VV_AI_LABELS}
+
+
+def test_label_names_include_auto() -> None:
+    """作成対象ラベル名に auto ラベルを含む。"""
+    assert "vv-ai:auto" in {label.name for label in VV_AI_LABELS}
 
 
 def test_sync_labels_creates_missing_and_edits_existing(
@@ -73,6 +80,7 @@ def test_sync_labels_creates_missing_and_edits_existing(
     assert len(calls) == len(VV_AI_LABELS) + 1
     assert "更新しました: vv-ai:reply" in output
     assert "作成しました: vv-ai:confirm" in output
+    assert "作成しました: vv-ai:auto" in output
     assert "org/repo の vv-ai ラベルを同期しました" in output
 
 
@@ -119,6 +127,7 @@ def test_sync_labels_dry_run_skips_create_and_edit(
     ]
     assert "更新予定: vv-ai:reply" in output
     assert "作成予定: vv-ai:confirm" in output
+    assert "作成予定: vv-ai:auto" in output
     assert "--dry-run: GitHub ラベルは変更していません。対象: 現在のリポジトリ" in output
 
 
