@@ -80,6 +80,8 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai --help
 ```yaml
 allowed_users:
   - Hiroshiba
+internal_bot_ids:
+  - 274163862
 
 provider_priority:
   - codex
@@ -90,6 +92,7 @@ pull_request_target_branch: master
 | 項目 | 必須 | 説明 |
 | --- | --- | --- |
 | `allowed_users` | 必須 | コマンド実行を許可する GitHub ユーザーの一覧 |
+| `internal_bot_ids` | 任意 | ラベル起動を許可する GitHub App bot の user ID 一覧 |
 | `provider_priority` | 任意 | プロバイダの優先順。デフォルトは `[codex, claude]` |
 | `pull_request_target_branch` | 任意 | PR の向き先ブランチ。未指定時はリポジトリのデフォルトブランチ |
 
@@ -164,6 +167,8 @@ PR でのみ使えるコマンド:
 
 Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動します。
 実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
+
+<!-- `vv-ai:auto` 単体で工程を実行しない挙動は自動進行の基盤段階の仮実装です。最終工程で、自動進行中の対象へ次の実行用ラベルを付ける制御を書き入れます。 -->
 
 ラベル起動に使う GitHub ラベルはツールで作成できます。既存のラベルは色と説明を更新します。
 

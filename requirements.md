@@ -79,7 +79,7 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 
 ### next の解決
 
-- `next` は原則として履歴から次の既存コマンドへ解決するショートカット
+- `next` は原則として工程起動の履歴から次の既存コマンドへ解決するショートカット
 - 通常 Issue の履歴なし `next` は `confirm`
 - サブ Issue の履歴なし `next` は `implement`
 - Issue では `confirm` → `requirements` → `arch` → `detail` の順に進む
@@ -103,9 +103,9 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 
 ### 2. GitHub ラベル起動（`issues.labeled` / `pull_request.labeled`）
 
-- Issue または PR に `vv-ai:<command>` label を付けると起動
-- 許可ユーザーの label 付与のみ反応。未許可は**完全サイレント**（何も返さない）
-- label 名から command を決め、`instruction` はなしとして扱う
+- Issue または PR に `vv-ai:<command>` ラベルを付けると起動
+- 許可されたラベル付与のみ反応。未許可は**完全サイレント**（何も返さない）
+- `vv-ai:auto` は起動コマンドではなく、自動進行が有効な状態を表す制御ラベルとして扱う
 
 ### 3. GitHub workflow_dispatch
 
@@ -280,6 +280,8 @@ Codex 実行時は `.codex/` を直接編集させず、作業用 mirror を編�
 ```yaml
 allowed_users:
   - Hiroshiba
+internal_bot_ids:
+  - 274163862
 
 provider_priority:
   - codex
@@ -291,6 +293,7 @@ provider_priority:
 | 項目                | 説明                                    |
 | ------------------- | --------------------------------------- |
 | `allowed_users`     | コマンド実行を許可する GitHub ユーザー  |
+| `internal_bot_ids`  | ラベル起動を許可する GitHub App bot の user ID |
 | `provider_priority` | プロバイダの優先順                      |
 
 ---
@@ -299,8 +302,9 @@ provider_priority:
 
 ### MVP
 
-- `vv-ai.yml` の `allowed_users` に入っているユーザーのみ実行可能
-- MVP では **Hiroshiba** のみ
+- コメント起動は `vv-ai.yml` の `allowed_users` に入っているユーザーのみ実行可能
+- ラベル起動は `allowed_users` に入っているユーザー、または `internal_bot_ids` に入っている GitHub App bot のみ実行可能
+- MVP では **Hiroshiba** と vv-ai 用 GitHub App bot のみ
 - workflow_dispatch では追加で `github.actor == "Hiroshiba"` をチェック
 
 ### 未許可ユーザーの操作

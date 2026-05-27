@@ -14,6 +14,7 @@ from vv_ai.inputs.build import (
     build_raw_input_from_pull_request_labeled_event,
     build_raw_input_from_workflow_dispatch_event,
     parse_comment_invocation,
+    parse_control_label_invocation,
     parse_label_invocation,
 )
 from vv_ai.inputs.models import (
@@ -193,6 +194,10 @@ class TestParseLabelInvocation:
     def test_label_sync(self) -> None:
         assert parse_label_invocation("vv-ai:sync") == "sync"
 
+    def test_label_auto_is_not_command(self) -> None:
+        with pytest.raises(InputError):
+            parse_label_invocation("vv-ai:auto")
+
     @pytest.mark.parametrize(
         "label_name",
         ["bug", "vv-ai", "vv-ai:", "vv-ai:unknown"],
@@ -200,6 +205,19 @@ class TestParseLabelInvocation:
     def test_error_invalid_label(self, label_name: str) -> None:
         with pytest.raises(InputError):
             parse_label_invocation(label_name)
+
+
+class TestParseControlLabelInvocation:
+    def test_label_auto(self) -> None:
+        assert parse_control_label_invocation("vv-ai:auto") == "vv-ai:auto"
+
+    @pytest.mark.parametrize(
+        "label_name",
+        ["bug", "vv-ai:next", "vv-ai:unknown"],
+    )
+    def test_error_invalid_control_label(self, label_name: str) -> None:
+        with pytest.raises(InputError):
+            parse_control_label_invocation(label_name)
 
 
 class TestBuildRawInputFromCli:
@@ -296,7 +314,7 @@ class TestBuildRawInputFromIssueLabeledEvent:
             "issue": {"number": 42, "updated_at": "2026-05-18T04:00:00Z"},
             "label": {"name": label_name},
             "repository": {"full_name": "org/repo"},
-            "sender": {"login": "Hiroshiba"},
+            "sender": {"login": "Hiroshiba", "id": 1},
         })
 
     def test_issue_labeled_confirm(self) -> None:
@@ -314,8 +332,21 @@ class TestBuildRawInputFromIssueLabeledEvent:
         assert raw.target_number == 42
         assert raw.repository_full_name == "org/repo"
         assert raw.actor == "Hiroshiba"
+        assert raw.actor_id == 1
         assert raw.trigger_label_name == "vv-ai:confirm"
         assert raw.trigger_event_created_at == "2026-05-18T04:00:00Z"
+
+    def test_issue_labeled_auto(self) -> None:
+        raw = build_raw_input_from_issue_labeled_event(
+            self._make_event("vv-ai:auto")
+        )
+
+        assert raw.command is None
+        assert raw.control_label_name == "vv-ai:auto"
+        assert raw.target_type == "issue"
+        assert raw.target_number == 42
+        assert raw.actor == "Hiroshiba"
+        assert raw.actor_id == 1
 
     def test_issue_labeled_reply_without_instruction(self) -> None:
         raw = build_raw_input_from_issue_labeled_event(
@@ -366,7 +397,7 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
             "pull_request": {"number": 43, "updated_at": "2026-05-18T04:00:00Z"},
             "label": {"name": label_name},
             "repository": {"full_name": "org/repo"},
-            "sender": {"login": "Hiroshiba"},
+            "sender": {"login": "Hiroshiba", "id": 1},
         })
 
     def test_pull_request_labeled_review(self) -> None:
@@ -380,8 +411,21 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
         assert raw.target_number == 43
         assert raw.repository_full_name == "org/repo"
         assert raw.actor == "Hiroshiba"
+        assert raw.actor_id == 1
         assert raw.trigger_label_name == "vv-ai:review"
         assert raw.trigger_event_created_at == "2026-05-18T04:00:00Z"
+
+    def test_pull_request_labeled_auto(self) -> None:
+        raw = build_raw_input_from_pull_request_labeled_event(
+            self._make_event("vv-ai:auto")
+        )
+
+        assert raw.command is None
+        assert raw.control_label_name == "vv-ai:auto"
+        assert raw.target_type == "pr"
+        assert raw.target_number == 43
+        assert raw.actor == "Hiroshiba"
+        assert raw.actor_id == 1
 
     def test_pull_request_labeled_address(self) -> None:
         raw = build_raw_input_from_pull_request_labeled_event(

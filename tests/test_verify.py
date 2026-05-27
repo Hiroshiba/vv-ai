@@ -23,27 +23,39 @@ def _make_config() -> VVAIConfig:
     return VVAIConfig(allowed_users=["Hiroshiba"])
 
 
-def _make_issue_labeled_payload(label_name: str, actor: str) -> dict[str, object]:
+def _make_issue_labeled_payload(
+    label_name: str,
+    actor: str,
+    actor_id: int | None = 1,
+) -> dict[str, object]:
     """issues labeled payload を生成する。"""
+    sender: dict[str, object] = {"login": actor}
+    if actor_id is not None:
+        sender["id"] = actor_id
     return {
         "action": "labeled",
         "issue": {"number": 42, "updated_at": "2026-05-18T04:00:00Z"},
         "label": {"name": label_name},
         "repository": {"full_name": "org/repo"},
-        "sender": {"login": actor},
+        "sender": sender,
     }
 
 
 def _make_pull_request_labeled_payload(
-    label_name: str, actor: str
+    label_name: str,
+    actor: str,
+    actor_id: int | None = 1,
 ) -> dict[str, object]:
     """pull_request labeled payload を生成する。"""
+    sender: dict[str, object] = {"login": actor}
+    if actor_id is not None:
+        sender["id"] = actor_id
     return {
         "action": "labeled",
         "pull_request": {"number": 43, "updated_at": "2026-05-18T04:00:00Z"},
         "label": {"name": label_name},
         "repository": {"full_name": "org/repo"},
-        "sender": {"login": actor},
+        "sender": sender,
     }
 
 
@@ -87,6 +99,16 @@ def test_issue_labeled_next_should_run(tmp_path: Path) -> None:
     assert result.event == "issues"
 
 
+def test_issue_labeled_auto_should_run(tmp_path: Path) -> None:
+    payload = _make_issue_labeled_payload("vv-ai:auto", "Hiroshiba")
+
+    result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+    assert result.event == "issues"
+
+
 def test_pull_request_labeled_review_should_run(tmp_path: Path) -> None:
     payload = _make_pull_request_labeled_payload("vv-ai:review", "Hiroshiba")
 
@@ -113,6 +135,18 @@ def test_pull_request_labeled_address_should_run(tmp_path: Path) -> None:
 
 def test_pull_request_labeled_next_should_run(tmp_path: Path) -> None:
     payload = _make_pull_request_labeled_payload("vv-ai:next", "Hiroshiba")
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+    assert result.event == "pull_request"
+
+
+def test_pull_request_labeled_auto_should_run(tmp_path: Path) -> None:
+    payload = _make_pull_request_labeled_payload("vv-ai:auto", "Hiroshiba")
 
     result = run_verify(
         "pull_request", _write_payload(tmp_path, payload), _make_config()
@@ -185,6 +219,54 @@ def test_pull_request_labeled_breakdown_should_not_run(tmp_path: Path) -> None:
 
 def test_issue_labeled_unauthorized_user_should_not_run(tmp_path: Path) -> None:
     payload = _make_issue_labeled_payload("vv-ai:confirm", "unknown-user")
+
+    result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
+
+    assert result.should_run is False
+    assert result.reason == "unauthorized"
+
+
+def test_issue_labeled_auto_unauthorized_user_should_not_run(tmp_path: Path) -> None:
+    payload = _make_issue_labeled_payload("vv-ai:auto", "unknown-user")
+
+    result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
+
+    assert result.should_run is False
+    assert result.reason == "unauthorized"
+
+
+def test_issue_labeled_internal_bot_next_should_run(tmp_path: Path) -> None:
+    payload = _make_issue_labeled_payload(
+        "vv-ai:next",
+        "vv-ai-public-read-github-app[bot]",
+        actor_id=274163862,
+    )
+
+    result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
+
+    assert result.should_run is True
+    assert result.actor == "vv-ai-public-read-github-app[bot]"
+
+
+def test_issue_labeled_other_bot_next_should_not_run(tmp_path: Path) -> None:
+    payload = _make_issue_labeled_payload(
+        "vv-ai:next",
+        "vv-ai-public-read-github-app[bot]",
+        actor_id=999,
+    )
+
+    result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
+
+    assert result.should_run is False
+    assert result.reason == "unauthorized"
+
+
+def test_issue_labeled_internal_bot_auto_should_not_run(tmp_path: Path) -> None:
+    payload = _make_issue_labeled_payload(
+        "vv-ai:auto",
+        "vv-ai-public-read-github-app[bot]",
+        actor_id=274163862,
+    )
 
     result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
 

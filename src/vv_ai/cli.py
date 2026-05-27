@@ -37,6 +37,7 @@ from vv_ai.artifacts.metrics import (
 from vv_ai.commands.next import NextResolutionError, resolve_next_command
 from vv_ai.workflow.preflight import (
     PreflightError,
+    ReadyControlExecution,
     ReadyExecution,
     SilentSkip,
     run_preflight,
@@ -48,7 +49,11 @@ from vv_ai.artifacts.session import SessionArtifactError, fork_session_artifact
 from vv_ai.artifacts.report import ReportSections
 from vv_ai.inputs.resolve import ResolutionError, resolve_raw_input
 from vv_ai.sessions.resolve import SessionResolutionError, resolve_session
-from vv_ai.targets.resolve import TargetResolutionError, resolve_target
+from vv_ai.targets.resolve import (
+    TargetResolutionError,
+    resolve_control_label_target,
+    resolve_target,
+)
 from vv_ai.workflow.verify import VerifyResult, run_verify
 
 
@@ -153,7 +158,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         resolved_command = resolve_raw_input(raw_input)
         repo_root = find_repo_root(Path.cwd())
         preflight_result = run_preflight(repo_root, resolved_command, os.environ)
-        if isinstance(preflight_result, ReadyExecution):
+        if isinstance(preflight_result, ReadyControlExecution):
+            resolved_control = resolve_control_label_target(preflight_result.control)
+            preflight_result = preflight_result.model_copy(
+                update={"control": resolved_control}
+            )
+        elif isinstance(preflight_result, ReadyExecution):
             resolved_target_command = resolve_target(
                 repo_root, preflight_result.command
             )
@@ -191,6 +201,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if isinstance(preflight_result, SilentSkip):
         return _handle_silent_skip(preflight_result)
+    if isinstance(preflight_result, ReadyControlExecution):
+        print(_format_ready_control_message(preflight_result))
+        return 0
 
     return _run_ready_execution(
         repo_root,
@@ -258,6 +271,20 @@ def _handle_silent_skip(result: SilentSkip) -> int:
     if result.reason not in {"unauthorized_comment", "unauthorized_label"}:
         raise AssertionError(f"未対応の silent skip 理由です: {result.reason}")
     return 0
+
+
+def _format_ready_control_message(result: ReadyControlExecution) -> str:
+    """制御ラベル確認時のメッセージを組み立てる。"""
+    message = (
+        "制御ラベルを確認しました: "
+        f"event={result.control.event_name}, "
+        f"label={result.control.control_label_name}, "
+        f"workflow_id={result.workflow_id}"
+    )
+    target = result.control.target
+    if target is None:
+        return message
+    return f"{message}, target={target.canonical_id}"
 
 
 def _format_ready_message(result: ReadyExecution) -> str:

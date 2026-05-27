@@ -28,7 +28,7 @@ class LabelDefinition:
     description: str
 
 
-VV_AI_LABELS: tuple[LabelDefinition, ...] = (
+VV_AI_COMMAND_LABELS: tuple[LabelDefinition, ...] = (
     LabelDefinition("vv-ai:reply", "5319e7", "vv-ai で返信する"),
     LabelDefinition("vv-ai:confirm", "5319e7", "vv-ai で意図確認する"),
     LabelDefinition("vv-ai:requirements", "5319e7", "vv-ai で要件定義する"),
@@ -41,6 +41,13 @@ VV_AI_LABELS: tuple[LabelDefinition, ...] = (
     LabelDefinition("vv-ai:issue", "5319e7", "vv-ai で Issue 作成する"),
     LabelDefinition("vv-ai:next", "5319e7", "vv-ai で次の工程を実行する"),
     LabelDefinition("vv-ai:sync", "5319e7", "vv-ai で PR を同期する"),
+)
+VV_AI_CONTROL_LABELS: tuple[LabelDefinition, ...] = (
+    LabelDefinition("vv-ai:auto", "0e8a16", "vv-ai の自動進行を有効にする"),
+)
+VV_AI_LABELS: tuple[LabelDefinition, ...] = (
+    *VV_AI_COMMAND_LABELS,
+    *VV_AI_CONTROL_LABELS,
 )
 
 

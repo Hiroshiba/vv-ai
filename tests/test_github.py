@@ -229,6 +229,7 @@ def test_list_issue_labeled_events_builds_models() -> None:
     assert "issueOrPullRequest(number: $number) {\n      timelineItems" not in query
     assert "... on IssueComment {\n      databaseId" in query
     assert "author {\n        __typename\n        login" in query
+    assert "... on Bot {\n          databaseId" in query
     assert "... on LabeledEvent {\n      databaseId" not in query
     assert "... on SubIssueAddedEvent {\n      databaseId" not in query
     assert "... on CrossReferencedEvent {\n      databaseId" not in query
@@ -330,6 +331,7 @@ def test_list_issue_timeline_events_normalizes_bot_author() -> None:
                             "author": {
                                 "__typename": "Bot",
                                 "login": "vv-ai-public-read-github-app",
+                                "databaseId": 274163862,
                             },
                             "createdAt": "2026-05-17T16:00:00Z",
                         }
@@ -343,6 +345,38 @@ def test_list_issue_timeline_events_normalizes_bot_author() -> None:
     events = client.list_issue_timeline_events("org/repo", 1)
 
     assert events[0].actor.login == "vv-ai-public-read-github-app[bot]"
+    assert events[0].actor.actor_type == "Bot"
+    assert events[0].actor.database_id == 274163862
+
+
+def test_list_issue_timeline_events_accepts_null_bot_database_id() -> None:
+    """list_issue_timeline_events は null の Bot databaseId を許容する。"""
+    client = GitHubClient(
+        lambda args: json.dumps(
+            [
+                _make_timeline_page(
+                    [
+                        {
+                            "__typename": "LabeledEvent",
+                            "label": {"name": "vv-ai:next"},
+                            "actor": {
+                                "__typename": "Bot",
+                                "login": "vv-ai-public-read-github-app",
+                                "databaseId": None,
+                            },
+                            "createdAt": "2026-05-17T16:00:00Z",
+                        }
+                    ]
+                )
+            ]
+        ),
+        lambda args: b"",
+    )
+
+    events = client.list_issue_timeline_events("org/repo", 1)
+
+    assert events[0].actor.login == "vv-ai-public-read-github-app[bot]"
+    assert events[0].actor.database_id is None
 
 
 def test_list_issue_timeline_events_builds_issue_cross_reference_source() -> None:

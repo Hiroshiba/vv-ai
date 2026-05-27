@@ -458,12 +458,23 @@ def _build_actor(raw_actor: object) -> GitHubActor:
     """`gh issue view` 系の actor を変換する。"""
     if not isinstance(raw_actor, dict):
         raise GitHubClientError("author の JSON 形式が不正です")
+    actor_type = raw_actor.get("__typename")
     login = raw_actor.get("login")
-    if raw_actor.get("__typename") == "Bot" and isinstance(login, str):
+    database_id = None
+    if actor_type == "Bot":
+        raw_database_id = raw_actor.get("databaseId")
+        if raw_database_id is not None and type(raw_database_id) is not int:
+            raise GitHubClientError("Bot.databaseId が不正です")
+        database_id = raw_database_id
+    if actor_type == "Bot" and isinstance(login, str):
         login = f"{login}[bot]"
     return _validate_model(
         GitHubActor,
-        {"login": login},
+        {
+            "login": login,
+            "database_id": database_id,
+            "actor_type": actor_type,
+        },
         "author",
     )
 
