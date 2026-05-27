@@ -148,18 +148,16 @@ def apply_auto_continuation_plan(
         plan.target_number,
     )
     if AUTO_LABEL_NAME not in label_names:
+        _remove_source_label_if_present(plan, github_client, label_names)
         return AutoContinuationApplyResult(status="auto_removed")
 
     target = _build_target(plan)
     target_details = github_client.get_target_details(target)
     if _is_target_closed(target_details):
+        _remove_source_label_if_present(plan, github_client, label_names)
         return AutoContinuationApplyResult(status="target_closed")
 
-    github_client.remove_issue_label(
-        plan.repository_full_name,
-        plan.target_number,
-        plan.source_label_name,
-    )
+    _remove_source_label_if_present(plan, github_client, label_names)
 
     if _is_limit_reached(plan, github_client):
         github_client.remove_issue_label(
@@ -193,6 +191,20 @@ def _build_target(plan: AutoContinuationPlan) -> ResolvedTarget:
 
 def _is_target_closed(target_details: GitHubTargetDetails) -> bool:
     return target_details.state != "OPEN"
+
+
+def _remove_source_label_if_present(
+    plan: AutoContinuationPlan,
+    github_client: GitHubClient,
+    label_names: list[str],
+) -> None:
+    if plan.source_label_name not in label_names:
+        return
+    github_client.remove_issue_label(
+        plan.repository_full_name,
+        plan.target_number,
+        plan.source_label_name,
+    )
 
 
 def _is_limit_reached(

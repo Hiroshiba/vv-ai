@@ -208,7 +208,7 @@ def test_apply_auto_continuation_plan_skips_without_auto_label(tmp_path: Path) -
     result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
 
     assert result.status == "auto_removed"
-    assert client.operations == []
+    assert client.operations == [("remove", "vv-ai:confirm")]
 
 
 def test_apply_auto_continuation_plan_skips_closed_issue(tmp_path: Path) -> None:
@@ -223,7 +223,7 @@ def test_apply_auto_continuation_plan_skips_closed_issue(tmp_path: Path) -> None
     result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
 
     assert result.status == "target_closed"
-    assert client.operations == []
+    assert client.operations == [("remove", "vv-ai:confirm")]
 
 
 @pytest.mark.parametrize("state", ["CLOSED", "MERGED"])
@@ -242,6 +242,23 @@ def test_apply_auto_continuation_plan_skips_closed_pr(
     result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
 
     assert result.status == "target_closed"
+    assert client.operations == [("remove", "vv-ai:confirm")]
+
+
+def test_apply_auto_continuation_plan_skips_removed_source_label(
+    tmp_path: Path,
+) -> None:
+    save_auto_continuation_plan(tmp_path, "test-workflow", _make_plan("issue"))
+    client = FakeGitHubClient(
+        [],
+        _make_issue("OPEN"),
+        [_make_labeled_event(AUTO_LABEL_NAME, "2026-05-27T00:00:00Z")],
+        [_make_artifact(1, "2026-05-27T00:01:00Z")],
+    )
+
+    result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
+
+    assert result.status == "auto_removed"
     assert client.operations == []
 
 
