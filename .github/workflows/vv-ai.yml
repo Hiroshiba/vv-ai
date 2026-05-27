@@ -341,3 +341,10 @@ jobs:
           name: ${{ steps.artifact_paths.outputs.report_name }}
           path: ${{ steps.artifact_paths.outputs.report_path }}
           retention-days: 90
+
+      - name: Apply auto continuation
+        env:
+          GITHUB_TOKEN: ${{ steps.write-token.outputs.token }}
+        run: |
+          uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai \
+            apply-auto-continuation

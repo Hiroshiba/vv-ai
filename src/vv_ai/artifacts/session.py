@@ -144,6 +144,12 @@ def build_session_artifact_prefix(session_key: SessionKey) -> str:
     return f"vv-ai-session__{target_name}__{provider_name}__{lane_name}__"
 
 
+def build_session_artifact_target_prefix(target_key: str) -> str:
+    """target ごとの session artifact prefix を返す。"""
+    target_name = _sanitize_name(target_key)
+    return f"vv-ai-session__{target_name}__"
+
+
 def save_session_artifact(
     repo_root: Path,
     workflow_id: str,

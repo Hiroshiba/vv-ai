@@ -27,6 +27,7 @@ from vv_ai.backends.github.paths import (
     _build_issue_comment_reactions_path,
     _build_issue_comments_path,
     _build_issue_label_path,
+    _build_issue_labels_path,
     _build_issues_path,
     _build_pulls_path,
     _build_repository_path,
@@ -380,6 +381,52 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
         if not isinstance(payload, dict):
             raise GitHubClientError("コメント作成結果の JSON 形式が不正です")
         return _build_comment(payload)
+
+    def list_issue_label_names(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> list[str]:
+        """Issue または PR の label 名一覧を返す。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--paginate",
+                "--slurp",
+                f"{_build_issue_labels_path(repository_full_name, number)}?per_page=100",
+            ]
+        )
+        if not isinstance(payload, list):
+            raise GitHubClientError("label 一覧取得結果の JSON 形式が不正です")
+
+        label_names: list[str] = []
+        for page in payload:
+            if not isinstance(page, list):
+                raise GitHubClientError("label 一覧取得結果のページ形式が不正です")
+            for raw_label in page:
+                label = _require_mapping(raw_label, "label")
+                label_names.append(_require_string(label.get("name"), "label.name"))
+        return label_names
+
+    def add_issue_label(
+        self,
+        repository_full_name: str,
+        number: int,
+        label_name: str,
+    ) -> None:
+        """Issue または PR へ label を追加する。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--method",
+                "POST",
+                _build_issue_labels_path(repository_full_name, number),
+                "-f",
+                f"labels[]={_require_non_empty_text(label_name, 'label_name')}",
+            ]
+        )
+        if not isinstance(payload, list):
+            raise GitHubClientError("label 追加結果の JSON 形式が不正です")
 
     def create_issue(
         self,

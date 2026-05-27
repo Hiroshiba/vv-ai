@@ -12,6 +12,12 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from vv_ai.auto_continuation import (
+    AutoContinuationError,
+    apply_auto_continuation_plan,
+    build_auto_continuation_plan,
+    save_auto_continuation_plan,
+)
 from vv_ai.config import (
     VVAIConfig,
     VVAIConfigError,
@@ -25,7 +31,8 @@ from vv_ai.artifacts.execution import (
     save_execution_artifacts,
 )
 from vv_ai.executions.result import ExecutionResult
-from vv_ai.backends.github.models import GitHubPullRequest
+from vv_ai.backends.github.client import build_github_client
+from vv_ai.backends.github.models import GitHubClientError, GitHubPullRequest
 from vv_ai.inputs.build import build_raw_input_from_cli
 from vv_ai.inputs.models import CLIInput, InputError
 from vv_ai.artifacts.metrics import (
@@ -147,6 +154,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     argv_list = list(sys.argv[1:] if argv is None else argv)
     if argv_list and argv_list[0] == "verify":
         return _run_verify_subcommand(argv_list[1:])
+    if argv_list and argv_list[0] == "apply-auto-continuation":
+        return _run_apply_auto_continuation_subcommand(argv_list[1:])
 
     started_at = time.perf_counter()
     parser = build_parser()
@@ -254,6 +263,57 @@ def _run_verify_subcommand(verify_argv: Sequence[str]) -> int:
     return 0
 
 
+def _run_apply_auto_continuation_subcommand(argv: Sequence[str]) -> int:
+    """保存済み自動継続計画を適用する。"""
+    parser = argparse.ArgumentParser(
+        prog="vv-ai apply-auto-continuation",
+        description="artifact upload 後に保存済み自動継続計画を適用する。",
+    )
+    parser.add_argument(
+        "--workflow-id",
+        help="適用する自動継続計画の workflow_id を指定する。",
+    )
+    namespace = parser.parse_args(argv)
+    try:
+        repo_root = find_repo_root(Path.cwd())
+        workflow_id = _resolve_auto_continuation_workflow_id(
+            namespace.workflow_id,
+            os.environ,
+        )
+        result = apply_auto_continuation_plan(
+            repo_root,
+            workflow_id,
+            build_github_client(),
+        )
+    except (AutoContinuationError, GitHubClientError, VVAIConfigError) as exc:
+        print(f"自動継続エラー: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"自動継続結果: {result.status}")
+    return 0
+
+
+def _resolve_auto_continuation_workflow_id(
+    workflow_id: str | None,
+    env: Mapping[str, str],
+) -> str:
+    """自動継続後段処理で使う workflow_id を返す。"""
+    if workflow_id is not None:
+        if workflow_id.strip() == "":
+            raise AutoContinuationError("workflow_id が空です")
+        return workflow_id
+
+    run_id = env.get("GITHUB_RUN_ID")
+    if run_id is None or run_id.strip() == "":
+        raise AutoContinuationError("GITHUB_RUN_ID がありません")
+    run_attempt = env.get("GITHUB_RUN_ATTEMPT")
+    if run_attempt is None:
+        return f"run-{run_id}"
+    if run_attempt.strip() == "":
+        raise AutoContinuationError("GITHUB_RUN_ATTEMPT が空です")
+    return f"run-{run_id}-attempt-{run_attempt}"
+
+
 def _load_verify_config(config_path: Path | None) -> VVAIConfig:
     """verify 用の vv-ai.yml を読み込む。"""
     if config_path is not None:
@@ -345,13 +405,17 @@ def _run_ready_execution(
     exit_code = 0
 
     created_pr = None
+    auto_continuation_enabled = False
     try:
-        execution_result, created_pr = run_command(
+        command_result = run_command(
             repo_root,
             ready_execution,
             env,
             preflight_duration_seconds,
         )
+        execution_result = command_result.execution_result
+        created_pr = command_result.created_pr
+        auto_continuation_enabled = command_result.auto_continuation_enabled
     except CommandCleanupError as exc:
         runtime_error = exc
         created_pr = exc.created_pr
@@ -396,6 +460,17 @@ def _run_ready_execution(
             _fork_session_for_pr(repo_root, ready_execution, saved_artifacts, created_pr.number)
         except SessionArtifactError as exc:
             print(f"session fork エラー: {exc}", file=sys.stderr)
+            return 1
+
+    if auto_continuation_enabled:
+        try:
+            save_auto_continuation_plan(
+                repo_root,
+                ready_execution.workflow_id,
+                build_auto_continuation_plan(ready_execution),
+            )
+        except AutoContinuationError as exc:
+            print(f"自動継続計画保存エラー: {exc}", file=sys.stderr)
             return 1
 
     if runtime_error is None:

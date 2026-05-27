@@ -77,6 +77,14 @@ def _build_issue_label_path(
     )
 
 
+def _build_issue_labels_path(repository_full_name: str, number: int) -> str:
+    """Issue labels endpoint を返す。"""
+    return (
+        f"{_build_issues_path(repository_full_name)}"
+        f"/{_require_positive_id(number, 'number')}/labels"
+    )
+
+
 def _require_repository_full_name(repository_full_name: str) -> str:
     """org/repo 形式の repository 名を返す。"""
     if repository_full_name.count("/") != 1:
