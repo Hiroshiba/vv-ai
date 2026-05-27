@@ -92,7 +92,7 @@ pull_request_target_branch: master
 | 項目 | 必須 | 説明 |
 | --- | --- | --- |
 | `allowed_users` | 必須 | コマンド実行を許可する GitHub ユーザーの一覧 |
-| `internal_bot_ids` | 任意 | 自動進行によるラベル起動を許可する GitHub App bot の user ID 一覧 |
+| `internal_bot_ids` | 任意 | ラベル起動を許可する GitHub App bot の user ID 一覧 |
 | `provider_priority` | 任意 | プロバイダの優先順。デフォルトは `[codex, claude]` |
 | `pull_request_target_branch` | 任意 | PR の向き先ブランチ。未指定時はリポジトリのデフォルトブランチ |
 
@@ -167,8 +167,6 @@ PR でのみ使えるコマンド:
 
 Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動します。
 実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
-
-`vv-ai:auto` は起動コマンドではなく、自動進行が有効な状態を表す制御ラベルです。許可ユーザーが付けた場合は状態として受け付けますが、単体では工程を実行しません。自動進行によるラベル起動は、`internal_bot_ids` に含まれる GitHub App bot が付けた実行用ラベルだけを許可します。
 
 <!-- `vv-ai:auto` 単体で工程を実行しない挙動は自動進行の基盤段階の仮実装です。最終工程で、自動進行中の対象へ次の実行用ラベルを付ける制御を書き入れます。 -->
 
