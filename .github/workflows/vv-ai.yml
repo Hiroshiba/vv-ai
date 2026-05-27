@@ -346,5 +346,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.write-token.outputs.token }}
         run: |
-          uvx --from git+https://github.com/Hiroshiba/vv-ai@main vv-ai \
-            apply-auto-continuation
+          uv run vv-ai apply-auto-continuation
