@@ -80,8 +80,7 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 ### next の解決
 
 - `next` は原則として履歴から次の既存コマンドへ解決するショートカット
-- `next` の履歴には、許可ユーザーのコメントと実行用ラベルに加えて、内部 bot が付けた実行用ラベルを含める
-- 内部 bot のコメントと制御ラベルは `next` の履歴に含めない
+- `next` の履歴には、起動経路で本体実行に進むコメント起動とラベル起動のうち、工程を表すものを含める
 - 通常 Issue の履歴なし `next` は `confirm`
 - サブ Issue の履歴なし `next` は `implement`
 - Issue では `confirm` → `requirements` → `arch` → `detail` の順に進む
@@ -108,7 +107,7 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 - Issue または PR に `vv-ai:<command>` ラベルを付けると起動
 - 許可ユーザーのラベル付与のみ反応。未許可は**完全サイレント**（何も返さない）
 - `vv-ai:auto` は起動コマンドではなく、自動進行が有効な状態を表す制御ラベルとして扱う
-- 内部 bot が付けた `vv-ai:<command>` ラベルは内部起動として許可する
+- `internal_bot_ids` に含まれる GitHub App bot が付けた `vv-ai:<command>` ラベルは、自動進行によるラベル起動として許可する
 
 ### 3. GitHub workflow_dispatch
 
@@ -296,7 +295,7 @@ provider_priority:
 | 項目                | 説明                                    |
 | ------------------- | --------------------------------------- |
 | `allowed_users`     | コマンド実行を許可する GitHub ユーザー  |
-| `internal_bot_ids`  | 内部起動を許可する GitHub App bot の user ID |
+| `internal_bot_ids`  | 自動進行によるラベル起動を許可する GitHub App bot の user ID |
 | `provider_priority` | プロバイダの優先順                      |
 
 ---
