@@ -297,7 +297,7 @@ def parse_control_label_invocation(label_name: str) -> ControlLabelName:
 
 
 def _parse_label_invocation_or_none(label_name: str) -> CommandName | None:
-    """command label であれば command を返す。"""
+    """実行用ラベルであれば command を返す。"""
     try:
         return parse_label_invocation(label_name)
     except InputError:

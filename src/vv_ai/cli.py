@@ -159,10 +159,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         repo_root = find_repo_root(Path.cwd())
         preflight_result = run_preflight(repo_root, resolved_command, os.environ)
         if isinstance(preflight_result, ReadyControlExecution):
-            resolved_control = resolve_control_label_target(
-                repo_root,
-                preflight_result.control,
-            )
+            resolved_control = resolve_control_label_target(preflight_result.control)
             preflight_result = preflight_result.model_copy(
                 update={"control": resolved_control}
             )

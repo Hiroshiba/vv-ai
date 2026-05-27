@@ -24,19 +24,20 @@ def resolve_target(repo_root: Path, command: ResolvedCommand) -> ResolvedCommand
 
 
 def resolve_control_label_target(
-    repo_root: Path,
     control_label: ResolvedControlLabel,
 ) -> ResolvedControlLabel:
     """制御ラベル入力の target を GitHub / local の共通表現へ変換する。"""
-    target = _build_target(repo_root, control_label)
-    if target is None:
-        raise TargetResolutionError("制御ラベル入力の target を解決できません")
+    target = _build_target_from_fields(
+        repository_full_name=control_label.repository_full_name,
+        kind=control_label.target_type,
+        number=control_label.target_number,
+    )
     return control_label.model_copy(update={"target": target})
 
 
 def _build_target(
     repo_root: Path,
-    command: ResolvedCommand | ResolvedControlLabel,
+    command: ResolvedCommand,
 ) -> ResolvedTarget | None:
     """利用可能な入力から target を組み立てる。"""
     if command.target_url is not None:

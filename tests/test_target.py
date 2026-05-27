@@ -6,8 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from vv_ai.inputs.resolve import ResolvedCommand
-from vv_ai.targets.resolve import TargetResolutionError, resolve_target
+from vv_ai.inputs.resolve import ResolvedCommand, ResolvedControlLabel
+from vv_ai.targets.resolve import (
+    TargetResolutionError,
+    resolve_control_label_target,
+    resolve_target,
+)
 
 
 def _make_command(**overrides: object) -> ResolvedCommand:
@@ -19,6 +23,23 @@ def _make_command(**overrides: object) -> ResolvedCommand:
     }
     defaults.update(overrides)
     return ResolvedCommand.model_validate(defaults)
+
+
+def _make_control_label(**overrides: object) -> ResolvedControlLabel:
+    """テスト用の最小 ResolvedControlLabel を生成する。"""
+    defaults: dict[str, object] = {
+        "event_name": "issues",
+        "control_label_name": "vv-ai:auto",
+        "target_type": "issue",
+        "target_number": 42,
+        "has_target": True,
+        "repository_full_name": "org/repo",
+        "actor": "Hiroshiba",
+        "trigger_label_name": "vv-ai:auto",
+        "trigger_event_created_at": "2026-05-18T04:00:00Z",
+    }
+    defaults.update(overrides)
+    return ResolvedControlLabel.model_validate(defaults)
 
 
 class TestGitHubTargetFromUrl:
@@ -182,3 +203,18 @@ class TestResolveTargetFromFields:
         assert result.target is not None
         assert result.target.canonical_id == "url/repo#99"
         assert result.target.kind == "issue"
+
+
+class TestResolveControlLabelTarget:
+    def test_github_target_from_fields(self) -> None:
+        control_label = _make_control_label()
+
+        result = resolve_control_label_target(control_label)
+
+        assert result.target is not None
+        assert result.target.backend == "github"
+        assert result.target.kind == "issue"
+        assert result.target.canonical_id == "org/repo#42"
+        assert result.target.repository_full_name == "org/repo"
+        assert result.target.number == 42
+        assert result.target.url == "https://github.com/org/repo/issues/42"

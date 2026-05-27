@@ -122,7 +122,7 @@ def _is_internal_bot_label(
     resolved_command: ResolvedCommand,
     config: VVAIConfig,
 ) -> bool:
-    """内部 bot による command label 起動かを返す。"""
+    """内部 bot による実行用ラベル起動かを返す。"""
     if resolved_command.event_name not in {"issues", "pull_request"}:
         return False
     if resolved_command.trigger_label_name is None:

@@ -80,7 +80,7 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 ### next の解決
 
 - `next` は原則として履歴から次の既存コマンドへ解決するショートカット
-- `next` の履歴には、許可ユーザーのコメントと command label に加えて、内部 bot が付けた command label を含める
+- `next` の履歴には、許可ユーザーのコメントと実行用ラベルに加えて、内部 bot が付けた実行用ラベルを含める
 - 内部 bot のコメントと制御ラベルは `next` の履歴に含めない
 - 通常 Issue の履歴なし `next` は `confirm`
 - サブ Issue の履歴なし `next` は `implement`
@@ -105,13 +105,10 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 
 ### 2. GitHub ラベル起動（`issues.labeled` / `pull_request.labeled`）
 
-- Issue または PR に `vv-ai:<command>` label を付けると起動
-- 許可ユーザーの label 付与のみ反応。未許可は**完全サイレント**（何も返さない）
-- label 名から command を決め、`instruction` はなしとして扱う
-- `vv-ai:auto` は command label ではなく制御ラベルとして扱う
-- 許可ユーザーが `vv-ai:auto` を付けた場合は本体処理まで到達し、工程実行を行わず成功終了する
-- `vv-ai:auto` は起動後も削除しない
-- `internal_bot_ids` に含まれる GitHub App bot が付けた command label は内部起動として許可する
+- Issue または PR に `vv-ai:<command>` ラベルを付けると起動
+- 許可ユーザーのラベル付与のみ反応。未許可は**完全サイレント**（何も返さない）
+- `vv-ai:auto` は起動コマンドではなく、自動進行が有効な状態を表す制御ラベルとして扱う
+- 内部 bot が付けた `vv-ai:<command>` ラベルは内部起動として許可する
 
 ### 3. GitHub workflow_dispatch
 
