@@ -106,6 +106,8 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 - Issue または PR に `vv-ai:<command>` ラベルを付けると起動
 - 許可されたラベル付与のみ反応。未許可は**完全サイレント**（何も返さない）
 - `vv-ai:auto` は起動コマンドではなく、自動進行が有効な状態を表す制御ラベルとして扱う
+- `vv-ai:merge` は起動コマンドではなく、PR の merge 操作を許可する制御ラベルとして扱う
+- PR から `vv-ai:merge` が外された場合は auto merge を解除する
 
 ### 3. GitHub workflow_dispatch
 
@@ -158,11 +160,12 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 | `workflow_dispatch`   | ✅ 有効    |
 | `issues.labeled`     | ✅ 有効    |
 | `pull_request.labeled` | ✅ 有効  |
+| `pull_request.unlabeled` | ✅ 有効 |
 | `issues.opened`      | ❌ 無効    |
 
 ### ワークフロー構成
 
-- **1 本の workflow** に `issue_comment`、`issues.labeled`、`pull_request.labeled`、`workflow_dispatch` を同居
+- **1 本の workflow** に `issue_comment`、`issues.labeled`、`pull_request.labeled`、`pull_request.unlabeled`、`workflow_dispatch` を同居
 - 同一 Issue/PR 番号の実行は **直列化（キュー）**
   - GitHub Actions の `concurrency` を使用
   - `cancel-in-progress: false`（前の実行が終わるまで待つ）
@@ -286,6 +289,9 @@ internal_bot_ids:
 provider_priority:
   - codex
   - claude
+merge_args:
+  - --auto
+  - --squash
 ```
 
 ### 設定項目
@@ -295,6 +301,7 @@ provider_priority:
 | `allowed_users`     | コマンド実行を許可する GitHub ユーザー  |
 | `internal_bot_ids`  | ラベル起動を許可する GitHub App bot の user ID |
 | `provider_priority` | プロバイダの優先順                      |
+| `merge_args`        | `gh pr merge` に渡す追加引数 |
 
 ---
 

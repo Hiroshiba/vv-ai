@@ -46,17 +46,23 @@ def _make_labeled_command(actor: str, actor_id: int | None) -> ResolvedCommand:
     )
 
 
-def _make_control_label(actor: str, actor_id: int | None) -> ResolvedControlLabel:
+def _make_control_label(
+    actor: str,
+    actor_id: int | None,
+    control_label_name: str,
+    label_action: str,
+) -> ResolvedControlLabel:
     return ResolvedControlLabel(
         event_name="issues",
-        control_label_name="vv-ai:auto",
+        control_label_name=control_label_name,
+        label_action=label_action,
         target_type="issue",
         target_number=42,
         has_target=True,
         repository_full_name="org/repo",
         actor=actor,
         actor_id=actor_id,
-        trigger_label_name="vv-ai:auto",
+        trigger_label_name=control_label_name,
         trigger_event_created_at="2026-05-18T04:00:00Z",
     )
 
@@ -118,7 +124,11 @@ class TestRunPreflight:
     def test_allowed_user_control_label_is_ready(self, tmp_path) -> None:
         _write_config(tmp_path)
 
-        result = run_preflight(tmp_path, _make_control_label("Hiroshiba", 1), {})
+        result = run_preflight(
+            tmp_path,
+            _make_control_label("Hiroshiba", 1, "vv-ai:auto", "labeled"),
+            {},
+        )
 
         assert isinstance(result, ReadyControlExecution)
         assert result.control.control_label_name == "vv-ai:auto"
@@ -128,7 +138,41 @@ class TestRunPreflight:
 
         result = run_preflight(
             tmp_path,
-            _make_control_label("vv-ai-public-read-github-app[bot]", 274163862),
+            _make_control_label(
+                "vv-ai-public-read-github-app[bot]",
+                274163862,
+                "vv-ai:auto",
+                "labeled",
+            ),
+            {},
+        )
+
+        assert isinstance(result, SilentSkip)
+        assert result.reason == "unauthorized_label"
+
+    def test_allowed_user_merge_control_label_is_ready(self, tmp_path) -> None:
+        _write_config(tmp_path)
+
+        result = run_preflight(
+            tmp_path,
+            _make_control_label("Hiroshiba", 1, "vv-ai:merge", "labeled"),
+            {},
+        )
+
+        assert isinstance(result, ReadyControlExecution)
+        assert result.control.control_label_name == "vv-ai:merge"
+
+    def test_internal_bot_merge_control_label_is_silent_skip(self, tmp_path) -> None:
+        _write_config(tmp_path)
+
+        result = run_preflight(
+            tmp_path,
+            _make_control_label(
+                "vv-ai-public-read-github-app[bot]",
+                274163862,
+                "vv-ai:merge",
+                "labeled",
+            ),
             {},
         )
 

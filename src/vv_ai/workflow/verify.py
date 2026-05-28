@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 from vv_ai.config import VVAIConfig
 from vv_ai.inputs.build import (
     build_raw_input_from_issue_labeled_event,
-    build_raw_input_from_pull_request_labeled_event,
+    build_raw_input_from_pull_request_label_event,
     parse_comment_invocation,
 )
 from vv_ai.inputs.models import (
@@ -19,7 +19,7 @@ from vv_ai.inputs.models import (
     IssueCommentEvent,
     IssueLabeledEvent,
     PullRequestEvent,
-    PullRequestLabeledEvent,
+    PullRequestLabelEvent,
     RawInput,
     WorkflowDispatchEvent,
 )
@@ -65,7 +65,7 @@ def run_verify(
     if event == "issues":
         return _verify_issue_labeled(payload, config)
     if event == "pull_request":
-        return _verify_pull_request_labeled(payload, config)
+        return _verify_pull_request_label(payload, config)
     raise AssertionError(f"未対応の event です: {event}")
 
 
@@ -148,20 +148,20 @@ def _verify_issue_labeled(
     return VerifyResult(should_run=True, actor=actor, event="issues")
 
 
-def _verify_pull_request_labeled(
+def _verify_pull_request_label(
     payload: dict[str, object], config: VVAIConfig
 ) -> VerifyResult:
     if payload.get("action") == "closed":
         return _verify_pull_request_closed(payload, config)
 
     try:
-        parsed = PullRequestLabeledEvent.model_validate(payload)
+        parsed = PullRequestLabelEvent.model_validate(payload)
     except ValidationError as exc:
         raise InputError("pull_request payload の値が不正です") from exc
 
     actor = parsed.sender.login
     try:
-        raw_input = build_raw_input_from_pull_request_labeled_event(parsed)
+        raw_input = build_raw_input_from_pull_request_label_event(parsed)
     except InputError:
         return VerifyResult(
             should_run=False,

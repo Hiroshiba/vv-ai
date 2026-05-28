@@ -13,10 +13,11 @@ CommandName = Literal[
     "confirm", "reply", "implement", "address", "review", "issue", "next",
     "requirements", "arch", "detail", "breakdown", "sync",
 ]
-ControlLabelName = Literal["vv-ai:auto"]
+ControlLabelName = Literal["vv-ai:auto", "vv-ai:merge"]
 EventName = Literal[
     "issue_comment", "workflow_dispatch", "issues", "pull_request", "local",
 ]
+LabelAction = Literal["labeled", "unlabeled"]
 SessionMode = Literal["inherit", "inherit_or_new", "compact", "new"]
 TargetType = Literal["issue", "pr"]
 
@@ -38,7 +39,7 @@ _LABEL_COMMANDS: dict[str, CommandName] = {
     "vv-ai:next": "next",
     "vv-ai:sync": "sync",
 }
-_CONTROL_LABELS: set[ControlLabelName] = {"vv-ai:auto"}
+_CONTROL_LABELS: set[ControlLabelName] = {"vv-ai:auto", "vv-ai:merge"}
 _ISSUE_LABEL_COMMANDS: set[CommandName] = {
     "reply", "confirm", "requirements", "arch", "detail",
     "breakdown", "implement", "issue", "next",
@@ -162,8 +163,8 @@ class PullRequestTarget(BaseModel):
     labels: list[GitHubLabel] = Field(default_factory=list)
 
 
-class PullRequestLabeledEvent(BaseModel):
-    """`pull_request` labeled event payload の必要最小限。"""
+class PullRequestLabelEvent(BaseModel):
+    """`pull_request` label event payload の必要最小限。"""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -193,6 +194,7 @@ class RawInput(BaseModel):
     event_name: EventName
     command: CommandName | None = None
     control_label_name: ControlLabelName | None = None
+    label_action: LabelAction | None = None
     instruction: str | None = None
     target_url: str | None = None
     target_type: TargetType | None = None

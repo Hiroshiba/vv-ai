@@ -87,6 +87,9 @@ provider_priority:
   - codex
   - claude
 pull_request_target_branch: master
+merge_args:
+  - --auto
+  - --squash
 ```
 
 | 項目 | 必須 | 説明 |
@@ -95,6 +98,7 @@ pull_request_target_branch: master
 | `internal_bot_ids` | 任意 | ラベル起動を許可する GitHub App bot の user ID 一覧 |
 | `provider_priority` | 任意 | プロバイダの優先順。デフォルトは `[codex, claude]` |
 | `pull_request_target_branch` | 任意 | PR の向き先ブランチ。未指定時はリポジトリのデフォルトブランチ |
+| `merge_args` | 任意 | `gh pr merge` に渡す追加引数 |
 
 ### Secrets
 

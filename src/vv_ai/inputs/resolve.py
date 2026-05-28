@@ -11,6 +11,7 @@ from vv_ai.inputs.models import (
     CommandName,
     ControlLabelName,
     EventName,
+    LabelAction,
     RawInput,
     SessionMode,
     TargetType,
@@ -73,6 +74,7 @@ class ResolvedControlLabel(BaseModel):
 
     event_name: EventName
     control_label_name: ControlLabelName
+    label_action: LabelAction
     target_type: TargetType
     target_number: int
     has_target: bool
@@ -154,7 +156,16 @@ def _resolve_control_label_input(raw_input: RawInput) -> ResolvedControlLabel:
     if raw_input.control_label_name is None:
         raise ResolutionError("control_label_name がありません")
     if raw_input.event_name not in {"issues", "pull_request"}:
-        raise ResolutionError("制御ラベルは labeled event でのみ使用できます")
+        raise ResolutionError("制御ラベルは label event でのみ使用できます")
+    if raw_input.label_action is None:
+        raise ResolutionError("制御ラベル入力に label_action がありません")
+    if (
+        raw_input.control_label_name == "vv-ai:auto"
+        and raw_input.label_action != "labeled"
+    ):
+        raise ResolutionError("`vv-ai:auto` は labeled action でのみ使用できます")
+    if raw_input.control_label_name == "vv-ai:merge":
+        _ensure_merge_control_label_event(raw_input)
 
     required_fields = {
         "repository_full_name": raw_input.repository_full_name,
@@ -184,6 +195,7 @@ def _resolve_control_label_input(raw_input: RawInput) -> ResolvedControlLabel:
     return ResolvedControlLabel(
         event_name=raw_input.event_name,
         control_label_name=raw_input.control_label_name,
+        label_action=raw_input.label_action,
         target_type=raw_input.target_type,
         target_number=raw_input.target_number,
         has_target=True,
@@ -192,6 +204,21 @@ def _resolve_control_label_input(raw_input: RawInput) -> ResolvedControlLabel:
         actor_id=raw_input.actor_id,
         trigger_label_name=raw_input.trigger_label_name,
         trigger_event_created_at=raw_input.trigger_event_created_at,
+    )
+
+
+def _ensure_merge_control_label_event(raw_input: RawInput) -> None:
+    """`vv-ai:merge` の event と action の組み合わせを検証する。"""
+    if raw_input.event_name == "issues" and raw_input.label_action == "labeled":
+        return
+    if (
+        raw_input.event_name == "pull_request"
+        and raw_input.label_action in {"labeled", "unlabeled"}
+    ):
+        return
+    raise ResolutionError(
+        "`vv-ai:merge` は issues.labeled、pull_request.labeled、"
+        "pull_request.unlabeled でのみ使用できます"
     )
 
 

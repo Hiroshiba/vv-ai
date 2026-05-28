@@ -239,6 +239,43 @@ query($owner: String!, $repo: String!, $number: Int!) {
             raise GitHubClientError("Pull Request 取得結果の JSON 形式が不正です")
         return _build_pull_request(repository_full_name, raw_pr)
 
+    def merge_pull_request(
+        self,
+        repository_full_name: str,
+        number: int,
+        merge_args: list[str],
+    ) -> None:
+        """Pull Request の merge 操作を実行する。"""
+        self._text_runner(
+            [
+                "gh",
+                "pr",
+                "merge",
+                str(_require_positive_id(number, "number")),
+                "--repo",
+                _require_repository_full_name(repository_full_name),
+                *merge_args,
+            ]
+        )
+
+    def disable_pull_request_auto_merge(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> None:
+        """Pull Request の auto merge を解除する。"""
+        self._text_runner(
+            [
+                "gh",
+                "pr",
+                "merge",
+                str(_require_positive_id(number, "number")),
+                "--repo",
+                _require_repository_full_name(repository_full_name),
+                "--disable-auto",
+            ]
+        )
+
     def get_pull_request_closing_state(
         self,
         repository_full_name: str,

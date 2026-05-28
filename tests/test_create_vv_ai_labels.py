@@ -43,6 +43,11 @@ def test_label_names_include_auto() -> None:
     assert "vv-ai:auto" in {label.name for label in VV_AI_LABELS}
 
 
+def test_label_names_include_merge() -> None:
+    """作成対象ラベル名に merge ラベルを含む。"""
+    assert "vv-ai:merge" in {label.name for label in VV_AI_LABELS}
+
+
 def test_sync_labels_creates_missing_and_edits_existing(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -81,6 +86,7 @@ def test_sync_labels_creates_missing_and_edits_existing(
     assert "更新しました: vv-ai:reply" in output
     assert "作成しました: vv-ai:confirm" in output
     assert "作成しました: vv-ai:auto" in output
+    assert "作成しました: vv-ai:merge" in output
     assert "org/repo の vv-ai ラベルを同期しました" in output
 
 
@@ -128,6 +134,7 @@ def test_sync_labels_dry_run_skips_create_and_edit(
     assert "更新予定: vv-ai:reply" in output
     assert "作成予定: vv-ai:confirm" in output
     assert "作成予定: vv-ai:auto" in output
+    assert "作成予定: vv-ai:merge" in output
     assert "--dry-run: GitHub ラベルは変更していません。対象: 現在のリポジトリ" in output
 
 

@@ -44,6 +44,7 @@ VV_AI_COMMAND_LABELS: tuple[LabelDefinition, ...] = (
 )
 VV_AI_CONTROL_LABELS: tuple[LabelDefinition, ...] = (
     LabelDefinition("vv-ai:auto", "0e8a16", "vv-ai の自動進行を有効にする"),
+    LabelDefinition("vv-ai:merge", "0e8a16", "vv-ai の merge 操作を許可する"),
 )
 VV_AI_LABELS: tuple[LabelDefinition, ...] = (
     *VV_AI_COMMAND_LABELS,

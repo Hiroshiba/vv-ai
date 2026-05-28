@@ -41,17 +41,18 @@ def _make_issue_labeled_payload(
     }
 
 
-def _make_pull_request_labeled_payload(
+def _make_pull_request_label_payload(
     label_name: str,
     actor: str,
+    action: str,
     actor_id: int | None = 1,
 ) -> dict[str, object]:
-    """pull_request labeled payload を生成する。"""
+    """pull_request label payload を生成する。"""
     sender: dict[str, object] = {"login": actor}
     if actor_id is not None:
         sender["id"] = actor_id
     return {
-        "action": "labeled",
+        "action": action,
         "pull_request": {"number": 43, "updated_at": "2026-05-18T04:00:00Z"},
         "label": {"name": label_name},
         "repository": {"full_name": "org/repo"},
@@ -131,7 +132,7 @@ def test_issue_labeled_auto_should_run(tmp_path: Path) -> None:
 
 
 def test_pull_request_labeled_review_should_run(tmp_path: Path) -> None:
-    payload = _make_pull_request_labeled_payload("vv-ai:review", "Hiroshiba")
+    payload = _make_pull_request_label_payload("vv-ai:review", "Hiroshiba", "labeled")
 
     result = run_verify(
         "pull_request", _write_payload(tmp_path, payload), _make_config()
@@ -143,7 +144,7 @@ def test_pull_request_labeled_review_should_run(tmp_path: Path) -> None:
 
 
 def test_pull_request_labeled_address_should_run(tmp_path: Path) -> None:
-    payload = _make_pull_request_labeled_payload("vv-ai:address", "Hiroshiba")
+    payload = _make_pull_request_label_payload("vv-ai:address", "Hiroshiba", "labeled")
 
     result = run_verify(
         "pull_request", _write_payload(tmp_path, payload), _make_config()
@@ -155,7 +156,7 @@ def test_pull_request_labeled_address_should_run(tmp_path: Path) -> None:
 
 
 def test_pull_request_labeled_next_should_run(tmp_path: Path) -> None:
-    payload = _make_pull_request_labeled_payload("vv-ai:next", "Hiroshiba")
+    payload = _make_pull_request_label_payload("vv-ai:next", "Hiroshiba", "labeled")
 
     result = run_verify(
         "pull_request", _write_payload(tmp_path, payload), _make_config()
@@ -167,7 +168,7 @@ def test_pull_request_labeled_next_should_run(tmp_path: Path) -> None:
 
 
 def test_pull_request_labeled_auto_should_run(tmp_path: Path) -> None:
-    payload = _make_pull_request_labeled_payload("vv-ai:auto", "Hiroshiba")
+    payload = _make_pull_request_label_payload("vv-ai:auto", "Hiroshiba", "labeled")
 
     result = run_verify(
         "pull_request", _write_payload(tmp_path, payload), _make_config()
@@ -179,7 +180,7 @@ def test_pull_request_labeled_auto_should_run(tmp_path: Path) -> None:
 
 
 def test_pull_request_labeled_sync_should_run(tmp_path: Path) -> None:
-    payload = _make_pull_request_labeled_payload("vv-ai:sync", "Hiroshiba")
+    payload = _make_pull_request_label_payload("vv-ai:sync", "Hiroshiba", "labeled")
 
     result = run_verify(
         "pull_request", _write_payload(tmp_path, payload), _make_config()
@@ -265,7 +266,11 @@ def test_issue_labeled_sync_should_not_run(tmp_path: Path) -> None:
 
 
 def test_pull_request_labeled_breakdown_should_not_run(tmp_path: Path) -> None:
-    payload = _make_pull_request_labeled_payload("vv-ai:breakdown", "Hiroshiba")
+    payload = _make_pull_request_label_payload(
+        "vv-ai:breakdown",
+        "Hiroshiba",
+        "labeled",
+    )
 
     result = run_verify(
         "pull_request", _write_payload(tmp_path, payload), _make_config()
@@ -290,6 +295,89 @@ def test_issue_labeled_auto_unauthorized_user_should_not_run(tmp_path: Path) -> 
 
     assert result.should_run is False
     assert result.reason == "unauthorized"
+
+
+def test_issue_labeled_merge_should_run(tmp_path: Path) -> None:
+    payload = _make_issue_labeled_payload("vv-ai:merge", "Hiroshiba")
+
+    result = run_verify("issues", _write_payload(tmp_path, payload), _make_config())
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+    assert result.event == "issues"
+
+
+def test_pull_request_labeled_merge_should_run(tmp_path: Path) -> None:
+    payload = _make_pull_request_label_payload("vv-ai:merge", "Hiroshiba", "labeled")
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+    assert result.event == "pull_request"
+
+
+def test_pull_request_unlabeled_merge_should_run(tmp_path: Path) -> None:
+    payload = _make_pull_request_label_payload(
+        "vv-ai:merge",
+        "Hiroshiba",
+        "unlabeled",
+    )
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+    assert result.event == "pull_request"
+
+
+def test_pull_request_labeled_merge_unauthorized_user_should_not_run(
+    tmp_path: Path,
+) -> None:
+    payload = _make_pull_request_label_payload(
+        "vv-ai:merge",
+        "unknown-user",
+        "labeled",
+    )
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is False
+    assert result.reason == "unauthorized"
+
+
+def test_pull_request_unlabeled_merge_unauthorized_user_should_not_run(
+    tmp_path: Path,
+) -> None:
+    payload = _make_pull_request_label_payload(
+        "vv-ai:merge",
+        "unknown-user",
+        "unlabeled",
+    )
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is False
+    assert result.reason == "unauthorized"
+
+
+def test_pull_request_unlabeled_auto_should_not_run(tmp_path: Path) -> None:
+    payload = _make_pull_request_label_payload("vv-ai:auto", "Hiroshiba", "unlabeled")
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is False
+    assert result.reason == "not_vv_ai_label"
 
 
 def test_issue_labeled_internal_bot_next_should_run(tmp_path: Path) -> None:
