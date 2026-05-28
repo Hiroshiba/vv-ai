@@ -23,6 +23,20 @@ def _make_config() -> VVAIConfig:
     return VVAIConfig(allowed_users=["Hiroshiba"])
 
 
+def _make_issue_comment_payload(body: str, actor: str) -> dict[str, object]:
+    """issue_comment payload を生成する。"""
+    return {
+        "comment": {
+            "id": 100,
+            "body": body,
+            "user": {"login": actor},
+        },
+        "issue": {"number": 42},
+        "repository": {"full_name": "org/repo"},
+        "sender": {"login": actor},
+    }
+
+
 def _make_issue_labeled_payload(
     label_name: str,
     actor: str,
@@ -82,16 +96,7 @@ def _make_pull_request_closed_payload(
 
 
 def test_issue_comment_vv_ai_prefix_should_run(tmp_path: Path) -> None:
-    payload = {
-        "comment": {
-            "id": 100,
-            "body": "@vv-ai reply",
-            "user": {"login": "Hiroshiba"},
-        },
-        "issue": {"number": 42},
-        "repository": {"full_name": "org/repo"},
-        "sender": {"login": "Hiroshiba"},
-    }
+    payload = _make_issue_comment_payload("@vv-ai reply", "Hiroshiba")
 
     result = run_verify(
         "issue_comment", _write_payload(tmp_path, payload), _make_config()
@@ -99,6 +104,30 @@ def test_issue_comment_vv_ai_prefix_should_run(tmp_path: Path) -> None:
 
     assert result.should_run is True
     assert result.actor == "Hiroshiba"
+
+
+def test_issue_comment_vvai_prefix_should_run(tmp_path: Path) -> None:
+    payload = _make_issue_comment_payload("@vvai reply", "Hiroshiba")
+
+    result = run_verify(
+        "issue_comment", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+
+
+def test_issue_comment_vvai_prefix_unauthorized_user_should_not_run(
+    tmp_path: Path,
+) -> None:
+    payload = _make_issue_comment_payload("@vvai reply", "unknown-user")
+
+    result = run_verify(
+        "issue_comment", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is False
+    assert result.reason == "unauthorized"
 
 
 def test_issue_labeled_confirm_should_run(tmp_path: Path) -> None:

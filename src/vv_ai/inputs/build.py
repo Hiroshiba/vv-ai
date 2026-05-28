@@ -33,6 +33,8 @@ from vv_ai.inputs.models import (
     _PULL_REQUEST_LABEL_COMMANDS,
 )
 
+_COMMENT_INVOCATION_PREFIXES = ("@vv-ai", "@vvai")
+
 
 def build_raw_input_from_cli(cli_input: CLIInput) -> RawInput:
     """CLI 入力から `RawInput` を構築する。"""
@@ -257,15 +259,8 @@ def build_raw_input_from_pull_request_event(event: PullRequestEvent) -> RawInput
 
 
 def parse_comment_invocation(comment_body: str) -> CommentInvocation:
-    """`@vv-ai ...` コメント本文を字句的に分解する。"""
-    stripped = comment_body.lstrip()
-    if not stripped.startswith("@vv-ai"):
-        raise InputError("`issue_comment` の本文は `@vv-ai` で始まる必要があります")
-
-    suffix = stripped[len("@vv-ai") :]
-    if suffix and not suffix[0].isspace():
-        raise InputError("`issue_comment` の本文は `@vv-ai` で始まる必要があります")
-
+    """`@vv-ai ...` または `@vvai ...` コメント本文を字句的に分解する。"""
+    suffix = _extract_comment_invocation_suffix(comment_body)
     tail = suffix.strip()
     if not tail:
         return CommentInvocation()
@@ -324,6 +319,20 @@ def parse_comment_invocation(comment_body: str) -> CommentInvocation:
         )
     except ValidationError as exc:
         raise InputError("コメント本文のオプション値が不正です") from exc
+
+
+def _extract_comment_invocation_suffix(comment_body: str) -> str:
+    stripped = comment_body.lstrip()
+    for prefix in _COMMENT_INVOCATION_PREFIXES:
+        if not stripped.startswith(prefix):
+            continue
+        suffix = stripped[len(prefix) :]
+        if suffix and not suffix[0].isspace():
+            continue
+        return suffix
+    raise InputError(
+        "`issue_comment` の本文は `@vv-ai` または `@vvai` で始まる必要があります"
+    )
 
 
 def parse_label_invocation(label_name: str) -> CommandName:
