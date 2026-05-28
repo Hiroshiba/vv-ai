@@ -308,7 +308,7 @@ class TestImplementPrompt:
         prompt = _build_prompt("issue", "implement", None)
 
         assert (
-            "Issue を解決する内容なら GitHub closing keyword を使っても構いません。"
+            "Issue を解決する内容なら GitHub closing keyword を使ってください。"
             in prompt
         )
 
