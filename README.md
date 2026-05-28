@@ -22,7 +22,7 @@ flowchart TD
   pr[["PR"]]
   review(["レビュー"])
   review_result{"レビュー結果"}
-  address(["address"])
+  address(["指摘対応"])
   address_result{"対応結果"}
   merged[["マージ済み PR"]]
 
