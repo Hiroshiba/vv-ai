@@ -298,6 +298,12 @@ class TestImplementPrompt:
             in prompt
         )
 
+    def test_pr_prompt_does_not_mention_review_thread_actions_dir(self) -> None:
+        prompt = _build_prompt("pr", "implement", None)
+
+        assert "REVIEW_THREAD_ACTIONS_DIR:" not in prompt
+        assert "操作ディレクトリ" not in prompt
+
 
 class TestIssueCommandPrompt:
     """issue コマンドの provider prompt を検証する。"""
@@ -358,9 +364,21 @@ class TestAddressPrompt:
     def test_prompt_mentions_review_thread_actions_format(self) -> None:
         prompt = _build_prompt("pr", "address", 2)
 
-        assert "REVIEW_THREAD_ACTIONS_DIR: <操作ディレクトリの絶対パス>" in prompt
+        assert "REVIEW_THREAD_ACTIONS_DIR: /絶対パス" in prompt
         assert "THREAD_ID: <review thread ID>" in prompt
         assert "ACTION: resolve または comment" in prompt
+
+    def test_prompt_mentions_review_thread_actions_steps(self) -> None:
+        prompt = _build_prompt("pr", "address", 2)
+
+        assert (
+            "1. `mkdir -p hiho_temp && mktemp -u hiho_temp/hiho.XXXXXXXXXX` "
+            "で一時パスを取得する"
+            in prompt
+        )
+        assert "2. そのパスをディレクトリとして `mkdir` で作成する" in prompt
+        assert "3. ディレクトリ内に `01.md`, `02.md`, ... と連番ファイルを作成する" in prompt
+        assert "4. 各ファイルは以下のフォーマットで記述する:" in prompt
 
     def test_prompt_does_not_mention_git_command_policy(self) -> None:
         prompt = _build_prompt("pr", "address", 0)
