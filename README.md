@@ -22,6 +22,7 @@ flowchart TD
   pr[["PR"]]
   review(["レビュー"])
   review_result{"レビュー結果"}
+  review_comments[["レビュー"]]
   address(["レビュー指摘対応"])
   address_result{"対応結果"}
   merged[["マージ済み PR"]]
@@ -40,12 +41,13 @@ flowchart TD
   pr -- "review" --> review
   review --> review_result
   review_result -- "マージ可能" --> merged
-  review_result -- "修正あり" --> address
+  review_result -- "指摘あり" --> review_comments
+  review_comments -- "address" --> address
   address --> address_result
   address_result -- "再レビュー" --> review
   address_result -- "マージ可能" --> merged
 
-  class issue,subissues,pr,merged githubObject
+  class issue,subissues,pr,review_comments,merged githubObject
   class intent,requirements,arch,detail,breakdown,implement_issue,review,address aiStep
   class next_decision,review_result,address_result decision
 
