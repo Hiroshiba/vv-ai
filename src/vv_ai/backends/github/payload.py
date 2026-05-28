@@ -18,6 +18,7 @@ from vv_ai.backends.github.models import (
     GitHubIssueTimelineEvent,
     GitHubPullRequest,
     GitHubPullRequestClosingState,
+    GitHubPullRequestReview,
     GitHubPullRequestSyncState,
     GitHubReaction,
     GitHubStatusCheckSummary,
@@ -405,6 +406,30 @@ def _build_comment(raw_comment: object) -> GitHubComment:
         "url": raw_comment.get("html_url"),
     }
     return _validate_model(GitHubComment, payload, "コメント")
+
+
+def _build_pull_request_review_list(
+    raw_reviews: list[object],
+) -> list[GitHubPullRequestReview]:
+    """Pull Request review 配列 JSON を model 配列へ変換する。"""
+    reviews: list[GitHubPullRequestReview] = []
+    for raw_review in raw_reviews:
+        reviews.append(_build_pull_request_review(raw_review))
+    return reviews
+
+
+def _build_pull_request_review(raw_review: object) -> GitHubPullRequestReview:
+    """Pull Request review JSON を model へ変換する。"""
+    if not isinstance(raw_review, dict):
+        raise GitHubClientError("Pull Request review 要素の JSON 形式が不正です")
+    payload = {
+        "id": raw_review.get("id"),
+        "body": _coerce_text(raw_review.get("body")),
+        "author": _build_rest_user(raw_review.get("user")),
+        "created_at": raw_review.get("submitted_at"),
+        "url": raw_review.get("html_url"),
+    }
+    return _validate_model(GitHubPullRequestReview, payload, "Pull Request review")
 
 
 def _build_issue_timeline_event_list(

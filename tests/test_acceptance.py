@@ -21,6 +21,7 @@ from vv_ai.backends.github.models import (
     GitHubIssue,
     GitHubIssueTimelineEvent,
     GitHubPullRequest,
+    GitHubPullRequestReview,
     RepoInfo,
 )
 from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpecificMetrics
@@ -136,6 +137,20 @@ def _make_github_comment(comment_id: int, body: str) -> GitHubComment:
     )
 
 
+def _make_github_pull_request_review(
+    review_id: int,
+    body: str,
+) -> GitHubPullRequestReview:
+    """テスト用 GitHubPullRequestReview を生成する。"""
+    return GitHubPullRequestReview(
+        id=review_id,
+        body=body,
+        author=GitHubActor(login="reviewer"),
+        created_at="2026-05-08T00:00:00Z",
+        url=f"https://github.com/org/repo/pull/1#pullrequestreview-{review_id}",
+    )
+
+
 def _make_github_timeline_comment(
     event_id: int,
     body: str,
@@ -247,6 +262,7 @@ def _enter_common_patches(
         github_client.get_issue.return_value = _make_github_issue("org/repo", 1)
         github_client.has_issue_sub_issues.return_value = False
         github_client.list_issue_comments.return_value = []
+        github_client.list_pull_request_reviews.return_value = []
         github_client.list_issue_timeline_events.return_value = []
         github_client.list_issue_label_names.return_value = []
     return execute_provider
@@ -342,16 +358,29 @@ class TestImplementPRDryRun:
         mock_gh.get_pull_request.return_value = pr
 
         with contextlib.ExitStack() as stack:
-            _enter_common_patches(stack, tmp_path, session, result, github_client=mock_gh)
+            execute_provider = _enter_common_patches(
+                stack,
+                tmp_path,
+                session,
+                result,
+                github_client=mock_gh,
+            )
+            mock_gh.list_issue_comments.return_value = []
+            mock_gh.list_pull_request_reviews.return_value = [
+                _make_github_pull_request_review(10, "Review body の追加指摘")
+            ]
             mock_checkout = stack.enter_context(
                 patch("vv_ai.commands.runner.fetch_and_checkout_branch")
             )
             exit_code = main(argv)
 
+        provider_prompt = execute_provider.call_args.args[4]
         assert exit_code == 0
         mock_gh.get_pull_request.assert_called_once_with("org/repo", 5)
         mock_checkout.assert_called_once()
         mock_gh.create_issue_comment.assert_not_called()
+        assert "Review body の追加指摘" in provider_prompt
+        assert "## PR review submission 10" in provider_prompt
 
 
 class TestReviewDryRun:

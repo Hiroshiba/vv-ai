@@ -16,6 +16,7 @@ from vv_ai.backends.github.models import (
     GitHubIssueTimelineEvent,
     GitHubPullRequest,
     GitHubPullRequestClosingState,
+    GitHubPullRequestReview,
     GitHubPullRequestSyncState,
     GitHubReaction,
     GitHubReactionContent,
@@ -30,6 +31,7 @@ from vv_ai.backends.github.paths import (
     _build_issue_label_path,
     _build_issue_labels_path,
     _build_issues_path,
+    _build_pull_request_reviews_path,
     _build_pulls_path,
     _build_repository_path,
     _require_mapping,
@@ -50,6 +52,7 @@ from vv_ai.backends.github.payload import (
     _build_pull_request,
     _build_pull_request_closing_state,
     _build_pull_request_from_rest,
+    _build_pull_request_review_list,
     _build_pull_request_sync_state,
     _build_sub_issue_list,
     _count_unresolved_review_threads,
@@ -516,6 +519,30 @@ mutation($threadId: ID!) {
                 raise GitHubClientError("コメント取得結果のページ形式が不正です")
             comments.extend(_build_comment_list(page))
         return comments
+
+    def list_pull_request_reviews(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> list[GitHubPullRequestReview]:
+        """Pull Request review submission 一覧を取得する。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--paginate",
+                "--slurp",
+                _build_pull_request_reviews_path(repository_full_name, number),
+            ]
+        )
+        if not isinstance(payload, list):
+            raise GitHubClientError("Pull Request review 取得結果の JSON 形式が不正です")
+
+        reviews: list[GitHubPullRequestReview] = []
+        for page in payload:
+            if not isinstance(page, list):
+                raise GitHubClientError("Pull Request review 取得結果のページ形式が不正です")
+            reviews.extend(_build_pull_request_review_list(page))
+        return reviews
 
     def list_issue_labeled_events(
         self,
