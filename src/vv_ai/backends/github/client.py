@@ -49,9 +49,12 @@ from vv_ai.backends.github.payload import (
     _build_pull_request,
     _build_pull_request_from_rest,
     _build_pull_request_sync_state,
+    _count_unresolved_review_threads,
     _build_reaction,
     _build_tree,
     _decode_blob,
+    _validate_add_pull_request_review_thread_reply,
+    _validate_resolve_review_thread,
 )
 from vv_ai.backends.github.runner import (
     GhBinaryRunner,
@@ -188,6 +191,113 @@ query($owner: String!, $repo: String!, $number: Int!) {
         if not isinstance(payload, dict):
             raise GitHubClientError("Pull Request sync 状態の JSON 形式が不正です")
         return _build_pull_request_sync_state(payload)
+
+    def count_unresolved_review_threads(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> int:
+        """Pull Request の未解決 review thread 数を返す。"""
+        owner, repo = _require_repository_full_name(repository_full_name).split("/")
+        query = """
+query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $endCursor) {
+        nodes {
+          isResolved
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+}
+""".strip()
+        payload = self._run_json(
+            [
+                "api",
+                "graphql",
+                "--paginate",
+                "--slurp",
+                "-f",
+                f"query={query}",
+                "-f",
+                f"owner={owner}",
+                "-f",
+                f"repo={repo}",
+                "-F",
+                f"number={_require_positive_id(number, 'number')}",
+            ]
+        )
+        if not isinstance(payload, list):
+            raise GitHubClientError("review thread 取得結果の JSON 形式が不正です")
+        return _count_unresolved_review_threads(payload)
+
+    def add_pull_request_review_thread_reply(
+        self,
+        thread_id: str,
+        body: str,
+    ) -> None:
+        """Pull Request review thread へ返信する。"""
+        mutation = """
+mutation($threadId: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(
+    input: {
+      pullRequestReviewThreadId: $threadId
+      body: $body
+    }
+  ) {
+    comment {
+      id
+      body
+    }
+  }
+}
+""".strip()
+        payload = self._run_json(
+            [
+                "api",
+                "graphql",
+                "-f",
+                f"query={mutation}",
+                "-f",
+                f"threadId={_require_non_empty_text(thread_id, 'thread_id')}",
+                "-f",
+                f"body={_require_non_empty_text(body, 'body')}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("review thread 返信結果の JSON 形式が不正です")
+        _validate_add_pull_request_review_thread_reply(payload)
+
+    def resolve_review_thread(self, thread_id: str) -> None:
+        """Pull Request review thread を解決済みにする。"""
+        mutation = """
+mutation($threadId: ID!) {
+  resolveReviewThread(input: {threadId: $threadId}) {
+    thread {
+      id
+      isResolved
+    }
+  }
+}
+""".strip()
+        payload = self._run_json(
+            [
+                "api",
+                "graphql",
+                "-f",
+                f"query={mutation}",
+                "-f",
+                f"threadId={_require_non_empty_text(thread_id, 'thread_id')}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("review thread 解決結果の JSON 形式が不正です")
+        _validate_resolve_review_thread(payload)
 
     def list_issue_comments(
         self,

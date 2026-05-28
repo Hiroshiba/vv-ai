@@ -34,6 +34,25 @@ def _make_timeline_page(nodes: list[object]) -> dict[str, object]:
     }
 
 
+def _make_review_threads_page(nodes: list[object]) -> dict[str, object]:
+    """GraphQL reviewThreads page payload を生成する。"""
+    return {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "nodes": nodes,
+                        "pageInfo": {
+                            "hasNextPage": False,
+                            "endCursor": None,
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+
 def test_get_issue_parent_number_returns_parent_number() -> None:
     """get_issue_parent_number は親 Issue 番号を返す。"""
     captured_args: list[str] = []
@@ -758,6 +777,203 @@ def test_get_pull_request_sync_state_allows_empty_status_checks() -> None:
     assert state.status_check_summary.failure_count == 0
     assert state.status_check_summary.pending_count == 0
     assert state.status_check_summary.unknown_count == 0
+
+
+def test_count_unresolved_review_threads_returns_unresolved_count() -> None:
+    """count_unresolved_review_threads は未解決 review thread 数を返す。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            [
+                _make_review_threads_page(
+                    [
+                        {"isResolved": False},
+                        {"isResolved": True},
+                    ]
+                ),
+                _make_review_threads_page(
+                    [
+                        {"isResolved": False},
+                    ]
+                ),
+            ]
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    count = client.count_unresolved_review_threads("org/repo", 34)
+
+    assert count == 2
+    assert captured_args[0:5] == ["gh", "api", "graphql", "--paginate", "--slurp"]
+    query = captured_args[6]
+    assert "pullRequest(number: $number)" in query
+    assert "reviewThreads(first: 100, after: $endCursor)" in query
+    assert "isResolved" in query
+    assert "owner=org" in captured_args
+    assert "repo=repo" in captured_args
+    assert "number=34" in captured_args
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({}, "JSON 形式"),
+        ([{"data": {"repository": {}}}], "pullRequest"),
+        ([_make_review_threads_page([{}])], "isResolved"),
+        (
+            [
+                {
+                    "data": {
+                        "repository": {
+                            "pullRequest": {
+                                "reviewThreads": {
+                                    "nodes": [],
+                                    "pageInfo": {
+                                        "hasNextPage": "false",
+                                        "endCursor": None,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                }
+            ],
+            "hasNextPage",
+        ),
+    ],
+)
+def test_count_unresolved_review_threads_rejects_invalid_payload(
+    payload: object,
+    message: str,
+) -> None:
+    """count_unresolved_review_threads は不正な payload を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps(payload), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match=message):
+        client.count_unresolved_review_threads("org/repo", 34)
+
+
+def test_add_pull_request_review_thread_reply_runs_mutation() -> None:
+    """add_pull_request_review_thread_reply は thread と本文を mutation に渡す。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            {
+                "data": {
+                    "addPullRequestReviewThreadReply": {
+                        "comment": {
+                            "id": "PRRC_kwDOAA",
+                            "body": "対応しました",
+                        },
+                    },
+                },
+            }
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    client.add_pull_request_review_thread_reply("PRRT_kwDOAA", "対応しました")
+
+    assert captured_args[0:3] == ["gh", "api", "graphql"]
+    mutation = captured_args[4]
+    assert "addPullRequestReviewThreadReply" in mutation
+    assert "pullRequestReviewThreadId: $threadId" in mutation
+    assert "body: $body" in mutation
+    assert "threadId=PRRT_kwDOAA" in captured_args
+    assert "body=対応しました" in captured_args
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ([], "JSON 形式"),
+        (
+            {
+                "data": {
+                    "addPullRequestReviewThreadReply": {
+                        "comment": {
+                            "id": "PRRC_kwDOAA",
+                        },
+                    },
+                },
+            },
+            "comment.body",
+        ),
+    ],
+)
+def test_add_pull_request_review_thread_reply_rejects_invalid_payload(
+    payload: object,
+    message: str,
+) -> None:
+    """add_pull_request_review_thread_reply は不正な payload を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps(payload), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match=message):
+        client.add_pull_request_review_thread_reply("PRRT_kwDOAA", "対応しました")
+
+
+def test_resolve_review_thread_runs_mutation() -> None:
+    """resolve_review_thread は thread を mutation に渡す。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            {
+                "data": {
+                    "resolveReviewThread": {
+                        "thread": {
+                            "id": "PRRT_kwDOAA",
+                            "isResolved": True,
+                        },
+                    },
+                },
+            }
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    client.resolve_review_thread("PRRT_kwDOAA")
+
+    assert captured_args[0:3] == ["gh", "api", "graphql"]
+    mutation = captured_args[4]
+    assert "resolveReviewThread" in mutation
+    assert "threadId: $threadId" in mutation
+    assert "threadId=PRRT_kwDOAA" in captured_args
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ([], "JSON 形式"),
+        (
+            {
+                "data": {
+                    "resolveReviewThread": {
+                        "thread": {
+                            "id": "PRRT_kwDOAA",
+                            "isResolved": False,
+                        },
+                    },
+                },
+            },
+            "isResolved",
+        ),
+    ],
+)
+def test_resolve_review_thread_rejects_invalid_payload(
+    payload: object,
+    message: str,
+) -> None:
+    """resolve_review_thread は不正な payload を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps(payload), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match=message):
+        client.resolve_review_thread("PRRT_kwDOAA")
 
 
 @pytest.mark.parametrize(

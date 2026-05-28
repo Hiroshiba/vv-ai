@@ -320,6 +320,69 @@ def _build_issue_timeline_event_list(
     return events
 
 
+def _count_unresolved_review_threads(raw_pages: list[object]) -> int:
+    """GraphQL reviewThreads JSON から未解決 thread 数を返す。"""
+    count = 0
+    for raw_page in raw_pages:
+        raw_nodes = _extract_review_thread_nodes(raw_page)
+        for raw_thread in raw_nodes:
+            thread = _require_mapping(raw_thread, "reviewThreads.nodes")
+            is_resolved = thread.get("isResolved")
+            if not isinstance(is_resolved, bool):
+                raise GitHubClientError("reviewThreads.nodes.isResolved が不正です")
+            if is_resolved is False:
+                count += 1
+    return count
+
+
+def _validate_add_pull_request_review_thread_reply(
+    payload: dict[str, object],
+) -> None:
+    """addPullRequestReviewThreadReply mutation 結果を検証する。"""
+    data = _require_mapping(payload.get("data"), "data")
+    result = _require_mapping(
+        data.get("addPullRequestReviewThreadReply"),
+        "addPullRequestReviewThreadReply",
+    )
+    comment = _require_mapping(result.get("comment"), "comment")
+    _require_string(comment.get("id"), "comment.id")
+    _require_string(comment.get("body"), "comment.body")
+
+
+def _validate_resolve_review_thread(payload: dict[str, object]) -> None:
+    """resolveReviewThread mutation 結果を検証する。"""
+    data = _require_mapping(payload.get("data"), "data")
+    result = _require_mapping(data.get("resolveReviewThread"), "resolveReviewThread")
+    thread = _require_mapping(result.get("thread"), "thread")
+    _require_string(thread.get("id"), "thread.id")
+    is_resolved = thread.get("isResolved")
+    if is_resolved is not True:
+        raise GitHubClientError("thread.isResolved が不正です")
+
+
+def _extract_review_thread_nodes(raw_page: object) -> list[object]:
+    """GraphQL reviewThreads ページから nodes を返す。"""
+    page = _require_mapping(raw_page, "review thread 取得結果のページ")
+    data = _require_mapping(page.get("data"), "data")
+    repository = _require_mapping(data.get("repository"), "repository")
+    pull_request = _require_mapping(repository.get("pullRequest"), "pullRequest")
+    review_threads = _require_mapping(
+        pull_request.get("reviewThreads"),
+        "reviewThreads",
+    )
+    page_info = _require_mapping(review_threads.get("pageInfo"), "pageInfo")
+    has_next_page = page_info.get("hasNextPage")
+    if not isinstance(has_next_page, bool):
+        raise GitHubClientError("pageInfo.hasNextPage が不正です")
+    end_cursor = page_info.get("endCursor")
+    if end_cursor is not None and not isinstance(end_cursor, str):
+        raise GitHubClientError("pageInfo.endCursor が不正です")
+    raw_nodes = review_threads.get("nodes")
+    if not isinstance(raw_nodes, list):
+        raise GitHubClientError("reviewThreads.nodes の JSON 形式が不正です")
+    return raw_nodes
+
+
 def _extract_timeline_item_nodes(raw_page: object) -> list[object]:
     """GraphQL timelineItems ページから nodes を返す。"""
     page = _require_mapping(raw_page, "timeline 取得結果のページ")
