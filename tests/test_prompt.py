@@ -156,6 +156,7 @@ def _make_next_ready_execution() -> ReadyExecution:
 def _build_prompt(
     kind: Literal["issue", "pr"],
     command: Literal["address", "implement"],
+    unresolved_review_thread_count: int | None,
     auto_continuation_requested: bool = False,
 ) -> str:
     """対象種別ごとの provider prompt を生成する。"""
@@ -164,6 +165,7 @@ def _build_prompt(
         target_context_block="テストコンテキスト",
         implement_branch_name="feature-branch",
         worktree_ref=None,
+        unresolved_review_thread_count=unresolved_review_thread_count,
         auto_continuation_requested=auto_continuation_requested,
     )
 
@@ -175,6 +177,7 @@ def _build_breakdown_prompt() -> str:
         target_context_block="テストコンテキスト",
         implement_branch_name=None,
         worktree_ref=None,
+        unresolved_review_thread_count=None,
         auto_continuation_requested=False,
     )
 
@@ -186,6 +189,7 @@ def _build_issue_command_prompt() -> str:
         target_context_block=None,
         implement_branch_name=None,
         worktree_ref=None,
+        unresolved_review_thread_count=None,
         auto_continuation_requested=False,
     )
 
@@ -197,6 +201,7 @@ def _build_requirements_prompt(auto_continuation_requested: bool = False) -> str
         target_context_block="テストコンテキスト",
         implement_branch_name=None,
         worktree_ref=None,
+        unresolved_review_thread_count=None,
         auto_continuation_requested=auto_continuation_requested,
     )
 
@@ -216,6 +221,7 @@ def _build_review_prompt(auto_continuation_requested: bool) -> str:
         target_context_block="テストコンテキスト",
         implement_branch_name=None,
         worktree_ref=None,
+        unresolved_review_thread_count=None,
         auto_continuation_requested=auto_continuation_requested,
     )
 
@@ -231,17 +237,17 @@ class TestImplementPrompt:
     """implement の provider prompt を検証する。"""
 
     def test_issue_prompt_does_not_mention_git_command_policy(self) -> None:
-        prompt = _build_prompt("issue", "implement")
+        prompt = _build_prompt("issue", "implement", None)
 
         _assert_prompt_does_not_mention_git_command_policy(prompt)
 
     def test_pr_prompt_does_not_mention_git_command_policy(self) -> None:
-        prompt = _build_prompt("pr", "implement")
+        prompt = _build_prompt("pr", "implement", None)
 
         _assert_prompt_does_not_mention_git_command_policy(prompt)
 
     def test_pr_prompt_mentions_response_comment(self) -> None:
-        prompt = _build_prompt("pr", "implement")
+        prompt = _build_prompt("pr", "implement", None)
 
         assert (
             "GitHub 実行時は、あなたの最終出力の本文が対象 PR にコメントとして投稿されます。"
@@ -249,7 +255,7 @@ class TestImplementPrompt:
         )
 
     def test_pr_prompt_mentions_fork_patch_comment(self) -> None:
-        prompt = _build_prompt("pr", "implement")
+        prompt = _build_prompt("pr", "implement", None)
 
         assert (
             "fork PR で push できず patch コメントを投稿する場合、"
@@ -258,14 +264,14 @@ class TestImplementPrompt:
         )
 
     def test_issue_prompt_does_not_mention_pr_response_comment(self) -> None:
-        prompt = _build_prompt("issue", "implement")
+        prompt = _build_prompt("issue", "implement", None)
 
         assert "以下の Issue の内容を実装してください。" in prompt
         assert "対象 PR にコメントとして投稿されます" not in prompt
         assert "patch コメント内に含まれます" not in prompt
 
     def test_issue_prompt_mentions_conventional_commit_title(self) -> None:
-        prompt = _build_prompt("issue", "implement")
+        prompt = _build_prompt("issue", "implement", None)
 
         assert (
             "PR タイトルは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。"
@@ -273,12 +279,12 @@ class TestImplementPrompt:
         )
 
     def test_issue_prompt_mentions_commit_message_format(self) -> None:
-        prompt = _build_prompt("issue", "implement")
+        prompt = _build_prompt("issue", "implement", None)
 
         assert "2行目: COMMIT_MESSAGE: <コミットメッセージ>" in prompt
 
     def test_issue_prompt_mentions_no_change_comment(self) -> None:
-        prompt = _build_prompt("issue", "implement")
+        prompt = _build_prompt("issue", "implement", None)
 
         assert (
             "変更コミットがない場合、BODY は対象 Issue へのコメントとして投稿されます。"
@@ -286,7 +292,7 @@ class TestImplementPrompt:
         )
 
     def test_issue_prompt_mentions_conventional_commit_message(self) -> None:
-        prompt = _build_prompt("issue", "implement")
+        prompt = _build_prompt("issue", "implement", None)
 
         assert (
             "コミットメッセージは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。"
@@ -294,12 +300,12 @@ class TestImplementPrompt:
         )
 
     def test_issue_prompt_mentions_source_issue_reference(self) -> None:
-        prompt = _build_prompt("issue", "implement")
+        prompt = _build_prompt("issue", "implement", None)
 
         assert "PR 本文には元 Issue への参照を含めてください。" in prompt
 
     def test_issue_prompt_mentions_closing_keyword(self) -> None:
-        prompt = _build_prompt("issue", "implement")
+        prompt = _build_prompt("issue", "implement", None)
 
         assert (
             "Issue を解決する内容なら GitHub closing keyword を使っても構いません。"
@@ -307,24 +313,30 @@ class TestImplementPrompt:
         )
 
     def test_pr_prompt_does_not_mention_created_pr_title_rule(self) -> None:
-        prompt = _build_prompt("pr", "implement")
+        prompt = _build_prompt("pr", "implement", None)
 
         assert "PR タイトルは Conventional Commits 形式にしてください" not in prompt
         assert "PR 本文には元 Issue への参照を含めてください。" not in prompt
 
     def test_pr_prompt_mentions_commit_message_format(self) -> None:
-        prompt = _build_prompt("pr", "implement")
+        prompt = _build_prompt("pr", "implement", None)
 
         assert "1行目: COMMIT_MESSAGE: <コミットメッセージ>" in prompt
         assert "2行目: BODY:" in prompt
 
     def test_pr_prompt_mentions_conventional_commit_message(self) -> None:
-        prompt = _build_prompt("pr", "implement")
+        prompt = _build_prompt("pr", "implement", None)
 
         assert (
             "コミットメッセージは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。"
             in prompt
         )
+
+    def test_pr_prompt_does_not_mention_review_thread_actions_dir(self) -> None:
+        prompt = _build_prompt("pr", "implement", None)
+
+        assert "REVIEW_THREAD_ACTIONS_DIR:" not in prompt
+        assert "操作ディレクトリ" not in prompt
 
 
 class TestIssueCommandPrompt:
@@ -369,37 +381,86 @@ class TestIssueCommandPrompt:
 class TestAddressPrompt:
     """address の provider prompt を検証する。"""
 
+    def test_prompt_mentions_zero_unresolved_review_thread_count(self) -> None:
+        prompt = _build_prompt("pr", "address", 0)
+
+        assert "未解決レビュースレッド件数: 0件" in prompt
+
+    def test_prompt_mentions_unresolved_review_thread_count(self) -> None:
+        prompt = _build_prompt("pr", "address", 2)
+
+        assert "未解決レビュースレッド件数: 2件" in prompt
+
+    def test_prompt_requires_unresolved_review_thread_count(self) -> None:
+        try:
+            _build_prompt("pr", "address", None)
+        except RuntimeError as exc:
+            assert str(exc) == "address プロンプトには未解決レビュースレッド件数が必要です"
+        else:
+            raise AssertionError("RuntimeError が発生しませんでした")
+
+    def test_implement_prompt_does_not_mention_unresolved_review_thread_count(
+        self,
+    ) -> None:
+        prompt = _build_prompt("pr", "implement", None)
+
+        assert "未解決レビュースレッド件数" not in prompt
+
+    def test_prompt_mentions_review_thread_actions_format(self) -> None:
+        prompt = _build_prompt("pr", "address", 2)
+
+        assert "REVIEW_THREAD_ACTIONS_DIR: /絶対パス" in prompt
+        assert "THREAD_ID: <review thread ID>" in prompt
+        assert "ACTION: resolve または comment" in prompt
+
+    def test_prompt_mentions_review_thread_actions_steps(self) -> None:
+        prompt = _build_prompt("pr", "address", 2)
+
+        assert (
+            "1. `mkdir -p hiho_temp && mktemp -u hiho_temp/hiho.XXXXXXXXXX` "
+            "で一時パスを取得する"
+            in prompt
+        )
+        assert "2. そのパスをディレクトリとして `mkdir` で作成する" in prompt
+        assert "3. ディレクトリ内に `01.md`, `02.md`, ... と連番ファイルを作成する" in prompt
+        assert "4. 各ファイルは以下のフォーマットで記述する:" in prompt
+
     def test_prompt_does_not_mention_git_command_policy(self) -> None:
-        prompt = _build_prompt("pr", "address")
+        prompt = _build_prompt("pr", "address", 0)
 
         _assert_prompt_does_not_mention_git_command_policy(prompt)
 
     def test_prompt_mentions_address_review_skill(self) -> None:
-        prompt = _build_prompt("pr", "address")
+        prompt = _build_prompt("pr", "address", 0)
 
         assert "address-review スキルを使って" in prompt
         assert "レビュー指摘に対応してください。" in prompt
 
     def test_prompt_mentions_commit_message_format(self) -> None:
-        prompt = _build_prompt("pr", "address")
+        prompt = _build_prompt("pr", "address", 0)
 
         assert "1行目: COMMIT_MESSAGE: <コミットメッセージ>" in prompt
         assert "2行目: BODY:" in prompt
 
     def test_prompt_does_not_duplicate_skill_body(self) -> None:
-        prompt = _build_prompt("pr", "address")
+        prompt = _build_prompt("pr", "address", 0)
 
         assert "レビュー指摘を鵜呑みにせず" not in prompt
         assert "解決済み化" not in prompt
         assert "スキルの結果報告" not in prompt
 
     def test_prompt_does_not_use_implement_task(self) -> None:
-        prompt = _build_prompt("pr", "address")
+        prompt = _build_prompt("pr", "address", 0)
 
         assert "追加実装してください。" not in prompt
 
     def test_auto_prompt_requests_address_next_command(self) -> None:
-        prompt = _build_prompt("pr", "address", auto_continuation_requested=True)
+        prompt = _build_prompt(
+            "pr",
+            "address",
+            0,
+            auto_continuation_requested=True,
+        )
 
         assert "COMMAND: review" in prompt
         assert "COMMAND: merge" in prompt

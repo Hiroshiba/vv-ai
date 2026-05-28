@@ -816,6 +816,43 @@ def test_count_unresolved_review_threads_returns_unresolved_count() -> None:
     assert "number=34" in captured_args
 
 
+def test_list_pull_request_review_thread_ids_returns_thread_ids() -> None:
+    """list_pull_request_review_thread_ids は review thread ID 一覧を返す。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            [
+                _make_review_threads_page(
+                    [
+                        {"id": "PRRT_1"},
+                        {"id": "PRRT_2"},
+                    ]
+                ),
+                _make_review_threads_page(
+                    [
+                        {"id": "PRRT_3"},
+                    ]
+                ),
+            ]
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    thread_ids = client.list_pull_request_review_thread_ids("org/repo", 34)
+
+    assert thread_ids == {"PRRT_1", "PRRT_2", "PRRT_3"}
+    assert captured_args[0:5] == ["gh", "api", "graphql", "--paginate", "--slurp"]
+    query = captured_args[6]
+    assert "pullRequest(number: $number)" in query
+    assert "reviewThreads(first: 100, after: $endCursor)" in query
+    assert "id" in query
+    assert "owner=org" in captured_args
+    assert "repo=repo" in captured_args
+    assert "number=34" in captured_args
+
+
 @pytest.mark.parametrize(
     ("payload", "message"),
     [
@@ -853,6 +890,25 @@ def test_count_unresolved_review_threads_rejects_invalid_payload(
 
     with pytest.raises(GitHubClientError, match=message):
         client.count_unresolved_review_threads("org/repo", 34)
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({}, "JSON 形式"),
+        ([{"data": {"repository": {}}}], "pullRequest"),
+        ([_make_review_threads_page([{}])], "id"),
+    ],
+)
+def test_list_pull_request_review_thread_ids_rejects_invalid_payload(
+    payload: object,
+    message: str,
+) -> None:
+    """list_pull_request_review_thread_ids は不正な payload を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps(payload), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match=message):
+        client.list_pull_request_review_thread_ids("org/repo", 34)
 
 
 def test_add_pull_request_review_thread_reply_runs_mutation() -> None:

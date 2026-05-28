@@ -122,7 +122,25 @@ _ADDRESS_TASK_DESCRIPTION: str = (
     "2行目: BODY:\n"
     "3行目以降: Markdown の PR コメント本文\n"
     "\n"
-    "コミットメッセージと本文以外の余計な出力は含めないでください。"
+    "必要なら review thread 操作を以下の手順でファイルに書き出してください:\n"
+    "1. `mkdir -p hiho_temp && mktemp -u hiho_temp/hiho.XXXXXXXXXX` で一時パスを取得する\n"
+    "2. そのパスをディレクトリとして `mkdir` で作成する\n"
+    "3. ディレクトリ内に `01.md`, `02.md`, ... と連番ファイルを作成する\n"
+    "4. 各ファイルは以下のフォーマットで記述する:\n"
+    "   THREAD_ID: <review thread ID>\n"
+    "   ACTION: resolve または comment\n"
+    "   BODY:\n"
+    "   返信本文\n"
+    "\n"
+    "操作ファイルは `.md` のみ対象です。\n"
+    "ACTION: comment の BODY は空にしないでください。\n"
+    "操作ディレクトリは後続処理で読み取るため削除しないでください。\n"
+    "\n"
+    "操作ディレクトリを作成した場合、最後に、作成したディレクトリの絶対パスだけを以下の形式で出力してください:\n"
+    "REVIEW_THREAD_ACTIONS_DIR: /絶対パス\n"
+    "\n"
+    "操作ディレクトリを作成しない場合は、COMMIT_MESSAGE と BODY だけを出力してください。\n"
+    "上記以外の余計な出力は含めないでください。"
 )
 
 _AUTO_STATUS_TASK_DESCRIPTION: str = (
@@ -153,6 +171,7 @@ def build_provider_prompt(
     target_context_block: str | None,
     implement_branch_name: str | None,
     worktree_ref: str | None,
+    unresolved_review_thread_count: int | None,
     auto_continuation_requested: bool,
 ) -> str:
     """コンテキストと指示を組み合わせたプロンプト文字列を返す。"""
@@ -170,6 +189,9 @@ def build_provider_prompt(
     command_name = ready_execution.command.command
     target = ready_execution.command.target
     if command_name == "address":
+        if unresolved_review_thread_count is None:
+            raise RuntimeError("address プロンプトには未解決レビュースレッド件数が必要です")
+        sections.append(f"未解決レビュースレッド件数: {unresolved_review_thread_count}件")
         sections.append(_ADDRESS_TASK_DESCRIPTION)
     elif command_name == "implement" and target is not None and target.kind == "pr":
         sections.append(_IMPLEMENT_PR_TASK_DESCRIPTION)

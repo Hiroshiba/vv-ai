@@ -17,7 +17,9 @@ from vv_ai.backends.github.models import (
     GitHubPullRequest,
 )
 from vv_ai.commands.output_parser import (
+    ReviewThreadAction,
     parse_breakdown_dir,
+    parse_address_output,
     parse_implement_issue_output,
     parse_pr_change_output,
     parse_title_body_output,
@@ -178,12 +180,27 @@ def _handle_pr_change_post_execution(
 
     assert target is not None
     assert target.number is not None
+    assert target.repository_full_name is not None
 
     response_text = execution_result.response_text
     if response_text is None:
         raise RuntimeError("AI からのコミットメッセージと本文がありません")
 
-    commit_message, response_body = parse_pr_change_output(response_text)
+    review_thread_actions: list[ReviewThreadAction] = []
+    if command.command == "address":
+        address_output = parse_address_output(response_text, repo_root)
+        commit_message = address_output.commit_message
+        response_body = address_output.body
+        review_thread_actions = address_output.review_thread_actions
+    else:
+        commit_message, response_body = parse_pr_change_output(response_text)
+
+    _validate_review_thread_actions(
+        github_client,
+        target.repository_full_name,
+        target.number,
+        review_thread_actions,
+    )
 
     committed = commit_all_changes(repo_root, commit_message)
     if committed:
@@ -192,7 +209,6 @@ def _handle_pr_change_post_execution(
     if pr_info is None or not pr_info.is_cross_repository:
         push_branch(repo_root, implement_branch_name, env.get("GITHUB_TOKEN"))
         print(f"ブランチ `{implement_branch_name}` を push しました。")
-        assert target.repository_full_name is not None
         _post_pr_change_response_comment(
             ready_execution,
             github_client,
@@ -200,9 +216,8 @@ def _handle_pr_change_post_execution(
             target.number,
             response_body,
         )
+        _apply_review_thread_actions(github_client, review_thread_actions)
         return
-
-    assert target.repository_full_name is not None
 
     if try_push_current_branch(repo_root, env.get("GITHUB_TOKEN")):
         print(f"fork ブランチ `{implement_branch_name}` を push しました。")
@@ -213,6 +228,7 @@ def _handle_pr_change_post_execution(
             target.number,
             response_body,
         )
+        _apply_review_thread_actions(github_client, review_thread_actions)
         return
 
     _post_fork_patch_fallback(
@@ -226,6 +242,52 @@ def _handle_pr_change_post_execution(
         head_sha_before,
         response_body,
     )
+
+
+def _validate_review_thread_actions(
+    github_client: GitHubClient | None,
+    repository_full_name: str,
+    number: int,
+    actions: list[ReviewThreadAction],
+) -> None:
+    if len(actions) == 0:
+        return
+    if github_client is None:
+        raise RuntimeError("review thread 操作には GitHub client が必要です")
+
+    review_thread_ids = github_client.list_pull_request_review_thread_ids(
+        repository_full_name,
+        number,
+    )
+    action_thread_ids = {action.thread_id for action in actions}
+    unexpected_thread_ids = sorted(action_thread_ids - review_thread_ids)
+    if len(unexpected_thread_ids) != 0:
+        joined_thread_ids = ", ".join(unexpected_thread_ids)
+        raise RuntimeError(
+            "review thread 操作に対象 PR 外の THREAD_ID が含まれています: "
+            f"{joined_thread_ids}"
+        )
+
+
+def _apply_review_thread_actions(
+    github_client: GitHubClient | None,
+    actions: list[ReviewThreadAction],
+) -> None:
+    if len(actions) == 0:
+        return
+    if github_client is None:
+        raise RuntimeError("review thread 操作には GitHub client が必要です")
+
+    for action in actions:
+        if action.action == "resolve":
+            github_client.resolve_review_thread(action.thread_id)
+        elif action.action == "comment":
+            github_client.add_pull_request_review_thread_reply(
+                action.thread_id,
+                action.body,
+            )
+        else:
+            raise RuntimeError(f"未対応の review thread 操作です: {action.action}")
 
 
 def _post_fork_patch_fallback(
