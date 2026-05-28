@@ -11,7 +11,12 @@ from pydantic import BaseModel, ConfigDict
 from vv_ai.config import VVAIConfig, load_vv_ai_config
 from vv_ai.backends.local.store import generate_local_workflow_id
 from vv_ai.providers.selection import ResolvedProvider, resolve_provider
-from vv_ai.inputs.resolve import ResolvedCommand, ResolvedControlLabel, ResolvedInput
+from vv_ai.inputs.resolve import (
+    ResolvedCommand,
+    ResolvedControlLabel,
+    ResolvedInput,
+    ResolvedPullRequestClosed,
+)
 from vv_ai.sessions.models import ResolvedSession
 
 
@@ -63,11 +68,21 @@ class ReadyControlExecution(BaseModel):
     workflow_id: str
 
 
+class ReadyPullRequestClosed(BaseModel):
+    """Pull Request close 後の自動進行へ進める状態。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pull_request: ResolvedPullRequestClosed
+    config: VVAIConfig
+    workflow_id: str
+
+
 def run_preflight(
     repo_root: Path,
     resolved_input: ResolvedInput,
     env: Mapping[str, str],
-) -> ReadyExecution | ReadyControlExecution | SilentSkip:
+) -> ReadyExecution | ReadyControlExecution | ReadyPullRequestClosed | SilentSkip:
     """設定読込・認可・provider 解決を行う。"""
     config = load_vv_ai_config(repo_root)
 
@@ -78,6 +93,13 @@ def run_preflight(
     if isinstance(resolved_input, ResolvedControlLabel):
         return ReadyControlExecution(
             control=resolved_input,
+            config=config,
+            workflow_id=_resolve_workflow_id(resolved_input, env),
+        )
+
+    if isinstance(resolved_input, ResolvedPullRequestClosed):
+        return ReadyPullRequestClosed(
+            pull_request=resolved_input,
             config=config,
             workflow_id=_resolve_workflow_id(resolved_input, env),
         )

@@ -59,6 +59,27 @@ def _make_pull_request_labeled_payload(
     }
 
 
+def _make_pull_request_closed_payload(
+    label_names: list[str],
+    actor: str,
+    actor_id: int | None = 1,
+) -> dict[str, object]:
+    """pull_request closed payload を生成する。"""
+    sender: dict[str, object] = {"login": actor}
+    if actor_id is not None:
+        sender["id"] = actor_id
+    return {
+        "action": "closed",
+        "pull_request": {
+            "number": 43,
+            "merged": True,
+            "labels": [{"name": label_name} for label_name in label_names],
+        },
+        "repository": {"full_name": "org/repo"},
+        "sender": sender,
+    }
+
+
 def test_issue_comment_vv_ai_prefix_should_run(tmp_path: Path) -> None:
     payload = {
         "comment": {
@@ -167,6 +188,42 @@ def test_pull_request_labeled_sync_should_run(tmp_path: Path) -> None:
     assert result.should_run is True
     assert result.actor == "Hiroshiba"
     assert result.event == "pull_request"
+
+
+def test_pull_request_closed_auto_should_run(tmp_path: Path) -> None:
+    payload = _make_pull_request_closed_payload(["vv-ai:auto"], "Hiroshiba")
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is True
+    assert result.actor == "Hiroshiba"
+    assert result.event == "pull_request"
+
+
+def test_pull_request_closed_without_auto_should_not_run(tmp_path: Path) -> None:
+    payload = _make_pull_request_closed_payload(["bug"], "Hiroshiba")
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is False
+    assert result.reason == "not_vv_ai_label"
+
+
+def test_pull_request_closed_unauthorized_user_should_not_run(
+    tmp_path: Path,
+) -> None:
+    payload = _make_pull_request_closed_payload(["vv-ai:auto"], "unknown-user")
+
+    result = run_verify(
+        "pull_request", _write_payload(tmp_path, payload), _make_config()
+    )
+
+    assert result.should_run is False
+    assert result.reason == "unauthorized"
 
 
 @pytest.mark.parametrize(

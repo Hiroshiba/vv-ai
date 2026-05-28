@@ -6,7 +6,7 @@ on:
   issue_comment:
     types: [ created ]
   pull_request:
-    types: [ labeled ]
+    types: [ labeled, closed ]
   workflow_dispatch:
     inputs:
       command:

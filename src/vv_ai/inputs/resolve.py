@@ -84,7 +84,22 @@ class ResolvedControlLabel(BaseModel):
     target: ResolvedTarget | None = None
 
 
-ResolvedInput = ResolvedCommand | ResolvedControlLabel
+class ResolvedPullRequestClosed(BaseModel):
+    """provider を起動しない Pull Request close 入力。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_name: EventName
+    target_type: TargetType
+    target_number: int
+    has_target: bool
+    repository_full_name: str
+    actor: str
+    actor_id: int | None = None
+    pull_request_merged: bool
+
+
+ResolvedInput = ResolvedCommand | ResolvedControlLabel | ResolvedPullRequestClosed
 
 
 def resolve_raw_input(raw_input: RawInput) -> ResolvedInput:
@@ -92,6 +107,8 @@ def resolve_raw_input(raw_input: RawInput) -> ResolvedInput:
     if raw_input.command is not None and raw_input.control_label_name is not None:
         raise ResolutionError("command と control_label_name は同時に指定できません")
     _validate_event_requirements(raw_input)
+    if raw_input.pull_request_merged is not None:
+        return _resolve_pull_request_closed_input(raw_input)
     if raw_input.control_label_name is not None:
         return _resolve_control_label_input(raw_input)
     command = raw_input.command or "reply"
@@ -178,6 +195,44 @@ def _resolve_control_label_input(raw_input: RawInput) -> ResolvedControlLabel:
     )
 
 
+def _resolve_pull_request_closed_input(
+    raw_input: RawInput,
+) -> ResolvedPullRequestClosed:
+    """`RawInput` を Pull Request close 入力へ変換する。"""
+    if raw_input.event_name != "pull_request":
+        raise ResolutionError("Pull Request close 入力は pull_request event でのみ使用できます")
+    required_fields = {
+        "repository_full_name": raw_input.repository_full_name,
+        "actor": raw_input.actor,
+        "target_type": raw_input.target_type,
+        "target_number": raw_input.target_number,
+        "pull_request_merged": raw_input.pull_request_merged,
+    }
+    _raise_for_missing_fields(raw_input.event_name, required_fields)
+    if raw_input.target_type != "pr":
+        raise ResolutionError("Pull Request close 入力の target_type は pr である必要があります")
+    if raw_input.target_number is None:
+        raise ResolutionError("Pull Request close 入力に target_number がありません")
+    if raw_input.repository_full_name is None:
+        raise ResolutionError("Pull Request close 入力に repository_full_name がありません")
+    if raw_input.actor is None:
+        raise ResolutionError("Pull Request close 入力に actor がありません")
+    if raw_input.pull_request_merged is None:
+        raise ResolutionError("Pull Request close 入力に merged がありません")
+    if raw_input.target_number <= 0:
+        raise ResolutionError("`target_number` は 1 以上である必要があります")
+    return ResolvedPullRequestClosed(
+        event_name=raw_input.event_name,
+        target_type=raw_input.target_type,
+        target_number=raw_input.target_number,
+        has_target=True,
+        repository_full_name=raw_input.repository_full_name,
+        actor=raw_input.actor,
+        actor_id=raw_input.actor_id,
+        pull_request_merged=raw_input.pull_request_merged,
+    )
+
+
 def _validate_event_requirements(raw_input: RawInput) -> None:
     """event ごとの最低限の必須項目を検証する。"""
     if raw_input.event_name == "issue_comment":
@@ -195,6 +250,17 @@ def _validate_event_requirements(raw_input: RawInput) -> None:
         required_fields = {
             "repository_full_name": raw_input.repository_full_name,
             "actor": raw_input.actor,
+        }
+        _raise_for_missing_fields(raw_input.event_name, required_fields)
+        return
+
+    if raw_input.event_name == "pull_request" and raw_input.pull_request_merged is not None:
+        required_fields = {
+            "repository_full_name": raw_input.repository_full_name,
+            "actor": raw_input.actor,
+            "target_type": raw_input.target_type,
+            "target_number": raw_input.target_number,
+            "pull_request_merged": raw_input.pull_request_merged,
         }
         _raise_for_missing_fields(raw_input.event_name, required_fields)
         return

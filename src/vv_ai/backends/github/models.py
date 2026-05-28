@@ -112,6 +112,15 @@ class GitHubIssue(BaseModel):
     url: str
 
 
+class GitHubIssueReference(BaseModel):
+    """GitHub Issue 参照を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    repository_full_name: str
+    number: int
+
+
 class GitHubPullRequest(BaseModel):
     """GitHub Pull Request を表す。"""
 
@@ -129,6 +138,15 @@ class GitHubPullRequest(BaseModel):
     head_repository_full_name: str | None
     is_cross_repository: bool
     maintainer_can_modify: bool
+
+
+class GitHubPullRequestClosingState(BaseModel):
+    """Pull Request の merge 状態と close 対象 Issue を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    merged: bool
+    closing_issue_references: list[GitHubIssueReference]
 
 
 class GitHubStatusCheckSummary(BaseModel):

@@ -16,6 +16,7 @@ from vv_ai.auto_continuation import (
     AutoContinuationError,
     apply_auto_continuation_plan,
     build_auto_continuation_plan,
+    continue_after_pull_request_closed,
     save_auto_continuation_plan,
 )
 from vv_ai.config import (
@@ -46,6 +47,7 @@ from vv_ai.workflow.preflight import (
     PreflightError,
     ReadyControlExecution,
     ReadyExecution,
+    ReadyPullRequestClosed,
     SilentSkip,
     run_preflight,
 )
@@ -172,6 +174,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             preflight_result = preflight_result.model_copy(
                 update={"control": resolved_control}
             )
+        elif isinstance(preflight_result, ReadyPullRequestClosed):
+            pass
         elif isinstance(preflight_result, ReadyExecution):
             resolved_target_command = resolve_target(
                 repo_root, preflight_result.command
@@ -213,6 +217,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if isinstance(preflight_result, ReadyControlExecution):
         print(_format_ready_control_message(preflight_result))
         return 0
+    if isinstance(preflight_result, ReadyPullRequestClosed):
+        return _run_pull_request_closed_auto_continuation(preflight_result)
 
     return _run_ready_execution(
         repo_root,
@@ -220,6 +226,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ,
         preflight_duration_seconds=time.perf_counter() - started_at,
     )
+
+
+def _run_pull_request_closed_auto_continuation(
+    ready: ReadyPullRequestClosed,
+) -> int:
+    """Pull Request close 後の自動進行を処理する。"""
+    try:
+        result = continue_after_pull_request_closed(
+            build_github_client(),
+            ready.pull_request.repository_full_name,
+            ready.pull_request.target_number,
+            ready.pull_request.pull_request_merged,
+        )
+    except (AutoContinuationError, GitHubClientError) as exc:
+        print(f"自動継続エラー: {exc}", file=sys.stderr)
+        return 1
+    print(f"自動継続結果: {result.status}")
+    return 0
 
 
 def _run_verify_subcommand(verify_argv: Sequence[str]) -> int:

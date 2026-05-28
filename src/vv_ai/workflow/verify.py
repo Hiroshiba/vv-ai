@@ -18,6 +18,7 @@ from vv_ai.inputs.models import (
     InputError,
     IssueCommentEvent,
     IssueLabeledEvent,
+    PullRequestEvent,
     PullRequestLabeledEvent,
     RawInput,
     WorkflowDispatchEvent,
@@ -150,6 +151,9 @@ def _verify_issue_labeled(
 def _verify_pull_request_labeled(
     payload: dict[str, object], config: VVAIConfig
 ) -> VerifyResult:
+    if payload.get("action") == "closed":
+        return _verify_pull_request_closed(payload, config)
+
     try:
         parsed = PullRequestLabeledEvent.model_validate(payload)
     except ValidationError as exc:
@@ -167,6 +171,36 @@ def _verify_pull_request_labeled(
         )
 
     if not _is_labeled_input_authorized(raw_input, config):
+        return VerifyResult(
+            should_run=False,
+            actor=actor,
+            event="pull_request",
+            reason="unauthorized",
+        )
+
+    return VerifyResult(should_run=True, actor=actor, event="pull_request")
+
+
+def _verify_pull_request_closed(
+    payload: dict[str, object],
+    config: VVAIConfig,
+) -> VerifyResult:
+    try:
+        parsed = PullRequestEvent.model_validate(payload)
+    except ValidationError as exc:
+        raise InputError("pull_request payload の値が不正です") from exc
+
+    actor = parsed.sender.login
+    label_names = {label.name for label in parsed.pull_request.labels}
+    if "vv-ai:auto" not in label_names:
+        return VerifyResult(
+            should_run=False,
+            actor=actor,
+            event="pull_request",
+            reason="not_vv_ai_label",
+        )
+
+    if actor not in config.allowed_users:
         return VerifyResult(
             should_run=False,
             actor=actor,
