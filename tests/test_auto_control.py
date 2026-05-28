@@ -16,6 +16,7 @@ def test_issue_command_continue_removes_auto_status_and_resolves_next_label() ->
     assert result.response_text == "\n## 要望確認\n本文"
     assert result.decision.action == "continue"
     assert result.decision.next_label_name == "vv-ai:requirements"
+    assert result.decision.stop_reason is None
 
 
 @pytest.mark.parametrize(
@@ -35,6 +36,7 @@ def test_issue_command_continue_resolves_fixed_next_label(
     assert result.response_text == "本文"
     assert result.decision.action == "continue"
     assert result.decision.next_label_name == label
+    assert result.decision.stop_reason is None
 
 
 def test_review_address_continue_removes_command_and_resolves_address_label() -> None:
@@ -46,6 +48,7 @@ def test_review_address_continue_removes_command_and_resolves_address_label() ->
     assert result.response_text == "レビュー本文"
     assert result.decision.action == "continue"
     assert result.decision.next_label_name == "vv-ai:address"
+    assert result.decision.stop_reason is None
 
 
 def test_address_continue_removes_command_and_resolves_review_label() -> None:
@@ -57,6 +60,7 @@ def test_address_continue_removes_command_and_resolves_review_label() -> None:
     assert result.response_text == "COMMIT_MESSAGE: fix\nBODY:\n本文"
     assert result.decision.action == "continue"
     assert result.decision.next_label_name == "vv-ai:review"
+    assert result.decision.stop_reason is None
 
 
 @pytest.mark.parametrize("command", ["review", "address"])
@@ -69,6 +73,7 @@ def test_pr_command_merge_wait(command: str) -> None:
     assert result.response_text == "本文"
     assert result.decision.action == "merge_wait"
     assert result.decision.next_label_name is None
+    assert result.decision.stop_reason is None
 
 
 def test_auto_status_escalate_stops() -> None:
@@ -77,37 +82,58 @@ def test_auto_status_escalate_stops() -> None:
     assert result.response_text == "本文"
     assert result.decision.action == "stop"
     assert result.decision.next_label_name is None
+    assert result.decision.stop_reason == "AUTO_STATUS が escalate です"
 
 
 @pytest.mark.parametrize(
-    "response_text",
+    ("response_text", "stop_reason"),
     [
-        "本文",
-        "AUTO_STATUS: unknown\n本文",
-        "AUTO_STATUS: continue\nAUTO_STATUS: continue\n本文",
-        "AUTO_STATUS: continue\nCOMMAND: address\n本文",
+        ("本文", "AUTO_STATUS がありません"),
+        ("AUTO_STATUS: unknown\n本文", "AUTO_STATUS が不正です: unknown"),
+        (
+            "AUTO_STATUS: continue\nAUTO_STATUS: continue\n本文",
+            "AUTO_STATUS が複数あります",
+        ),
+        (
+            "AUTO_STATUS: continue\nCOMMAND: address\n本文",
+            "confirm では COMMAND を使用できません",
+        ),
     ],
 )
-def test_invalid_issue_control_lines_stop(response_text: str) -> None:
+def test_invalid_issue_control_lines_stop(
+    response_text: str,
+    stop_reason: str,
+) -> None:
     result = parse_auto_control_response("confirm", response_text)
 
     assert result.decision.action == "stop"
     assert result.decision.next_label_name is None
+    assert result.decision.stop_reason == stop_reason
 
 
 @pytest.mark.parametrize(
-    "response_text",
+    ("response_text", "stop_reason"),
     [
-        "AUTO_STATUS: continue\n本文",
-        "AUTO_STATUS: continue\nCOMMAND: review\n本文",
-        "AUTO_STATUS: continue\nCOMMAND: address\nCOMMAND: merge\n本文",
+        ("AUTO_STATUS: continue\n本文", "COMMAND がありません"),
+        (
+            "AUTO_STATUS: continue\nCOMMAND: review\n本文",
+            "COMMAND が不正です: review",
+        ),
+        (
+            "AUTO_STATUS: continue\nCOMMAND: address\nCOMMAND: merge\n本文",
+            "COMMAND が複数あります",
+        ),
     ],
 )
-def test_invalid_review_control_lines_stop(response_text: str) -> None:
+def test_invalid_review_control_lines_stop(
+    response_text: str,
+    stop_reason: str,
+) -> None:
     result = parse_auto_control_response("review", response_text)
 
     assert result.decision.action == "stop"
     assert result.decision.next_label_name is None
+    assert result.decision.stop_reason == stop_reason
 
 
 def test_none_response_stops() -> None:
@@ -115,3 +141,4 @@ def test_none_response_stops() -> None:
 
     assert result.response_text is None
     assert result.decision.action == "stop"
+    assert result.decision.stop_reason == "AI 応答本文がありません"

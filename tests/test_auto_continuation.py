@@ -12,6 +12,7 @@ from vv_ai.auto_continuation import (
     AutoContinuationError,
     AutoContinuationPlan,
     apply_auto_continuation_plan,
+    build_move_to_sub_issue_decision,
     load_auto_continuation_plan,
     save_auto_continuation_plan,
     find_first_incomplete_sub_issue,
@@ -187,7 +188,9 @@ class CrossTargetFakeGitHubClient:
     def __init__(self) -> None:
         self.labels: dict[int, list[str]] = {
             1: [AUTO_LABEL_NAME, "vv-ai:breakdown"],
+            10: [AUTO_LABEL_NAME],
         }
+        self.target_states: dict[int, str] = {}
         self.sub_issues: list[GitHubIssue] = []
         self.merged_closing_pull_request_numbers: set[int] = set()
         self.parent_numbers: dict[int, int | None] = {}
@@ -208,7 +211,10 @@ class CrossTargetFakeGitHubClient:
     def get_target_details(self, target: ResolvedTarget) -> GitHubIssue:
         assert target.repository_full_name == "org/repo"
         assert target.number is not None
-        return _make_issue_number(target.number, "OPEN")
+        return _make_issue_number(
+            target.number,
+            self.target_states.get(target.number, "OPEN"),
+        )
 
     def remove_issue_label(
         self,
@@ -323,7 +329,10 @@ def test_apply_auto_continuation_plan_continues(tmp_path: Path) -> None:
     ]
 
 
-def test_apply_auto_continuation_plan_stops(tmp_path: Path) -> None:
+def test_apply_auto_continuation_plan_stops(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     save_auto_continuation_plan(
         tmp_path,
         "test-workflow",
@@ -339,6 +348,8 @@ def test_apply_auto_continuation_plan_stops(tmp_path: Path) -> None:
     result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
 
     assert result.status == "stopped"
+    captured = capsys.readouterr()
+    assert "自動進行を停止します" in captured.out
     assert client.operations == [
         ("remove", "vv-ai:confirm"),
         ("remove", AUTO_LABEL_NAME),
@@ -391,7 +402,10 @@ def test_apply_auto_continuation_plan_skips_closed_issue(tmp_path: Path) -> None
     result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
 
     assert result.status == "target_closed"
-    assert client.operations == [("remove", "vv-ai:confirm")]
+    assert client.operations == [
+        ("remove", "vv-ai:confirm"),
+        ("remove", AUTO_LABEL_NAME),
+    ]
 
 
 @pytest.mark.parametrize("state", ["CLOSED", "MERGED"])
@@ -410,7 +424,10 @@ def test_apply_auto_continuation_plan_skips_closed_pr(
     result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
 
     assert result.status == "target_closed"
-    assert client.operations == [("remove", "vv-ai:confirm")]
+    assert client.operations == [
+        ("remove", "vv-ai:confirm"),
+        ("remove", AUTO_LABEL_NAME),
+    ]
 
 
 def test_apply_auto_continuation_plan_skips_removed_source_label(
@@ -490,6 +507,53 @@ def test_apply_auto_continuation_plan_moves_to_sub_issue(tmp_path: Path) -> None
     ]
 
 
+def test_apply_auto_continuation_plan_stops_when_destination_is_closed(
+    tmp_path: Path,
+) -> None:
+    plan = _make_plan("issue", "move", None).model_copy(
+        update={
+            "source_label_name": "vv-ai:breakdown",
+            "destination_target_type": "issue",
+            "destination_target_number": 2,
+            "destination_label_names": [AUTO_LABEL_NAME, NEXT_LABEL_NAME],
+        }
+    )
+    save_auto_continuation_plan(tmp_path, "test-workflow", plan)
+    client = CrossTargetFakeGitHubClient()
+    client.target_states[2] = "CLOSED"
+
+    result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
+
+    assert result.status == "target_closed"
+    assert client.operations == [
+        ("remove", 1, "vv-ai:breakdown"),
+        ("remove", 1, AUTO_LABEL_NAME),
+    ]
+
+
+def test_apply_auto_continuation_plan_stops_without_destination(
+    tmp_path: Path,
+) -> None:
+    plan = _make_plan("issue", "move", None).model_copy(
+        update={
+            "source_label_name": "vv-ai:breakdown",
+            "destination_target_type": None,
+            "destination_target_number": None,
+            "destination_label_names": [],
+        }
+    )
+    save_auto_continuation_plan(tmp_path, "test-workflow", plan)
+    client = CrossTargetFakeGitHubClient()
+
+    result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
+
+    assert result.status == "no_destination"
+    assert client.operations == [
+        ("remove", 1, "vv-ai:breakdown"),
+        ("remove", 1, AUTO_LABEL_NAME),
+    ]
+
+
 def test_find_first_incomplete_sub_issue_skips_completed_pr() -> None:
     client = CrossTargetFakeGitHubClient()
     client.sub_issues = [
@@ -514,6 +578,15 @@ def test_find_first_incomplete_sub_issue_ignores_cross_reference_only() -> None:
     assert sub_issue.number == 2
 
 
+def test_build_move_to_sub_issue_decision_stops_without_incomplete_sub_issue() -> None:
+    client = CrossTargetFakeGitHubClient()
+
+    decision = build_move_to_sub_issue_decision(client, "org/repo", 1)
+
+    assert decision.action == "stop"
+    assert decision.stop_reason == "未完了サブ Issue が見つかりません"
+
+
 def test_continue_after_pull_request_closed_moves_to_next_sub_issue() -> None:
     client = CrossTargetFakeGitHubClient()
     client.closing_state = GitHubPullRequestClosingState(
@@ -532,6 +605,7 @@ def test_continue_after_pull_request_closed_moves_to_next_sub_issue() -> None:
 
     assert result.status == "moved"
     assert client.operations == [
+        ("remove", 10, AUTO_LABEL_NAME),
         ("add", 3, AUTO_LABEL_NAME),
         ("add", 3, NEXT_LABEL_NAME),
     ]
@@ -547,4 +621,14 @@ def test_continue_after_pull_request_closed_stops_without_closing_issue(
     captured = capsys.readouterr()
     assert result.status == "stopped"
     assert "close 対象 Issue がない" in captured.err
+    assert client.operations == [("remove", 10, AUTO_LABEL_NAME)]
+
+
+def test_continue_after_pull_request_closed_stops_without_auto_label() -> None:
+    client = CrossTargetFakeGitHubClient()
+    client.labels[10] = []
+
+    result = continue_after_pull_request_closed(client, "org/repo", 10, True)
+
+    assert result.status == "auto_removed"
     assert client.operations == []

@@ -56,6 +56,7 @@ class AutoContinuationPlan(BaseModel):
     source_label_name: str
     action: AutoContinuationAction
     next_label_name: str | None
+    stop_reason: str | None = None
     destination_target_type: TargetType | None = None
     destination_target_number: int | None = None
     destination_label_names: list[str] = Field(default_factory=list)
@@ -97,6 +98,7 @@ def build_auto_continuation_plan(
         source_label_name=command.trigger_label_name,
         action=decision.action,
         next_label_name=decision.next_label_name,
+        stop_reason=decision.stop_reason,
         destination_target_type=decision.destination_target_type,
         destination_target_number=decision.destination_target_number,
         destination_label_names=decision.destination_label_names,
@@ -119,7 +121,10 @@ def build_move_to_sub_issue_decision(
         parent_number,
     )
     if sub_issue is None:
-        return AutoContinuationDecision(action="stop")
+        return AutoContinuationDecision(
+            action="stop",
+            stop_reason="未完了サブ Issue が見つかりません",
+        )
     return AutoContinuationDecision(
         action="move",
         destination_target_type="issue",
@@ -167,6 +172,18 @@ def continue_after_pull_request_closed(
     event_merged: bool,
 ) -> AutoContinuationApplyResult:
     """PR merge 後に親 Issue 配下の次サブ Issue へ自動進行を移す。"""
+    label_names = github_client.list_issue_label_names(repository_full_name, pr_number)
+    if AUTO_LABEL_NAME not in label_names:
+        print("PR から vv-ai:auto が外れているため自動進行を停止します")
+        return AutoContinuationApplyResult(status="auto_removed")
+
+    _remove_auto_label_if_present(
+        github_client,
+        repository_full_name,
+        pr_number,
+        label_names,
+    )
+
     if not event_merged:
         print("PR は merge されていないため自動進行を停止します")
         return AutoContinuationApplyResult(status="stopped")
@@ -277,28 +294,34 @@ def apply_auto_continuation_plan(
     target = _build_target(plan)
     target_details = github_client.get_target_details(target)
     if _is_target_closed(target_details):
-        _remove_source_label_if_present(plan, github_client, label_names)
-        return AutoContinuationApplyResult(status="target_closed")
-
-    _remove_source_label_if_present(plan, github_client, label_names)
+        return _stop_auto_continuation(
+            plan,
+            github_client,
+            label_names,
+            "target_closed",
+            "移動元 target が open ではありません",
+        )
 
     if _is_limit_reached(plan, github_client):
-        github_client.remove_issue_label(
-            plan.repository_full_name,
-            plan.target_number,
-            AUTO_LABEL_NAME,
+        return _stop_auto_continuation(
+            plan,
+            github_client,
+            label_names,
+            "limit_reached",
+            "自動進行のステップ上限に到達しました",
         )
-        return AutoContinuationApplyResult(status="limit_reached")
 
     if plan.action == "stop":
-        github_client.remove_issue_label(
-            plan.repository_full_name,
-            plan.target_number,
-            AUTO_LABEL_NAME,
+        return _stop_auto_continuation(
+            plan,
+            github_client,
+            label_names,
+            "stopped",
+            plan.stop_reason or "自動進行を停止します",
         )
-        return AutoContinuationApplyResult(status="stopped")
 
     if plan.action == "merge_wait":
+        _remove_source_label_if_present(plan, github_client, label_names)
         return AutoContinuationApplyResult(status="merge_waiting")
 
     if plan.action == "move":
@@ -307,16 +330,35 @@ def apply_auto_continuation_plan(
             or plan.destination_target_number is None
             or len(plan.destination_label_names) == 0
         ):
-            github_client.remove_issue_label(
-                plan.repository_full_name,
-                plan.target_number,
-                AUTO_LABEL_NAME,
+            return _stop_auto_continuation(
+                plan,
+                github_client,
+                label_names,
+                "no_destination",
+                "自動進行の移動先 target がありません",
             )
-            return AutoContinuationApplyResult(status="no_destination")
-        github_client.remove_issue_label(
+
+        destination = _build_target_from_parts(
+            plan.repository_full_name,
+            plan.destination_target_type,
+            plan.destination_target_number,
+        )
+        destination_details = github_client.get_target_details(destination)
+        if _is_target_closed(destination_details):
+            return _stop_auto_continuation(
+                plan,
+                github_client,
+                label_names,
+                "target_closed",
+                "移動先 target が open ではありません",
+            )
+
+        _remove_source_label_if_present(plan, github_client, label_names)
+        _remove_auto_label_if_present(
+            github_client,
             plan.repository_full_name,
             plan.target_number,
-            AUTO_LABEL_NAME,
+            label_names,
         )
         _add_labels(
             github_client,
@@ -331,6 +373,7 @@ def apply_auto_continuation_plan(
     if plan.next_label_name is None:
         raise AutoContinuationError("自動継続の次 label がありません")
 
+    _remove_source_label_if_present(plan, github_client, label_names)
     github_client.add_issue_label(
         plan.repository_full_name,
         plan.target_number,
@@ -354,12 +397,24 @@ def _build_plan_path(repo_root: Path, workflow_id: str) -> Path:
 
 
 def _build_target(plan: AutoContinuationPlan) -> ResolvedTarget:
+    return _build_target_from_parts(
+        plan.repository_full_name,
+        plan.target_type,
+        plan.target_number,
+    )
+
+
+def _build_target_from_parts(
+    repository_full_name: str,
+    target_type: TargetType,
+    target_number: int,
+) -> ResolvedTarget:
     return ResolvedTarget(
         backend="github",
-        kind=plan.target_type,
-        canonical_id=f"github:{plan.repository_full_name}#{plan.target_number}",
-        repository_full_name=plan.repository_full_name,
-        number=plan.target_number,
+        kind=target_type,
+        canonical_id=f"github:{repository_full_name}#{target_number}",
+        repository_full_name=repository_full_name,
+        number=target_number,
     )
 
 
@@ -379,6 +434,35 @@ def _remove_source_label_if_present(
         plan.target_number,
         plan.source_label_name,
     )
+
+
+def _remove_auto_label_if_present(
+    github_client: GitHubClient,
+    repository_full_name: str,
+    number: int,
+    label_names: list[str],
+) -> None:
+    if AUTO_LABEL_NAME not in label_names:
+        return
+    github_client.remove_issue_label(repository_full_name, number, AUTO_LABEL_NAME)
+
+
+def _stop_auto_continuation(
+    plan: AutoContinuationPlan,
+    github_client: GitHubClient,
+    label_names: list[str],
+    status: ApplyStatus,
+    reason: str,
+) -> AutoContinuationApplyResult:
+    _remove_source_label_if_present(plan, github_client, label_names)
+    _remove_auto_label_if_present(
+        github_client,
+        plan.repository_full_name,
+        plan.target_number,
+        label_names,
+    )
+    print(f"自動進行を停止します: {reason}")
+    return AutoContinuationApplyResult(status=status)
 
 
 def _is_limit_reached(

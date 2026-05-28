@@ -108,6 +108,7 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 - `vv-ai:auto` は起動コマンドではなく、自動進行が有効な状態を表す制御ラベルとして扱う
 - `vv-ai:merge` は起動コマンドではなく、PR の merge 操作を許可する制御ラベルとして扱う
 - PR から `vv-ai:merge` が外された場合は auto merge を解除する
+- 自動進行が継続できない場合は `vv-ai:auto` を外す
 
 ### 3. GitHub workflow_dispatch
 
@@ -161,11 +162,12 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 | `issues.labeled`     | ✅ 有効    |
 | `pull_request.labeled` | ✅ 有効  |
 | `pull_request.unlabeled` | ✅ 有効 |
+| `pull_request.closed` | ✅ 有効 |
 | `issues.opened`      | ❌ 無効    |
 
 ### ワークフロー構成
 
-- **1 本の workflow** に `issue_comment`、`issues.labeled`、`pull_request.labeled`、`pull_request.unlabeled`、`workflow_dispatch` を同居
+- **1 本の workflow** に `issue_comment`、`issues.labeled`、`pull_request.labeled`、`pull_request.unlabeled`、`pull_request.closed`、`workflow_dispatch` を同居
 - 同一 Issue/PR 番号の実行は **直列化（キュー）**
   - GitHub Actions の `concurrency` を使用
   - `cancel-in-progress: false`（前の実行が終わるまで待つ）
