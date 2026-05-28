@@ -125,12 +125,35 @@ _ADDRESS_TASK_DESCRIPTION: str = (
     "コミットメッセージと本文以外の余計な出力は含めないでください。"
 )
 
+_AUTO_STATUS_TASK_DESCRIPTION: str = (
+    "自動進行中です。"
+    "最終出力には次のどちらかの制御行を独立した行として含めてください。\n"
+    "AUTO_STATUS: continue\n"
+    "AUTO_STATUS: escalate\n"
+    "\n"
+    "次工程へ進めてよい場合は `AUTO_STATUS: continue`、"
+    "人間の判断が必要な場合は `AUTO_STATUS: escalate` を出力してください。"
+)
+
+_AUTO_REVIEW_COMMAND_TASK_DESCRIPTION: str = (
+    "レビュー後の次工程を示すため、次のどちらかの制御行を独立した行として含めてください。\n"
+    "COMMAND: address\n"
+    "COMMAND: merge"
+)
+
+_AUTO_ADDRESS_COMMAND_TASK_DESCRIPTION: str = (
+    "レビュー指摘対応後の次工程を示すため、次のどちらかの制御行を独立した行として含めてください。\n"
+    "COMMAND: review\n"
+    "COMMAND: merge"
+)
+
 
 def build_provider_prompt(
     ready_execution: ReadyExecution,
     target_context_block: str | None,
     implement_branch_name: str | None,
     worktree_ref: str | None,
+    auto_continuation_requested: bool,
 ) -> str:
     """コンテキストと指示を組み合わせたプロンプト文字列を返す。"""
     sections: list[str] = []
@@ -153,6 +176,13 @@ def build_provider_prompt(
     elif command_name in _COMMAND_TASK_DESCRIPTION:
         sections.append(_COMMAND_TASK_DESCRIPTION[command_name])
 
+    auto_control_description = _build_auto_control_description(
+        command_name,
+        auto_continuation_requested,
+    )
+    if auto_control_description is not None:
+        sections.append(auto_control_description)
+
     instruction = ready_execution.command.instruction
     if instruction is not None:
         sections.append(f"指示:\n{instruction}")
@@ -161,6 +191,22 @@ def build_provider_prompt(
         sections.append(f"対象の Issue / PR コンテキスト:\n{target_context_block}")
 
     return "\n\n".join(sections)
+
+
+def _build_auto_control_description(
+    command_name: str,
+    auto_continuation_requested: bool,
+) -> str | None:
+    if not auto_continuation_requested:
+        return None
+    if command_name not in {"confirm", "requirements", "arch", "detail", "review", "address"}:
+        return None
+    descriptions = [_AUTO_STATUS_TASK_DESCRIPTION]
+    if command_name == "review":
+        descriptions.append(_AUTO_REVIEW_COMMAND_TASK_DESCRIPTION)
+    elif command_name == "address":
+        descriptions.append(_AUTO_ADDRESS_COMMAND_TASK_DESCRIPTION)
+    return "\n\n".join(descriptions)
 
 
 def build_next_decision_prompt(

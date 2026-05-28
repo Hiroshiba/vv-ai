@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from vv_ai.artifacts.session import build_session_artifact_target_prefix
+from vv_ai.auto_control import AutoContinuationAction, AutoContinuationDecision
 from vv_ai.backends.github.client import GitHubClient
 from vv_ai.backends.github.models import (
     GitHubArtifact,
@@ -30,6 +31,8 @@ ApplyStatus = Literal[
     "target_closed",
     "limit_reached",
     "continued",
+    "stopped",
+    "merge_waiting",
 ]
 
 
@@ -47,7 +50,8 @@ class AutoContinuationPlan(BaseModel):
     target_type: TargetType
     target_number: int
     source_label_name: str
-    next_label_name: str
+    action: AutoContinuationAction
+    next_label_name: str | None
     session_artifact_target_prefix: str
     workflow_id: str
 
@@ -62,6 +66,7 @@ class AutoContinuationApplyResult(BaseModel):
 
 def build_auto_continuation_plan(
     ready_execution: ReadyExecution,
+    decision: AutoContinuationDecision,
 ) -> AutoContinuationPlan:
     """実行状態から自動継続計画を組み立てる。"""
     command = ready_execution.command
@@ -83,7 +88,8 @@ def build_auto_continuation_plan(
         target_type=target.kind,
         target_number=target.number,
         source_label_name=command.trigger_label_name,
-        next_label_name=NEXT_LABEL_NAME,
+        action=decision.action,
+        next_label_name=decision.next_label_name,
         session_artifact_target_prefix=build_session_artifact_target_prefix(
             session.key.target_key
         ),
@@ -166,6 +172,22 @@ def apply_auto_continuation_plan(
             AUTO_LABEL_NAME,
         )
         return AutoContinuationApplyResult(status="limit_reached")
+
+    if plan.action == "stop":
+        github_client.remove_issue_label(
+            plan.repository_full_name,
+            plan.target_number,
+            AUTO_LABEL_NAME,
+        )
+        return AutoContinuationApplyResult(status="stopped")
+
+    if plan.action == "merge_wait":
+        return AutoContinuationApplyResult(status="merge_waiting")
+
+    if plan.action != "continue":
+        raise AutoContinuationError(f"未対応の自動継続 action です: {plan.action}")
+    if plan.next_label_name is None:
+        raise AutoContinuationError("自動継続の次 label がありません")
 
     github_client.add_issue_label(
         plan.repository_full_name,
