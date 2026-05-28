@@ -492,7 +492,10 @@ def _build_cross_target_auto_decision(
         )
     if command.command == "implement" and target.kind == "issue":
         if created_pr is None:
-            return AutoContinuationDecision(action="stop")
+            return AutoContinuationDecision(
+                action="stop",
+                stop_reason="implement 成功後に PR が作成されていません",
+            )
         return build_move_to_pull_request_decision(created_pr.number)
     return current_decision
 

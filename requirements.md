@@ -108,6 +108,10 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 - `vv-ai:auto` は起動コマンドではなく、自動進行が有効な状態を表す制御ラベルとして扱う
 - `vv-ai:merge` は起動コマンドではなく、PR の merge 操作を許可する制御ラベルとして扱う
 - PR から `vv-ai:merge` が外された場合は auto merge を解除する
+- 自動進行が停止した場合は `vv-ai:auto` を外し、次のコマンドラベルを付けない
+- 自動進行の停止では通知コメントを追加せず、停止理由は Actions ログに出す
+- `AUTO_STATUS` 欠落、不正な `COMMAND`、ステップ上限到達、移動先 target が open でない場合は自動進行を停止する
+- `breakdown` 後に未完了サブ Issue がない場合と、`implement` 後に PR がない場合は自動進行を停止する
 
 ### 3. GitHub workflow_dispatch
 
@@ -161,6 +165,7 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 | `issues.labeled`     | ✅ 有効    |
 | `pull_request.labeled` | ✅ 有効  |
 | `pull_request.unlabeled` | ✅ 有効 |
+| `pull_request.closed` | ✅ 有効 |
 | `issues.opened`      | ❌ 無効    |
 
 ### ワークフロー構成
@@ -724,6 +729,15 @@ merge_args:
 - コメント起動: `@vv-ai <command> --dry-run ...`
 - workflow_dispatch: `dry_run: true`
 - ローカル CLI: `--dry-run`
+
+### 自動進行の手動確認
+
+- 検証用の親 Issue に `vv-ai:auto` を付け、`confirm` から `detail` までの同一 Issue 内進行を確認する
+- `breakdown` 後に最初の未完了サブ Issue へ `vv-ai:auto` と `vv-ai:next` が移ることを確認する
+- サブ Issue の `implement` 後に作成 PR へ `vv-ai:auto` と `vv-ai:next` が移ることを確認する
+- PR の `review` / `address` 後に `COMMAND: merge` で `vv-ai:auto` が残ることを確認する
+- PR merge 後に処理対象 PR の `vv-ai:auto` が外れ、次の未完了サブ Issue に `vv-ai:auto` と `vv-ai:next` が付くことを確認する
+- 停止経路では通知コメントが増えず、`vv-ai:auto` が外れ、停止理由が Actions ログに出ることを確認する
 
 ---
 

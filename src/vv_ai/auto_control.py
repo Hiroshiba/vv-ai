@@ -28,6 +28,7 @@ class AutoContinuationDecision(BaseModel):
 
     action: AutoContinuationAction
     next_label_name: str | None = None
+    stop_reason: str | None = None
     destination_target_type: TargetType | None = None
     destination_target_number: int | None = None
     destination_label_names: list[str] = Field(default_factory=list)
@@ -50,7 +51,7 @@ def parse_auto_control_response(
     if response_text is None:
         return AutoControlParseResult(
             response_text=None,
-            decision=_stop_decision(),
+            decision=_stop_decision("AI 応答本文がありません"),
         )
 
     control_lines, body_lines = _split_control_lines(response_text)
@@ -86,20 +87,24 @@ def _resolve_decision(
 ) -> AutoContinuationDecision:
     statuses = control_lines["auto_status"]
     commands = control_lines["command"]
-    if len(statuses) != 1:
-        return _stop_decision()
+    if len(statuses) == 0:
+        return _stop_decision("AUTO_STATUS がありません")
+    if len(statuses) > 1:
+        return _stop_decision("AUTO_STATUS が複数あります")
     if len(commands) > 1:
-        return _stop_decision()
+        return _stop_decision("COMMAND が複数あります")
 
     auto_status = statuses[0]
     if auto_status == "escalate":
-        return _stop_decision()
+        return _stop_decision("AUTO_STATUS が escalate です")
     if auto_status != "continue":
-        return _stop_decision()
+        return _stop_decision(f"AUTO_STATUS が不正です: {auto_status}")
 
     if command_name in _ISSUE_NEXT_LABELS:
         if len(commands) != 0:
-            return _stop_decision()
+            return _stop_decision(
+                f"{command_name} では COMMAND を使用できません"
+            )
         return AutoContinuationDecision(
             action="continue",
             next_label_name=_ISSUE_NEXT_LABELS[command_name],
@@ -108,7 +113,7 @@ def _resolve_decision(
         return _resolve_pr_decision(commands, "address")
     if command_name == "address":
         return _resolve_pr_decision(commands, "review")
-    return _stop_decision()
+    return _stop_decision(f"{command_name} は自動進行対象外です")
 
 
 def _resolve_pr_decision(
@@ -116,7 +121,7 @@ def _resolve_pr_decision(
     continue_command: str,
 ) -> AutoContinuationDecision:
     if len(commands) != 1:
-        return _stop_decision()
+        return _stop_decision("COMMAND がありません")
     command = commands[0]
     if command == "merge":
         return AutoContinuationDecision(action="merge_wait")
@@ -125,8 +130,8 @@ def _resolve_pr_decision(
             action="continue",
             next_label_name=f"vv-ai:{continue_command}",
         )
-    return _stop_decision()
+    return _stop_decision(f"COMMAND が不正です: {command}")
 
 
-def _stop_decision() -> AutoContinuationDecision:
-    return AutoContinuationDecision(action="stop")
+def _stop_decision(reason: str) -> AutoContinuationDecision:
+    return AutoContinuationDecision(action="stop", stop_reason=reason)

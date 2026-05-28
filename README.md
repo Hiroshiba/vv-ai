@@ -172,13 +172,17 @@ PR でのみ使えるコマンド:
 Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動します。
 実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
 
-<!-- `vv-ai:auto` 単体でコマンドを実行しない挙動は自動進行の基盤段階の仮実装です。最終段階で、自動進行中の対象へ次の実行用ラベルを付ける制御を書き入れます。 -->
+`vv-ai:auto` は自動進行が有効な状態を表す制御ラベルです。自動進行が停止すると `vv-ai:auto` は外れ、追加の停止通知コメントは投稿されません。停止理由は Actions ログで確認します。
+
+`vv-ai:merge` は PR の merge 操作を許可する制御ラベルです。`vv-ai.yml` の `merge_args` を使って `gh pr merge` を実行します。
 
 ラベル起動に使う GitHub ラベルはツールで作成できます。既存のラベルは色と説明を更新します。
 
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main create-vv-ai-labels --repo org/repo
 ```
+
+自動進行の手動確認では、検証用の親 Issue に `vv-ai:auto` を付け、`confirm` から `detail`、`breakdown`、サブ Issue の `implement`、PR の `review` / `address`、PR merge 後の次サブ Issue 移動までを Actions ログとラベルの変化で追います。途中停止した場合は対象の `vv-ai:auto` が外れ、次ラベルが付かないことを確認します。
 
 ### workflow_dispatch
 
