@@ -133,7 +133,7 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-claude-settings-secre
 
 ### コメント起動
 
-Issue または PR のコメントで `@vv-ai` で始めると起動します。
+Issue または PR のコメントで `@vv-ai` または `@vvai` で始めると起動します。
 
 `instruction` は実際の指示に置き換えます。角括弧で囲んだ部分は省略できます。
 

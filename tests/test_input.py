@@ -42,6 +42,11 @@ class TestParseCommentInvocation:
         assert result.command == "reply"
         assert result.instruction is None
 
+    def test_short_prefix_only(self) -> None:
+        result = parse_comment_invocation("@vvai")
+        assert result.command == "reply"
+        assert result.instruction is None
+
     def test_command_reply_implicit(self) -> None:
         result = parse_comment_invocation("@vv-ai 要約して")
         assert result.command == "reply"
@@ -74,6 +79,11 @@ class TestParseCommentInvocation:
         result = parse_comment_invocation("@vv-ai implement このIssueを実装して")
         assert result.command == "implement"
         assert result.instruction == "このIssueを実装して"
+
+    def test_short_prefix_command_implement(self) -> None:
+        result = parse_comment_invocation("@vvai implement 修正して")
+        assert result.command == "implement"
+        assert result.instruction == "修正して"
 
     def test_command_address(self) -> None:
         result = parse_comment_invocation("@vv-ai address")
@@ -108,6 +118,16 @@ class TestParseCommentInvocation:
     def test_command_next_with_options(self) -> None:
         result = parse_comment_invocation(
             "@vv-ai next --provider codex --session_mode new --dry-run"
+        )
+        assert result.command == "next"
+        assert result.provider == "codex"
+        assert result.session_mode == "new"
+        assert result.dry_run is True
+        assert result.instruction is None
+
+    def test_short_prefix_command_next_with_options(self) -> None:
+        result = parse_comment_invocation(
+            "@vvai next --provider codex --session_mode new --dry-run"
         )
         assert result.command == "next"
         assert result.provider == "codex"
@@ -169,6 +189,10 @@ class TestParseCommentInvocation:
     def test_error_vv_ai_like_prefix(self) -> None:
         with pytest.raises(InputError):
             parse_comment_invocation("@vv-aibot hello")
+
+    def test_error_short_vv_ai_like_prefix(self) -> None:
+        with pytest.raises(InputError):
+            parse_comment_invocation("@vvaibot hello")
 
     def test_error_unknown_option(self) -> None:
         with pytest.raises(InputError):
