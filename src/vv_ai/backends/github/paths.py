@@ -44,6 +44,14 @@ def _build_pulls_path(repository_full_name: str) -> str:
     return f"repos/{_require_repository_full_name(repository_full_name)}/pulls"
 
 
+def _build_pull_request_reviews_path(repository_full_name: str, number: int) -> str:
+    """Pull Request reviews endpoint を返す。"""
+    return (
+        f"{_build_pulls_path(repository_full_name)}"
+        f"/{_require_positive_id(number, 'number')}/reviews"
+    )
+
+
 def _build_repository_path(repository_full_name: str) -> str:
     """Repository endpoint を返す。"""
     return f"repos/{_require_repository_full_name(repository_full_name)}"

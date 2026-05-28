@@ -59,6 +59,18 @@ class GitHubComment(BaseModel):
     url: str
 
 
+class GitHubPullRequestReview(BaseModel):
+    """Pull Request review submission を表す。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    body: str
+    author: GitHubActor
+    created_at: str
+    url: str
+
+
 class GitHubIssueLabeledEvent(BaseModel):
     """Issue timeline の labeled event を表す。"""
 

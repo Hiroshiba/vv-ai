@@ -12,9 +12,12 @@ from vv_ai.backends.github.models import (
     GitHubComment,
     GitHubIssue,
     GitHubPullRequest,
+    GitHubPullRequestReview,
 )
 from vv_ai.inputs.resolve import ResolvedTarget
 from vv_ai.sessions.models import SessionStateRef, TargetContextState
+
+TargetContextEntry = GitHubComment | GitHubPullRequestReview
 
 
 class TargetContextError(Exception):
@@ -88,6 +91,12 @@ def build_target_context(
             target.repository_full_name,
             target.number,
         )
+        reviews: list[GitHubPullRequestReview] = []
+        if target.kind == "pr":
+            reviews = github_client.list_pull_request_reviews(
+                target.repository_full_name,
+                target.number,
+            )
     except GitHubClientError as exc:
         raise TargetContextError(f"target context の取得に失敗しました: {exc}") from exc
 
@@ -102,16 +111,21 @@ def build_target_context(
         sections.append(_format_description(description))
         next_state.description_hash = description_hash
 
-    for comment in _sort_comments(comments):
-        comment_key = str(comment.id)
-        comment_hash = _hash_comment(comment)
-        if current_comment_id is not None and comment.id == current_comment_id:
-            next_state.comment_hashes[comment_key] = comment_hash
+    entries = _sort_target_context_entries(comments, reviews)
+    for entry in entries:
+        entry_key = _build_entry_key(entry)
+        entry_hash = _hash_entry(entry)
+        if (
+            isinstance(entry, GitHubComment)
+            and current_comment_id is not None
+            and entry.id == current_comment_id
+        ):
+            next_state.comment_hashes[entry_key] = entry_hash
             continue
-        if state.comment_hashes.get(comment_key) == comment_hash:
+        if state.comment_hashes.get(entry_key) == entry_hash:
             continue
-        sections.append(_format_comment(comment))
-        next_state.comment_hashes[comment_key] = comment_hash
+        sections.append(_format_entry(entry))
+        next_state.comment_hashes[entry_key] = entry_hash
 
     prompt_block = "\n\n---\n\n".join(sections) if len(sections) > 0 else None
     return TargetContextBuildResult(prompt_block=prompt_block, state=next_state)
@@ -140,14 +154,47 @@ def _fetch_target_title_and_description(
     raise TargetContextError("target kind が不正です")
 
 
-def _sort_comments(comments: list[GitHubComment]) -> list[GitHubComment]:
-    """comment を作成順で返す。"""
-    return sorted(comments, key=lambda comment: (comment.created_at, comment.id))
+def _sort_target_context_entries(
+    comments: list[GitHubComment],
+    reviews: list[GitHubPullRequestReview],
+) -> list[TargetContextEntry]:
+    """target context entry を作成順で返す。"""
+    entries: list[TargetContextEntry] = [
+        *comments,
+        *[review for review in reviews if review.body.strip() != ""],
+    ]
+    return sorted(
+        entries,
+        key=lambda entry: (entry.created_at, _build_entry_key(entry)),
+    )
+
+
+def _build_entry_key(entry: TargetContextEntry) -> str:
+    """target context entry の投入済み判定に使う key を返す。"""
+    if isinstance(entry, GitHubComment):
+        return str(entry.id)
+    if isinstance(entry, GitHubPullRequestReview):
+        return f"review:{entry.id}"
+    raise TargetContextError("target context entry の種別が不正です")
+
+
+def _hash_entry(entry: TargetContextEntry) -> str:
+    """target context entry の投入済み判定に使う hash を返す。"""
+    if isinstance(entry, GitHubComment):
+        return _hash_comment(entry)
+    if isinstance(entry, GitHubPullRequestReview):
+        return _hash_pull_request_review(entry)
+    raise TargetContextError("target context entry の種別が不正です")
 
 
 def _hash_comment(comment: GitHubComment) -> str:
     """comment の投入済み判定に使う hash を返す。"""
     return _hash_text(f"{comment.updated_at}\n{comment.body}")
+
+
+def _hash_pull_request_review(review: GitHubPullRequestReview) -> str:
+    """Pull Request review の投入済み判定に使う hash を返す。"""
+    return _hash_text(f"{review.created_at}\n{review.body}")
 
 
 def _hash_text(value: str) -> str:
@@ -165,6 +212,15 @@ def _format_description(description: str) -> str:
     return f"## Description\n\n{description}"
 
 
+def _format_entry(entry: TargetContextEntry) -> str:
+    """target context entry 用の prompt section を返す。"""
+    if isinstance(entry, GitHubComment):
+        return _format_comment(entry)
+    if isinstance(entry, GitHubPullRequestReview):
+        return _format_pull_request_review(entry)
+    raise TargetContextError("target context entry の種別が不正です")
+
+
 def _format_comment(comment: GitHubComment) -> str:
     """comment 用の prompt section を返す。"""
     return (
@@ -174,4 +230,15 @@ def _format_comment(comment: GitHubComment) -> str:
         f"- 更新日時: {comment.updated_at}\n"
         f"- URL: {comment.url}\n\n"
         f"{comment.body}"
+    )
+
+
+def _format_pull_request_review(review: GitHubPullRequestReview) -> str:
+    """Pull Request review 用の prompt section を返す。"""
+    return (
+        f"## PR review submission {review.id}\n\n"
+        f"- 作成者: {review.author.login}\n"
+        f"- 作成日時: {review.created_at}\n"
+        f"- URL: {review.url}\n\n"
+        f"{review.body}"
     )

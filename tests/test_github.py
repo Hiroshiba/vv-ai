@@ -184,6 +184,68 @@ def test_get_repository_blob_rejects_unknown_encoding() -> None:
         client.get_repository_blob("org/repo", "abc123")
 
 
+def test_list_pull_request_reviews_builds_models() -> None:
+    """list_pull_request_reviews は review submission 一覧を model 化する。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            [
+                [
+                    {
+                        "id": 10,
+                        "body": "レビュー本文",
+                        "user": {"login": "reviewer"},
+                        "submitted_at": "2026-05-17T16:00:00Z",
+                        "html_url": "https://github.com/org/repo/pull/1#pullrequestreview-10",
+                    },
+                    {
+                        "id": 11,
+                        "body": None,
+                        "user": {"login": "reviewer"},
+                        "submitted_at": "2026-05-17T16:01:00Z",
+                        "html_url": "https://github.com/org/repo/pull/1#pullrequestreview-11",
+                    },
+                ]
+            ]
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    reviews = client.list_pull_request_reviews("org/repo", 1)
+
+    assert captured_args == [
+        "gh",
+        "api",
+        "--paginate",
+        "--slurp",
+        "repos/org/repo/pulls/1/reviews",
+    ]
+    assert reviews[0].id == 10
+    assert reviews[0].body == "レビュー本文"
+    assert reviews[0].author.login == "reviewer"
+    assert reviews[0].created_at == "2026-05-17T16:00:00Z"
+    assert reviews[0].url == "https://github.com/org/repo/pull/1#pullrequestreview-10"
+    assert reviews[1].body == ""
+
+
+def test_list_pull_request_reviews_rejects_invalid_payload() -> None:
+    """list_pull_request_reviews は不正な JSON 形式を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps({}), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match="Pull Request review"):
+        client.list_pull_request_reviews("org/repo", 1)
+
+
+def test_list_pull_request_reviews_rejects_invalid_page() -> None:
+    """list_pull_request_reviews は不正なページ形式を拒否する。"""
+    client = GitHubClient(lambda args: json.dumps([{}]), lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match="ページ"):
+        client.list_pull_request_reviews("org/repo", 1)
+
+
 def test_list_issue_labeled_events_builds_models() -> None:
     """list_issue_labeled_events は labeled event を model に変換する。"""
     captured_args: list[str] = []
