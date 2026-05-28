@@ -782,6 +782,65 @@ class TestImplementResponseComment:
             "org/repo", 2, "レビュー指摘対応完了"
         )
 
+    def test_address_pr_applies_review_thread_actions(self, tmp_path: Path) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(
+                command="address",
+                dry_run=False,
+                target=ResolvedTarget(
+                    backend="github",
+                    kind="pr",
+                    canonical_id="org/repo#2",
+                    repository_full_name="org/repo",
+                    number=2,
+                ),
+            )
+        )
+        actions_dir = tmp_path / "hiho_temp" / "actions"
+        actions_dir.mkdir(parents=True)
+        (actions_dir / "01.md").write_text(
+            "THREAD_ID: PRRT_1\nACTION: comment\nBODY:\n返信しました",
+            encoding="utf-8",
+        )
+        (actions_dir / "02.md").write_text(
+            "THREAD_ID: PRRT_2\nACTION: resolve\nBODY:\n",
+            encoding="utf-8",
+        )
+        result = _make_execution_result(
+            "success",
+            response_text=(
+                "COMMIT_MESSAGE: fix: address review\n"
+                "BODY:\n"
+                "レビュー指摘対応完了\n"
+                f"REVIEW_THREAD_ACTIONS_DIR: {actions_dir}"
+            ),
+        )
+        github_client = MagicMock()
+
+        with (
+            patch("vv_ai.commands.post_execution.commit_all_changes", return_value=True),
+            patch("vv_ai.commands.post_execution.push_branch"),
+        ):
+            _handle_pr_change_post_execution(
+                tmp_path,
+                ready,
+                result,
+                github_client,
+                "feature-branch",
+                _make_github_pr(number=2, is_cross_repository=False),
+                None,
+                {},
+            )
+
+        github_client.create_issue_comment.assert_called_once_with(
+            "org/repo", 2, "レビュー指摘対応完了"
+        )
+        github_client.add_pull_request_review_thread_reply.assert_called_once_with(
+            "PRRT_1",
+            "返信しました",
+        )
+        github_client.resolve_review_thread.assert_called_once_with("PRRT_2")
+
     def test_fork_patch_comment_includes_response_text(self) -> None:
         ready = _make_ready_execution(
             command=_make_command(

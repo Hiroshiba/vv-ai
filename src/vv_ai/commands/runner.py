@@ -101,6 +101,7 @@ def run_command(
     head_sha_before: str | None = None
     fork_base_ref: str | None = None
     worktree_ref: str | None = None
+    unresolved_review_thread_count: int | None = None
     execution_result: ExecutionResult | None = None
     created_pr: GitHubPullRequest | None = None
     finalize_status: ExecutionStatus = "failure"
@@ -206,6 +207,13 @@ def run_command(
                     target.repository_full_name,
                     target.number,
                 )
+                if command.command == "address":
+                    unresolved_review_thread_count = (
+                        github_client.count_unresolved_review_threads(
+                            target.repository_full_name,
+                            target.number,
+                        )
+                    )
                 implement_branch_name = pr_info.head_ref_name
                 if pr_info.is_cross_repository:
                     checkout_fork_pr(
@@ -232,6 +240,7 @@ def run_command(
                 target_context.prompt_block,
                 implement_branch_name,
                 worktree_ref,
+                unresolved_review_thread_count,
             )
             execution_result = execute_provider(
                 repo_root,

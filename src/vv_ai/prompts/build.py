@@ -106,7 +106,7 @@ _IMPLEMENT_PR_TASK_DESCRIPTION: str = (
     "2行目: BODY:\n"
     "3行目以降: Markdown の PR コメント本文\n"
     "\n"
-    "コミットメッセージと本文以外の余計な出力は含めないでください。"
+    "コミットメッセージ、本文、必要な操作ディレクトリ行以外の余計な出力は含めないでください。"
 )
 
 _ADDRESS_TASK_DESCRIPTION: str = (
@@ -121,6 +121,16 @@ _ADDRESS_TASK_DESCRIPTION: str = (
     "1行目: COMMIT_MESSAGE: <コミットメッセージ>\n"
     "2行目: BODY:\n"
     "3行目以降: Markdown の PR コメント本文\n"
+    "必要なら review thread 操作用のディレクトリを hiho_temp 配下に作成してください。\n"
+    "操作ディレクトリは後続処理で読み取るため削除しないでください。\n"
+    "操作ファイルは `.md` のみ対象です。各ファイルは以下の形式で記述してください:\n"
+    "THREAD_ID: <review thread ID>\n"
+    "ACTION: resolve または comment\n"
+    "BODY:\n"
+    "返信本文\n"
+    "ACTION: comment の BODY は空にしないでください。\n"
+    "操作ディレクトリを作成した場合、最終非空行に以下の形式で出力してください:\n"
+    "REVIEW_THREAD_ACTIONS_DIR: <操作ディレクトリの絶対パス>\n"
     "\n"
     "コミットメッセージと本文以外の余計な出力は含めないでください。"
 )
@@ -131,6 +141,7 @@ def build_provider_prompt(
     target_context_block: str | None,
     implement_branch_name: str | None,
     worktree_ref: str | None,
+    unresolved_review_thread_count: int | None,
 ) -> str:
     """コンテキストと指示を組み合わせたプロンプト文字列を返す。"""
     sections: list[str] = []
@@ -147,6 +158,9 @@ def build_provider_prompt(
     command_name = ready_execution.command.command
     target = ready_execution.command.target
     if command_name == "address":
+        if unresolved_review_thread_count is None:
+            raise RuntimeError("address プロンプトには未解決レビュースレッド件数が必要です")
+        sections.append(f"未解決レビュースレッド件数: {unresolved_review_thread_count}件")
         sections.append(_ADDRESS_TASK_DESCRIPTION)
     elif command_name == "implement" and target is not None and target.kind == "pr":
         sections.append(_IMPLEMENT_PR_TASK_DESCRIPTION)
