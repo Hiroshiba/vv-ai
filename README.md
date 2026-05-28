@@ -22,7 +22,8 @@ flowchart TD
   pr[["PR"]]
   review(["レビュー"])
   review_result{"レビュー結果"}
-  address(["レビュー指摘対応"])
+  address(["指摘対応"])
+  address_result{"対応結果"}
   merged[["マージ済み PR"]]
 
   issue -- "confirm" --> intent
@@ -38,13 +39,15 @@ flowchart TD
   implement_issue --> pr
   pr -- "review" --> review
   review --> review_result
-  review_result -- "OK" --> merged
-  review_result -- "修正あり" --> address
-  address --> pr
+  review_result -- "マージ可能" --> merged
+  review_result -- "address" --> address
+  address --> address_result
+  address_result -- "review" --> review
+  address_result -- "マージ可能" --> merged
 
   class issue,subissues,pr,merged githubObject
   class intent,requirements,arch,detail,breakdown,implement_issue,review,address aiStep
-  class next_decision,review_result decision
+  class next_decision,review_result,address_result decision
 
   classDef githubObject fill:#e8f3ff,stroke:#2f6f9f,stroke-width:2px
   classDef aiStep fill:#edf7ed,stroke:#3c7a3c,stroke-width:2px
@@ -54,6 +57,7 @@ flowchart TD
 - 青: GitHub 上の対象や成果物
 - 緑: vv-ai が実行するコマンド
 - 黄: 判断
+- 人間の判断が必要な場合は自動進行を停止します。
 
 ## セットアップ
 
