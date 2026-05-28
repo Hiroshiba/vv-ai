@@ -118,6 +118,23 @@ def _make_requirements_ready_execution() -> ReadyExecution:
     )
 
 
+def _make_review_ready_execution() -> ReadyExecution:
+    """review 用の ReadyExecution を生成する。"""
+    return ReadyExecution(
+        command=ResolvedCommand(
+            event_name="issue_comment",
+            command="review",
+            has_target=True,
+            dry_run=False,
+            repository_full_name="org/repo",
+            target=_make_target("pr", 1),
+        ),
+        config=VVAIConfig(allowed_users=["Hiroshiba"]),
+        resolved_provider=_make_provider(),
+        workflow_id="test-run-1",
+    )
+
+
 def _make_next_ready_execution() -> ReadyExecution:
     """next 用の ReadyExecution を生成する。"""
     return ReadyExecution(
@@ -139,6 +156,7 @@ def _make_next_ready_execution() -> ReadyExecution:
 def _build_prompt(
     kind: Literal["issue", "pr"],
     command: Literal["address", "implement"],
+    auto_continuation_requested: bool = False,
 ) -> str:
     """対象種別ごとの provider prompt を生成する。"""
     return build_provider_prompt(
@@ -146,6 +164,7 @@ def _build_prompt(
         target_context_block="テストコンテキスト",
         implement_branch_name="feature-branch",
         worktree_ref=None,
+        auto_continuation_requested=auto_continuation_requested,
     )
 
 
@@ -156,6 +175,7 @@ def _build_breakdown_prompt() -> str:
         target_context_block="テストコンテキスト",
         implement_branch_name=None,
         worktree_ref=None,
+        auto_continuation_requested=False,
     )
 
 
@@ -166,16 +186,18 @@ def _build_issue_command_prompt() -> str:
         target_context_block=None,
         implement_branch_name=None,
         worktree_ref=None,
+        auto_continuation_requested=False,
     )
 
 
-def _build_requirements_prompt() -> str:
+def _build_requirements_prompt(auto_continuation_requested: bool = False) -> str:
     """requirements の provider prompt を生成する。"""
     return build_provider_prompt(
         ready_execution=_make_requirements_ready_execution(),
         target_context_block="テストコンテキスト",
         implement_branch_name=None,
         worktree_ref=None,
+        auto_continuation_requested=auto_continuation_requested,
     )
 
 
@@ -184,6 +206,17 @@ def _build_next_decision_prompt() -> str:
     return build_next_decision_prompt(
         ready_execution=_make_next_ready_execution(),
         target_context_block="テストコンテキスト",
+    )
+
+
+def _build_review_prompt(auto_continuation_requested: bool) -> str:
+    """review の provider prompt を生成する。"""
+    return build_provider_prompt(
+        ready_execution=_make_review_ready_execution(),
+        target_context_block="テストコンテキスト",
+        implement_branch_name=None,
+        worktree_ref=None,
+        auto_continuation_requested=auto_continuation_requested,
     )
 
 
@@ -321,6 +354,17 @@ class TestIssueCommandPrompt:
 
         assert "define-requirements スキルに従って要件定義を行ってください。" in prompt
 
+    def test_normal_prompt_does_not_request_auto_status(self) -> None:
+        prompt = _build_requirements_prompt()
+
+        assert "AUTO_STATUS" not in prompt
+
+    def test_auto_prompt_requests_auto_status(self) -> None:
+        prompt = _build_requirements_prompt(auto_continuation_requested=True)
+
+        assert "AUTO_STATUS: continue" in prompt
+        assert "AUTO_STATUS: escalate" in prompt
+
 
 class TestAddressPrompt:
     """address の provider prompt を検証する。"""
@@ -353,6 +397,22 @@ class TestAddressPrompt:
         prompt = _build_prompt("pr", "address")
 
         assert "追加実装してください。" not in prompt
+
+    def test_auto_prompt_requests_address_next_command(self) -> None:
+        prompt = _build_prompt("pr", "address", auto_continuation_requested=True)
+
+        assert "COMMAND: review" in prompt
+        assert "COMMAND: merge" in prompt
+
+
+class TestReviewPrompt:
+    """review の provider prompt を検証する。"""
+
+    def test_auto_prompt_requests_review_next_command(self) -> None:
+        prompt = _build_review_prompt(auto_continuation_requested=True)
+
+        assert "COMMAND: address" in prompt
+        assert "COMMAND: merge" in prompt
 
 
 class TestBreakdownPrompt:

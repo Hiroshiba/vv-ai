@@ -15,6 +15,7 @@ from vv_ai.auto_continuation import (
     load_auto_continuation_plan,
     save_auto_continuation_plan,
 )
+from vv_ai.auto_control import AutoContinuationAction
 from vv_ai.backends.github.models import (
     GitHubActor,
     GitHubArtifact,
@@ -25,16 +26,25 @@ from vv_ai.backends.github.models import (
 from vv_ai.inputs.resolve import ResolvedTarget
 
 
-def _make_plan(target_type: str) -> AutoContinuationPlan:
+def _make_plan(
+    target_type: str,
+    action: AutoContinuationAction,
+    next_label_name: str | None,
+) -> AutoContinuationPlan:
     return AutoContinuationPlan(
         repository_full_name="org/repo",
         target_type=target_type,
         target_number=1,
         source_label_name="vv-ai:confirm",
-        next_label_name=NEXT_LABEL_NAME,
+        action=action,
+        next_label_name=next_label_name,
         session_artifact_target_prefix="vv-ai-session__org-repo-1__",
         workflow_id="test-workflow",
     )
+
+
+def _make_continue_plan(target_type: str) -> AutoContinuationPlan:
+    return _make_plan(target_type, "continue", NEXT_LABEL_NAME)
 
 
 def _make_issue(state: str) -> GitHubIssue:
@@ -155,7 +165,7 @@ class FakeGitHubClient:
 
 
 def test_save_and_load_auto_continuation_plan(tmp_path: Path) -> None:
-    plan = _make_plan("issue")
+    plan = _make_continue_plan("issue")
 
     save_auto_continuation_plan(tmp_path, "test-workflow", plan)
     loaded = load_auto_continuation_plan(tmp_path, "test-workflow")
@@ -179,7 +189,7 @@ def test_apply_auto_continuation_plan_returns_no_plan(tmp_path: Path) -> None:
 
 
 def test_apply_auto_continuation_plan_continues(tmp_path: Path) -> None:
-    save_auto_continuation_plan(tmp_path, "test-workflow", _make_plan("issue"))
+    save_auto_continuation_plan(tmp_path, "test-workflow", _make_continue_plan("issue"))
     client = FakeGitHubClient(
         [AUTO_LABEL_NAME, "vv-ai:confirm"],
         _make_issue("OPEN"),
@@ -196,8 +206,49 @@ def test_apply_auto_continuation_plan_continues(tmp_path: Path) -> None:
     ]
 
 
+def test_apply_auto_continuation_plan_stops(tmp_path: Path) -> None:
+    save_auto_continuation_plan(
+        tmp_path,
+        "test-workflow",
+        _make_plan("issue", "stop", None),
+    )
+    client = FakeGitHubClient(
+        [AUTO_LABEL_NAME, "vv-ai:confirm"],
+        _make_issue("OPEN"),
+        [_make_labeled_event(AUTO_LABEL_NAME, "2026-05-27T00:00:00Z")],
+        [_make_artifact(1, "2026-05-27T00:01:00Z")],
+    )
+
+    result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
+
+    assert result.status == "stopped"
+    assert client.operations == [
+        ("remove", "vv-ai:confirm"),
+        ("remove", AUTO_LABEL_NAME),
+    ]
+
+
+def test_apply_auto_continuation_plan_waits_for_merge(tmp_path: Path) -> None:
+    save_auto_continuation_plan(
+        tmp_path,
+        "test-workflow",
+        _make_plan("pr", "merge_wait", None),
+    )
+    client = FakeGitHubClient(
+        [AUTO_LABEL_NAME, "vv-ai:confirm"],
+        _make_pr("OPEN"),
+        [_make_labeled_event(AUTO_LABEL_NAME, "2026-05-27T00:00:00Z")],
+        [_make_artifact(1, "2026-05-27T00:01:00Z")],
+    )
+
+    result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
+
+    assert result.status == "merge_waiting"
+    assert client.operations == [("remove", "vv-ai:confirm")]
+
+
 def test_apply_auto_continuation_plan_skips_without_auto_label(tmp_path: Path) -> None:
-    save_auto_continuation_plan(tmp_path, "test-workflow", _make_plan("issue"))
+    save_auto_continuation_plan(tmp_path, "test-workflow", _make_continue_plan("issue"))
     client = FakeGitHubClient(
         ["vv-ai:confirm"],
         _make_issue("OPEN"),
@@ -212,7 +263,7 @@ def test_apply_auto_continuation_plan_skips_without_auto_label(tmp_path: Path) -
 
 
 def test_apply_auto_continuation_plan_skips_closed_issue(tmp_path: Path) -> None:
-    save_auto_continuation_plan(tmp_path, "test-workflow", _make_plan("issue"))
+    save_auto_continuation_plan(tmp_path, "test-workflow", _make_continue_plan("issue"))
     client = FakeGitHubClient(
         [AUTO_LABEL_NAME, "vv-ai:confirm"],
         _make_issue("CLOSED"),
@@ -231,7 +282,7 @@ def test_apply_auto_continuation_plan_skips_closed_pr(
     tmp_path: Path,
     state: str,
 ) -> None:
-    save_auto_continuation_plan(tmp_path, "test-workflow", _make_plan("pr"))
+    save_auto_continuation_plan(tmp_path, "test-workflow", _make_continue_plan("pr"))
     client = FakeGitHubClient(
         [AUTO_LABEL_NAME, "vv-ai:confirm"],
         _make_pr(state),
@@ -248,7 +299,7 @@ def test_apply_auto_continuation_plan_skips_closed_pr(
 def test_apply_auto_continuation_plan_skips_removed_source_label(
     tmp_path: Path,
 ) -> None:
-    save_auto_continuation_plan(tmp_path, "test-workflow", _make_plan("issue"))
+    save_auto_continuation_plan(tmp_path, "test-workflow", _make_continue_plan("issue"))
     client = FakeGitHubClient(
         [],
         _make_issue("OPEN"),
@@ -263,7 +314,7 @@ def test_apply_auto_continuation_plan_skips_removed_source_label(
 
 
 def test_apply_auto_continuation_plan_removes_auto_at_limit(tmp_path: Path) -> None:
-    save_auto_continuation_plan(tmp_path, "test-workflow", _make_plan("issue"))
+    save_auto_continuation_plan(tmp_path, "test-workflow", _make_continue_plan("issue"))
     artifacts = [
         _make_artifact(index, "2026-05-27T00:01:00Z")
         for index in range(1, 11)
@@ -287,7 +338,7 @@ def test_apply_auto_continuation_plan_removes_auto_at_limit(tmp_path: Path) -> N
 def test_apply_auto_continuation_plan_requires_auto_label_event(
     tmp_path: Path,
 ) -> None:
-    save_auto_continuation_plan(tmp_path, "test-workflow", _make_plan("issue"))
+    save_auto_continuation_plan(tmp_path, "test-workflow", _make_continue_plan("issue"))
     client = FakeGitHubClient(
         [AUTO_LABEL_NAME, "vv-ai:confirm"],
         _make_issue("OPEN"),
