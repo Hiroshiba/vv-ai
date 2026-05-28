@@ -280,6 +280,11 @@ def _apply_review_thread_actions(
 
     for action in actions:
         if action.action == "resolve":
+            if action.body.strip() != "":
+                github_client.add_pull_request_review_thread_reply(
+                    action.thread_id,
+                    action.body,
+                )
             github_client.resolve_review_thread(action.thread_id)
         elif action.action == "comment":
             github_client.add_pull_request_review_thread_reply(
