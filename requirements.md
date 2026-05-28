@@ -290,6 +290,7 @@ provider_priority:
   - codex
   - claude
 merge_args:
+  - --auto
   - --squash
 ```
 
@@ -300,7 +301,7 @@ merge_args:
 | `allowed_users`     | コマンド実行を許可する GitHub ユーザー  |
 | `internal_bot_ids`  | ラベル起動を許可する GitHub App bot の user ID |
 | `provider_priority` | プロバイダの優先順                      |
-| `merge_args`        | `vv-ai:merge` で実行する `gh pr merge` の追加引数 |
+| `merge_args`        | `gh pr merge` に渡す追加引数 |
 
 ---
 
