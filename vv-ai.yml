@@ -3,3 +3,6 @@ allowed_users:
 provider_priority:
   - codex
   - claude
+merge_args:
+  - --auto
+  - --squash
