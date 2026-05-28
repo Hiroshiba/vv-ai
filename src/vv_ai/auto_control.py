@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from vv_ai.inputs.models import CommandName
+from vv_ai.inputs.models import CommandName, TargetType
 
-AutoContinuationAction = Literal["continue", "stop", "merge_wait"]
+AutoContinuationAction = Literal["continue", "stop", "merge_wait", "move"]
 
 _AUTO_STATUS_PREFIX = "AUTO_STATUS:"
 _COMMAND_PREFIX = "COMMAND:"
@@ -28,6 +28,9 @@ class AutoContinuationDecision(BaseModel):
 
     action: AutoContinuationAction
     next_label_name: str | None = None
+    destination_target_type: TargetType | None = None
+    destination_target_number: int | None = None
+    destination_label_names: list[str] = Field(default_factory=list)
 
 
 class AutoControlParseResult(BaseModel):

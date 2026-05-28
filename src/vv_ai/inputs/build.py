@@ -19,6 +19,7 @@ from vv_ai.inputs.models import (
     InputError,
     IssueCommentEvent,
     IssueLabeledEvent,
+    PullRequestEvent,
     PullRequestLabeledEvent,
     RawInput,
     SessionMode,
@@ -80,6 +81,10 @@ def build_raw_input_from_event_file(event_name: EventName, event_file: Path) -> 
                 IssueLabeledEvent.model_validate(payload)
             )
         if event_name == "pull_request":
+            if payload.get("action") == "closed":
+                return build_raw_input_from_pull_request_event(
+                    PullRequestEvent.model_validate(payload)
+                )
             return build_raw_input_from_pull_request_labeled_event(
                 PullRequestLabeledEvent.model_validate(payload)
             )
@@ -208,6 +213,23 @@ def build_raw_input_from_pull_request_labeled_event(
         actor_id=event.sender.id,
         trigger_label_name=event.label.name,
         trigger_event_created_at=event.pull_request.updated_at,
+    )
+
+
+def build_raw_input_from_pull_request_event(event: PullRequestEvent) -> RawInput:
+    """`pull_request` payload から provider なしの `RawInput` を構築する。"""
+    if event.action != "closed":
+        raise InputError("`pull_request` event は labeled または closed action である必要があります")
+    if event.pull_request.merged is None:
+        raise InputError("`pull_request.closed` payload に merged がありません")
+    return RawInput(
+        event_name="pull_request",
+        target_type="pr",
+        target_number=event.pull_request.number,
+        repository_full_name=event.repository.full_name,
+        actor=event.sender.login,
+        actor_id=event.sender.id,
+        pull_request_merged=event.pull_request.merged,
     )
 
 
@@ -360,6 +382,8 @@ def _resolve_event_name_for_event_file(
         return "issues"
     if _looks_like_pull_request_labeled_event(payload):
         return "pull_request"
+    if _looks_like_pull_request_closed_event(payload):
+        return "pull_request"
     raise InputError(
         "`--event-file` から event 種別を判定できませんでした。"
         " `--event issue_comment`、`--event workflow_dispatch`、"
@@ -419,6 +443,16 @@ def _looks_like_pull_request_labeled_event(payload: dict[str, Any]) -> bool:
         payload.get("action") == "labeled"
         and isinstance(payload.get("pull_request"), dict)
         and isinstance(payload.get("label"), dict)
+        and isinstance(payload.get("repository"), dict)
+        and isinstance(payload.get("sender"), dict)
+    )
+
+
+def _looks_like_pull_request_closed_event(payload: dict[str, Any]) -> bool:
+    """`pull_request` closed らしい payload かを判定する。"""
+    return (
+        payload.get("action") == "closed"
+        and isinstance(payload.get("pull_request"), dict)
         and isinstance(payload.get("repository"), dict)
         and isinstance(payload.get("sender"), dict)
     )

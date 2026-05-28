@@ -14,6 +14,8 @@ from vv_ai.auto_continuation import (
     apply_auto_continuation_plan,
     load_auto_continuation_plan,
     save_auto_continuation_plan,
+    find_first_incomplete_sub_issue,
+    continue_after_pull_request_closed,
 )
 from vv_ai.auto_control import AutoContinuationAction
 from vv_ai.backends.github.models import (
@@ -21,7 +23,9 @@ from vv_ai.backends.github.models import (
     GitHubArtifact,
     GitHubIssue,
     GitHubIssueLabeledEvent,
+    GitHubIssueReference,
     GitHubPullRequest,
+    GitHubPullRequestClosingState,
 )
 from vv_ai.inputs.resolve import ResolvedTarget
 
@@ -57,6 +61,19 @@ def _make_issue(state: str) -> GitHubIssue:
         state=state,
         author=GitHubActor(login="Hiroshiba"),
         url="https://github.com/org/repo/issues/1",
+    )
+
+
+def _make_issue_number(number: int, state: str) -> GitHubIssue:
+    return GitHubIssue(
+        id=number,
+        repository_full_name="org/repo",
+        number=number,
+        title=f"Issue {number}",
+        body="本文",
+        state=state,
+        author=GitHubActor(login="Hiroshiba"),
+        url=f"https://github.com/org/repo/issues/{number}",
     )
 
 
@@ -162,6 +179,106 @@ class FakeGitHubClient:
         assert repository_full_name == "org/repo"
         assert prefix == "vv-ai-session__org-repo-1__"
         return self.artifacts
+
+
+class CrossTargetFakeGitHubClient:
+    """対象またぎ自動継続テスト用の GitHub client。"""
+
+    def __init__(self) -> None:
+        self.labels: dict[int, list[str]] = {
+            1: [AUTO_LABEL_NAME, "vv-ai:breakdown"],
+        }
+        self.sub_issues: list[GitHubIssue] = []
+        self.merged_closing_pull_request_numbers: set[int] = set()
+        self.parent_numbers: dict[int, int | None] = {}
+        self.closing_state = GitHubPullRequestClosingState(
+            merged=True,
+            closing_issue_references=[],
+        )
+        self.operations: list[tuple[str, int, str]] = []
+
+    def list_issue_label_names(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> list[str]:
+        assert repository_full_name == "org/repo"
+        return self.labels.get(number, [])
+
+    def get_target_details(self, target: ResolvedTarget) -> GitHubIssue:
+        assert target.repository_full_name == "org/repo"
+        assert target.number is not None
+        return _make_issue_number(target.number, "OPEN")
+
+    def remove_issue_label(
+        self,
+        repository_full_name: str,
+        number: int,
+        label_name: str,
+    ) -> None:
+        assert repository_full_name == "org/repo"
+        self.operations.append(("remove", number, label_name))
+
+    def add_issue_label(
+        self,
+        repository_full_name: str,
+        number: int,
+        label_name: str,
+    ) -> None:
+        assert repository_full_name == "org/repo"
+        self.operations.append(("add", number, label_name))
+
+    def list_issue_labeled_events(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> list[GitHubIssueLabeledEvent]:
+        assert repository_full_name == "org/repo"
+        assert number == 1
+        return [_make_labeled_event(AUTO_LABEL_NAME, "2026-05-27T00:00:00Z")]
+
+    def list_repository_artifacts_by_prefix(
+        self,
+        repository_full_name: str,
+        prefix: str,
+    ) -> list[GitHubArtifact]:
+        assert repository_full_name == "org/repo"
+        assert prefix == "vv-ai-session__org-repo-1__"
+        return [_make_artifact(1, "2026-05-27T00:01:00Z")]
+
+    def list_sub_issues(
+        self,
+        repository_full_name: str,
+        parent_number: int,
+    ) -> list[GitHubIssue]:
+        assert repository_full_name == "org/repo"
+        assert parent_number == 1
+        return self.sub_issues
+
+    def has_merged_closing_pull_request(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> bool:
+        assert repository_full_name == "org/repo"
+        return number in self.merged_closing_pull_request_numbers
+
+    def get_pull_request_closing_state(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> GitHubPullRequestClosingState:
+        assert repository_full_name == "org/repo"
+        assert number == 10
+        return self.closing_state
+
+    def get_issue_parent_number(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> int | None:
+        assert repository_full_name == "org/repo"
+        return self.parent_numbers[number]
 
 
 def test_save_and_load_auto_continuation_plan(tmp_path: Path) -> None:
@@ -348,3 +465,86 @@ def test_apply_auto_continuation_plan_requires_auto_label_event(
 
     with pytest.raises(AutoContinuationError, match="自動継続 label"):
         apply_auto_continuation_plan(tmp_path, "test-workflow", client)
+
+
+def test_apply_auto_continuation_plan_moves_to_sub_issue(tmp_path: Path) -> None:
+    plan = _make_plan("issue", "move", None).model_copy(
+        update={
+            "source_label_name": "vv-ai:breakdown",
+            "destination_target_type": "issue",
+            "destination_target_number": 2,
+            "destination_label_names": [AUTO_LABEL_NAME, NEXT_LABEL_NAME],
+        }
+    )
+    save_auto_continuation_plan(tmp_path, "test-workflow", plan)
+    client = CrossTargetFakeGitHubClient()
+
+    result = apply_auto_continuation_plan(tmp_path, "test-workflow", client)
+
+    assert result.status == "moved"
+    assert client.operations == [
+        ("remove", 1, "vv-ai:breakdown"),
+        ("remove", 1, AUTO_LABEL_NAME),
+        ("add", 2, AUTO_LABEL_NAME),
+        ("add", 2, NEXT_LABEL_NAME),
+    ]
+
+
+def test_find_first_incomplete_sub_issue_skips_completed_pr() -> None:
+    client = CrossTargetFakeGitHubClient()
+    client.sub_issues = [
+        _make_issue_number(2, "OPEN"),
+        _make_issue_number(3, "OPEN"),
+    ]
+    client.merged_closing_pull_request_numbers = {2}
+
+    sub_issue = find_first_incomplete_sub_issue(client, "org/repo", 1)
+
+    assert sub_issue is not None
+    assert sub_issue.number == 3
+
+
+def test_find_first_incomplete_sub_issue_ignores_cross_reference_only() -> None:
+    client = CrossTargetFakeGitHubClient()
+    client.sub_issues = [_make_issue_number(2, "OPEN")]
+
+    sub_issue = find_first_incomplete_sub_issue(client, "org/repo", 1)
+
+    assert sub_issue is not None
+    assert sub_issue.number == 2
+
+
+def test_continue_after_pull_request_closed_moves_to_next_sub_issue() -> None:
+    client = CrossTargetFakeGitHubClient()
+    client.closing_state = GitHubPullRequestClosingState(
+        merged=True,
+        closing_issue_references=[
+            GitHubIssueReference(repository_full_name="org/repo", number=2)
+        ],
+    )
+    client.parent_numbers = {2: 1}
+    client.sub_issues = [
+        _make_issue_number(2, "CLOSED"),
+        _make_issue_number(3, "OPEN"),
+    ]
+
+    result = continue_after_pull_request_closed(client, "org/repo", 10, True)
+
+    assert result.status == "moved"
+    assert client.operations == [
+        ("add", 3, AUTO_LABEL_NAME),
+        ("add", 3, NEXT_LABEL_NAME),
+    ]
+
+
+def test_continue_after_pull_request_closed_stops_without_closing_issue(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    client = CrossTargetFakeGitHubClient()
+
+    result = continue_after_pull_request_closed(client, "org/repo", 10, True)
+
+    captured = capsys.readouterr()
+    assert result.status == "stopped"
+    assert "close 対象 Issue がない" in captured.err
+    assert client.operations == []

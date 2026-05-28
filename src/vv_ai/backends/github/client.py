@@ -15,6 +15,7 @@ from vv_ai.backends.github.models import (
     GitHubIssueLabeledEvent,
     GitHubIssueTimelineEvent,
     GitHubPullRequest,
+    GitHubPullRequestClosingState,
     GitHubPullRequestSyncState,
     GitHubReaction,
     GitHubReactionContent,
@@ -47,9 +48,12 @@ from vv_ai.backends.github.payload import (
     _build_issue_parent_number,
     _build_issue_timeline_event_list,
     _build_pull_request,
+    _build_pull_request_closing_state,
     _build_pull_request_from_rest,
     _build_pull_request_sync_state,
+    _build_sub_issue_list,
     _count_unresolved_review_threads,
+    _has_merged_closing_pull_request,
     _list_review_thread_ids,
     _build_reaction,
     _build_tree,
@@ -147,6 +151,69 @@ query($owner: String!, $repo: String!, $number: Int!) {
             raise GitHubClientError("サブ Issue 一覧取得結果の JSON 形式が不正です")
         return len(payload) > 0
 
+    def list_sub_issues(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> list[GitHubIssue]:
+        """Issue の順序付きサブ Issue 一覧を返す。"""
+        payload = self._run_json(
+            [
+                "api",
+                "--paginate",
+                "--slurp",
+                (
+                    f"repos/{_require_repository_full_name(repository_full_name)}"
+                    f"/issues/{_require_positive_id(number, 'number')}/sub_issues"
+                    "?per_page=100"
+                ),
+            ]
+        )
+        if not isinstance(payload, list):
+            raise GitHubClientError("サブ Issue 一覧取得結果の JSON 形式が不正です")
+        return _build_sub_issue_list(repository_full_name, payload)
+
+    def has_merged_closing_pull_request(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> bool:
+        """Issue を close する merged Pull Request があるか返す。"""
+        owner, repo = _require_repository_full_name(repository_full_name).split("/")
+        query = """
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      closedByPullRequestsReferences(first: 100) {
+        nodes {
+          merged
+        }
+        pageInfo {
+          hasNextPage
+        }
+      }
+    }
+  }
+}
+""".strip()
+        payload = self._run_json(
+            [
+                "api",
+                "graphql",
+                "-f",
+                f"query={query}",
+                "-f",
+                f"owner={owner}",
+                "-f",
+                f"repo={repo}",
+                "-F",
+                f"number={_require_positive_id(number, 'number')}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("Issue close PR 取得結果の JSON 形式が不正です")
+        return _has_merged_closing_pull_request(payload)
+
     def get_pull_request(
         self,
         repository_full_name: str,
@@ -171,6 +238,51 @@ query($owner: String!, $repo: String!, $number: Int!) {
         if not isinstance(raw_pr, dict):
             raise GitHubClientError("Pull Request 取得結果の JSON 形式が不正です")
         return _build_pull_request(repository_full_name, raw_pr)
+
+    def get_pull_request_closing_state(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> GitHubPullRequestClosingState:
+        """Pull Request の merge 状態と close 対象 Issue を返す。"""
+        owner, repo = _require_repository_full_name(repository_full_name).split("/")
+        query = """
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      merged
+      closingIssuesReferences(first: 100) {
+        nodes {
+          number
+          repository {
+            nameWithOwner
+          }
+        }
+        pageInfo {
+          hasNextPage
+        }
+      }
+    }
+  }
+}
+""".strip()
+        payload = self._run_json(
+            [
+                "api",
+                "graphql",
+                "-f",
+                f"query={query}",
+                "-f",
+                f"owner={owner}",
+                "-f",
+                f"repo={repo}",
+                "-F",
+                f"number={_require_positive_id(number, 'number')}",
+            ]
+        )
+        if not isinstance(payload, dict):
+            raise GitHubClientError("Pull Request close 対象取得結果の JSON 形式が不正です")
+        return _build_pull_request_closing_state(payload)
 
     def get_pull_request_sync_state(
         self,

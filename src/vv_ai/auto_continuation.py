@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from vv_ai.artifacts.session import build_session_artifact_target_prefix
 from vv_ai.auto_control import AutoContinuationAction, AutoContinuationDecision
 from vv_ai.backends.github.client import GitHubClient
 from vv_ai.backends.github.models import (
     GitHubArtifact,
+    GitHubIssue,
     GitHubIssueLabeledEvent,
     GitHubTargetDetails,
 )
@@ -33,6 +35,8 @@ ApplyStatus = Literal[
     "continued",
     "stopped",
     "merge_waiting",
+    "moved",
+    "no_destination",
 ]
 
 
@@ -52,6 +56,9 @@ class AutoContinuationPlan(BaseModel):
     source_label_name: str
     action: AutoContinuationAction
     next_label_name: str | None
+    destination_target_type: TargetType | None = None
+    destination_target_number: int | None = None
+    destination_label_names: list[str] = Field(default_factory=list)
     session_artifact_target_prefix: str
     workflow_id: str
 
@@ -90,11 +97,121 @@ def build_auto_continuation_plan(
         source_label_name=command.trigger_label_name,
         action=decision.action,
         next_label_name=decision.next_label_name,
+        destination_target_type=decision.destination_target_type,
+        destination_target_number=decision.destination_target_number,
+        destination_label_names=decision.destination_label_names,
         session_artifact_target_prefix=build_session_artifact_target_prefix(
             session.key.target_key
         ),
         workflow_id=ready_execution.workflow_id,
     )
+
+
+def build_move_to_sub_issue_decision(
+    github_client: GitHubClient,
+    repository_full_name: str,
+    parent_number: int,
+) -> AutoContinuationDecision:
+    """親 Issue 配下の次の未完了サブ Issue へ移す判断を返す。"""
+    sub_issue = find_first_incomplete_sub_issue(
+        github_client,
+        repository_full_name,
+        parent_number,
+    )
+    if sub_issue is None:
+        return AutoContinuationDecision(action="stop")
+    return AutoContinuationDecision(
+        action="move",
+        destination_target_type="issue",
+        destination_target_number=sub_issue.number,
+        destination_label_names=[AUTO_LABEL_NAME, NEXT_LABEL_NAME],
+    )
+
+
+def build_move_to_pull_request_decision(
+    pr_number: int,
+) -> AutoContinuationDecision:
+    """作成された PR へ自動進行を移す判断を返す。"""
+    if pr_number <= 0:
+        raise AutoContinuationError("PR 番号は 1 以上である必要があります")
+    return AutoContinuationDecision(
+        action="move",
+        destination_target_type="pr",
+        destination_target_number=pr_number,
+        destination_label_names=[AUTO_LABEL_NAME, NEXT_LABEL_NAME],
+    )
+
+
+def find_first_incomplete_sub_issue(
+    github_client: GitHubClient,
+    repository_full_name: str,
+    parent_number: int,
+) -> GitHubIssue | None:
+    """親 Issue 配下で最初の未完了サブ Issue を返す。"""
+    for sub_issue in github_client.list_sub_issues(repository_full_name, parent_number):
+        if sub_issue.state != "OPEN":
+            continue
+        if github_client.has_merged_closing_pull_request(
+            sub_issue.repository_full_name,
+            sub_issue.number,
+        ):
+            continue
+        return sub_issue
+    return None
+
+
+def continue_after_pull_request_closed(
+    github_client: GitHubClient,
+    repository_full_name: str,
+    pr_number: int,
+    event_merged: bool,
+) -> AutoContinuationApplyResult:
+    """PR merge 後に親 Issue 配下の次サブ Issue へ自動進行を移す。"""
+    if not event_merged:
+        print("PR は merge されていないため自動進行を停止します")
+        return AutoContinuationApplyResult(status="stopped")
+
+    closing_state = github_client.get_pull_request_closing_state(
+        repository_full_name,
+        pr_number,
+    )
+    if not closing_state.merged:
+        print("PR は merge 済みではないため自動進行を停止します")
+        return AutoContinuationApplyResult(status="stopped")
+
+    closing_references = closing_state.closing_issue_references
+    if len(closing_references) == 0:
+        print("PR の close 対象 Issue がないため自動進行を停止します", file=sys.stderr)
+        return AutoContinuationApplyResult(status="stopped")
+    if len(closing_references) > 1:
+        print("PR の close 対象 Issue が複数あるため自動進行を停止します", file=sys.stderr)
+        return AutoContinuationApplyResult(status="stopped")
+
+    origin_issue = closing_references[0]
+    parent_number = github_client.get_issue_parent_number(
+        origin_issue.repository_full_name,
+        origin_issue.number,
+    )
+    if parent_number is None:
+        print("close 対象 Issue に親 Issue がないため自動進行を停止します")
+        return AutoContinuationApplyResult(status="stopped")
+
+    sub_issue = find_first_incomplete_sub_issue(
+        github_client,
+        origin_issue.repository_full_name,
+        parent_number,
+    )
+    if sub_issue is None:
+        print("次の未完了サブ Issue がないため自動進行を停止します")
+        return AutoContinuationApplyResult(status="no_destination")
+
+    _add_labels(
+        github_client,
+        sub_issue.repository_full_name,
+        sub_issue.number,
+        [AUTO_LABEL_NAME, NEXT_LABEL_NAME],
+    )
+    return AutoContinuationApplyResult(status="moved")
 
 
 def save_auto_continuation_plan(
@@ -184,6 +301,31 @@ def apply_auto_continuation_plan(
     if plan.action == "merge_wait":
         return AutoContinuationApplyResult(status="merge_waiting")
 
+    if plan.action == "move":
+        if (
+            plan.destination_target_type is None
+            or plan.destination_target_number is None
+            or len(plan.destination_label_names) == 0
+        ):
+            github_client.remove_issue_label(
+                plan.repository_full_name,
+                plan.target_number,
+                AUTO_LABEL_NAME,
+            )
+            return AutoContinuationApplyResult(status="no_destination")
+        github_client.remove_issue_label(
+            plan.repository_full_name,
+            plan.target_number,
+            AUTO_LABEL_NAME,
+        )
+        _add_labels(
+            github_client,
+            plan.repository_full_name,
+            plan.destination_target_number,
+            plan.destination_label_names,
+        )
+        return AutoContinuationApplyResult(status="moved")
+
     if plan.action != "continue":
         raise AutoContinuationError(f"未対応の自動継続 action です: {plan.action}")
     if plan.next_label_name is None:
@@ -195,6 +337,16 @@ def apply_auto_continuation_plan(
         plan.next_label_name,
     )
     return AutoContinuationApplyResult(status="continued")
+
+
+def _add_labels(
+    github_client: GitHubClient,
+    repository_full_name: str,
+    number: int,
+    label_names: list[str],
+) -> None:
+    for label_name in label_names:
+        github_client.add_issue_label(repository_full_name, number, label_name)
 
 
 def _build_plan_path(repo_root: Path, workflow_id: str) -> Path:

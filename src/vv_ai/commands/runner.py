@@ -9,6 +9,10 @@ from pathlib import Path
 
 from vv_ai.backends.github.client import GitHubClient, build_github_client
 from vv_ai.backends.github.models import GitHubPullRequest
+from vv_ai.auto_continuation import (
+    build_move_to_pull_request_decision,
+    build_move_to_sub_issue_decision,
+)
 from vv_ai.auto_control import (
     AutoContinuationDecision,
     parse_auto_control_response,
@@ -283,6 +287,15 @@ def run_command(
                 fork_base_ref,
                 env,
             )
+            auto_continuation_decision = _build_cross_target_auto_decision(
+                auto_continuation_requested,
+                command,
+                target,
+                execution_result,
+                github_client,
+                created_pr,
+                auto_continuation_decision,
+            )
             assert execution_result is not None
             finalize_status = execution_result.status
         except BaseException as exc:
@@ -450,6 +463,38 @@ def _build_auto_decision(
     result = parse_auto_control_response(command_name, execution_result.response_text)
     execution_result.response_text = result.response_text
     return result.decision
+
+
+def _build_cross_target_auto_decision(
+    auto_continuation_requested: bool,
+    command: ResolvedCommand,
+    target: ResolvedTarget | None,
+    execution_result: ExecutionResult,
+    github_client: GitHubClient | None,
+    created_pr: GitHubPullRequest | None,
+    current_decision: AutoContinuationDecision | None,
+) -> AutoContinuationDecision | None:
+    if not auto_continuation_requested:
+        return current_decision
+    if execution_result.status != "success":
+        return current_decision
+    if target is None or target.backend != "github":
+        return current_decision
+    if target.repository_full_name is None or target.number is None:
+        return current_decision
+    if command.command == "breakdown":
+        if github_client is None:
+            raise RuntimeError("`breakdown` の自動進行に GitHub client がありません")
+        return build_move_to_sub_issue_decision(
+            github_client,
+            target.repository_full_name,
+            target.number,
+        )
+    if command.command == "implement" and target.kind == "issue":
+        if created_pr is None:
+            return AutoContinuationDecision(action="stop")
+        return build_move_to_pull_request_decision(created_pr.number)
+    return current_decision
 
 
 def _should_defer_label_cleanup(

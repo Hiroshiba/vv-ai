@@ -11,6 +11,7 @@ from vv_ai.inputs.build import (
     build_raw_input_from_cli,
     build_raw_input_from_issue_comment_event,
     build_raw_input_from_issue_labeled_event,
+    build_raw_input_from_pull_request_event,
     build_raw_input_from_pull_request_labeled_event,
     build_raw_input_from_workflow_dispatch_event,
     parse_comment_invocation,
@@ -22,6 +23,7 @@ from vv_ai.inputs.models import (
     InputError,
     IssueCommentEvent,
     IssueLabeledEvent,
+    PullRequestEvent,
     PullRequestLabeledEvent,
     RawInput,
     WorkflowDispatchEvent,
@@ -461,6 +463,43 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
             )
 
 
+class TestBuildRawInputFromPullRequestEvent:
+    def test_pull_request_closed(self) -> None:
+        event = PullRequestEvent.model_validate({
+            "action": "closed",
+            "pull_request": {
+                "number": 43,
+                "merged": True,
+                "labels": [{"name": "vv-ai:auto"}],
+            },
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba", "id": 1},
+        })
+
+        raw = build_raw_input_from_pull_request_event(event)
+
+        assert raw.event_name == "pull_request"
+        assert raw.command is None
+        assert raw.control_label_name is None
+        assert raw.target_type == "pr"
+        assert raw.target_number == 43
+        assert raw.repository_full_name == "org/repo"
+        assert raw.actor == "Hiroshiba"
+        assert raw.actor_id == 1
+        assert raw.pull_request_merged is True
+
+    def test_pull_request_closed_requires_merged(self) -> None:
+        event = PullRequestEvent.model_validate({
+            "action": "closed",
+            "pull_request": {"number": 43},
+            "repository": {"full_name": "org/repo"},
+            "sender": {"login": "Hiroshiba", "id": 1},
+        })
+
+        with pytest.raises(InputError, match="merged"):
+            build_raw_input_from_pull_request_event(event)
+
+
 class TestBuildRawInputFromEventFile:
     def test_auto_detect_issue_labeled_event(self, tmp_path: Path) -> None:
         event_file = tmp_path / "event.json"
@@ -497,6 +536,25 @@ class TestBuildRawInputFromEventFile:
 
         assert raw.event_name == "pull_request"
         assert raw.command == "review"
+
+    def test_auto_detect_pull_request_closed_event(self, tmp_path: Path) -> None:
+        event_file = tmp_path / "event.json"
+        event_file.write_text(
+            json.dumps({
+                "action": "closed",
+                "pull_request": {"number": 43, "merged": True},
+                "repository": {"full_name": "org/repo"},
+                "sender": {"login": "Hiroshiba", "id": 1},
+            }),
+            encoding="utf-8",
+        )
+
+        raw = build_raw_input_from_cli(CLIInput(event_file=event_file))
+
+        assert raw.event_name == "pull_request"
+        assert raw.target_type == "pr"
+        assert raw.target_number == 43
+        assert raw.pull_request_merged is True
 
 
 class TestBuildRawInputFromWorkflowDispatchEvent:

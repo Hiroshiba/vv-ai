@@ -585,6 +585,106 @@ def test_has_issue_sub_issues_uses_sub_issues_endpoint() -> None:
     ]
 
 
+def test_list_sub_issues_returns_ordered_issues() -> None:
+    """list_sub_issues は GitHub の順序を維持して Issue を返す。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return json.dumps(
+            [
+                [
+                    {
+                        "id": 2,
+                        "number": 2,
+                        "title": "task 2",
+                        "body": "本文",
+                        "state": "open",
+                        "user": {"login": "Hiroshiba"},
+                        "html_url": "https://github.com/org/repo/issues/2",
+                    },
+                    {
+                        "id": 3,
+                        "number": 3,
+                        "title": "task 3",
+                        "body": "本文",
+                        "state": "closed",
+                        "user": {"login": "Hiroshiba"},
+                        "html_url": "https://github.com/org/repo/issues/3",
+                    },
+                ],
+            ]
+        )
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    issues = client.list_sub_issues("org/repo", 1)
+
+    assert [issue.number for issue in issues] == [2, 3]
+    assert issues[0].state == "OPEN"
+    assert issues[1].state == "CLOSED"
+    assert captured_args == [
+        "gh",
+        "api",
+        "--paginate",
+        "--slurp",
+        "repos/org/repo/issues/1/sub_issues?per_page=100",
+    ]
+
+
+def test_has_merged_closing_pull_request_returns_true() -> None:
+    """has_merged_closing_pull_request は merged close PR の有無を返す。"""
+    client = GitHubClient(
+        lambda args: json.dumps({
+            "data": {
+                "repository": {
+                    "issue": {
+                        "closedByPullRequestsReferences": {
+                            "nodes": [{"merged": False}, {"merged": True}],
+                            "pageInfo": {"hasNextPage": False},
+                        },
+                    },
+                },
+            },
+        }),
+        lambda args: b"",
+    )
+
+    assert client.has_merged_closing_pull_request("org/repo", 2) is True
+
+
+def test_get_pull_request_closing_state_builds_model() -> None:
+    """get_pull_request_closing_state は close 対象 Issue を返す。"""
+    client = GitHubClient(
+        lambda args: json.dumps({
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "merged": True,
+                        "closingIssuesReferences": {
+                            "nodes": [
+                                {
+                                    "number": 2,
+                                    "repository": {"nameWithOwner": "org/repo"},
+                                },
+                            ],
+                            "pageInfo": {"hasNextPage": False},
+                        },
+                    },
+                },
+            },
+        }),
+        lambda args: b"",
+    )
+
+    state = client.get_pull_request_closing_state("org/repo", 10)
+
+    assert state.merged is True
+    assert len(state.closing_issue_references) == 1
+    assert state.closing_issue_references[0].repository_full_name == "org/repo"
+    assert state.closing_issue_references[0].number == 2
+
+
 def test_remove_sub_issue_uses_delete_method() -> None:
     """remove_sub_issue は sub_issue_id を指定して DELETE する。"""
     captured_args: list[Sequence[str]] = []

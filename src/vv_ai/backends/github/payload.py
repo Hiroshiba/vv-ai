@@ -14,8 +14,10 @@ from vv_ai.backends.github.models import (
     GitHubClientError,
     GitHubComment,
     GitHubIssue,
+    GitHubIssueReference,
     GitHubIssueTimelineEvent,
     GitHubPullRequest,
+    GitHubPullRequestClosingState,
     GitHubPullRequestSyncState,
     GitHubReaction,
     GitHubStatusCheckSummary,
@@ -149,6 +151,21 @@ def _build_issue_from_rest(
     return _validate_model(GitHubIssue, payload, "Issue")
 
 
+def _build_sub_issue_list(
+    repository_full_name: str,
+    raw_pages: list[object],
+) -> list[GitHubIssue]:
+    """REST sub issue ページ群を Issue model 配列へ変換する。"""
+    issues: list[GitHubIssue] = []
+    for raw_page in raw_pages:
+        if not isinstance(raw_page, list):
+            raise GitHubClientError("サブ Issue 一覧取得結果のページ形式が不正です")
+        for raw_issue in raw_page:
+            issue = _require_mapping(raw_issue, "sub issue")
+            issues.append(_build_issue_from_rest(repository_full_name, issue))
+    return issues
+
+
 def _build_pull_request(
     repository_full_name: str,
     raw_pr: dict[str, object],
@@ -171,6 +188,88 @@ def _build_pull_request(
         "maintainer_can_modify": raw_pr.get("maintainerCanModify"),
     }
     return _validate_model(GitHubPullRequest, payload, "Pull Request")
+
+
+def _build_pull_request_closing_state(
+    payload: dict[str, object],
+) -> GitHubPullRequestClosingState:
+    """GraphQL Pull Request JSON から close 対象状態を構築する。"""
+    data = _require_mapping(payload.get("data"), "data")
+    repository = _require_mapping(data.get("repository"), "repository")
+    pull_request = _require_mapping(repository.get("pullRequest"), "pullRequest")
+    merged = pull_request.get("merged")
+    if not isinstance(merged, bool):
+        raise GitHubClientError("pullRequest.merged が不正です")
+    return GitHubPullRequestClosingState(
+        merged=merged,
+        closing_issue_references=_build_pull_request_closing_issue_references(
+            pull_request.get("closingIssuesReferences")
+        ),
+    )
+
+
+def _has_merged_closing_pull_request(payload: dict[str, object]) -> bool:
+    """GraphQL Issue JSON から merged close PR の有無を返す。"""
+    data = _require_mapping(payload.get("data"), "data")
+    repository = _require_mapping(data.get("repository"), "repository")
+    issue = _require_mapping(repository.get("issue"), "issue")
+    references = _require_mapping(
+        issue.get("closedByPullRequestsReferences"),
+        "closedByPullRequestsReferences",
+    )
+    page_info = _require_mapping(references.get("pageInfo"), "pageInfo")
+    has_next_page = page_info.get("hasNextPage")
+    if not isinstance(has_next_page, bool):
+        raise GitHubClientError(
+            "closedByPullRequestsReferences.pageInfo.hasNextPage が不正です"
+        )
+    if has_next_page:
+        raise GitHubClientError("closedByPullRequestsReferences が 100 件を超えています")
+    raw_nodes = references.get("nodes")
+    if not isinstance(raw_nodes, list):
+        raise GitHubClientError("closedByPullRequestsReferences.nodes の JSON 形式が不正です")
+    for raw_node in raw_nodes:
+        node = _require_mapping(raw_node, "closedByPullRequestsReferences.nodes")
+        merged = node.get("merged")
+        if not isinstance(merged, bool):
+            raise GitHubClientError("closedByPullRequestsReferences.nodes.merged が不正です")
+        if merged:
+            return True
+    return False
+
+
+def _build_pull_request_closing_issue_references(
+    raw_references: object,
+) -> list[GitHubIssueReference]:
+    """closingIssuesReferences JSON を Issue 参照配列へ変換する。"""
+    references = _require_mapping(
+        raw_references,
+        "closingIssuesReferences",
+    )
+    page_info = _require_mapping(references.get("pageInfo"), "pageInfo")
+    has_next_page = page_info.get("hasNextPage")
+    if not isinstance(has_next_page, bool):
+        raise GitHubClientError("closingIssuesReferences.pageInfo.hasNextPage が不正です")
+    if has_next_page:
+        raise GitHubClientError("closingIssuesReferences が 100 件を超えています")
+    raw_nodes = references.get("nodes")
+    if not isinstance(raw_nodes, list):
+        raise GitHubClientError("closingIssuesReferences.nodes の JSON 形式が不正です")
+    return [_build_issue_reference(raw_node) for raw_node in raw_nodes]
+
+
+def _build_issue_reference(raw_issue: object) -> GitHubIssueReference:
+    """GraphQL Issue node を Issue 参照へ変換する。"""
+    issue = _require_mapping(raw_issue, "issue reference")
+    repository = _require_mapping(issue.get("repository"), "issue.repository")
+    return _validate_model(
+        GitHubIssueReference,
+        {
+            "repository_full_name": repository.get("nameWithOwner"),
+            "number": issue.get("number"),
+        },
+        "Issue 参照",
+    )
 
 
 def _build_pull_request_sync_state(

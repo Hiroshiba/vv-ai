@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from vv_ai.config import ProviderName
 
@@ -158,6 +158,8 @@ class PullRequestTarget(BaseModel):
 
     number: int
     updated_at: str | None = None
+    merged: bool | None = None
+    labels: list[GitHubLabel] = Field(default_factory=list)
 
 
 class PullRequestLabeledEvent(BaseModel):
@@ -168,6 +170,17 @@ class PullRequestLabeledEvent(BaseModel):
     action: str | None = None
     pull_request: PullRequestTarget
     label: GitHubLabel
+    repository: GitHubRepository
+    sender: GitHubUser
+
+
+class PullRequestEvent(BaseModel):
+    """`pull_request` event payload の必要最小限。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    action: str | None = None
+    pull_request: PullRequestTarget
     repository: GitHubRepository
     sender: GitHubUser
 
@@ -197,6 +210,7 @@ class RawInput(BaseModel):
     comment_body: str | None = None
     trigger_label_name: str | None = None
     trigger_event_created_at: str | None = None
+    pull_request_merged: bool | None = None
 
 
 class CommentInvocation(BaseModel):
