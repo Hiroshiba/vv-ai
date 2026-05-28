@@ -12,7 +12,7 @@ from vv_ai.inputs.build import (
     build_raw_input_from_issue_comment_event,
     build_raw_input_from_issue_labeled_event,
     build_raw_input_from_pull_request_event,
-    build_raw_input_from_pull_request_labeled_event,
+    build_raw_input_from_pull_request_label_event,
     build_raw_input_from_workflow_dispatch_event,
     parse_comment_invocation,
     parse_control_label_invocation,
@@ -24,7 +24,7 @@ from vv_ai.inputs.models import (
     IssueCommentEvent,
     IssueLabeledEvent,
     PullRequestEvent,
-    PullRequestLabeledEvent,
+    PullRequestLabelEvent,
     RawInput,
     WorkflowDispatchEvent,
 )
@@ -200,6 +200,10 @@ class TestParseLabelInvocation:
         with pytest.raises(InputError):
             parse_label_invocation("vv-ai:auto")
 
+    def test_label_merge_is_not_command(self) -> None:
+        with pytest.raises(InputError):
+            parse_label_invocation("vv-ai:merge")
+
     @pytest.mark.parametrize(
         "label_name",
         ["bug", "vv-ai", "vv-ai:", "vv-ai:unknown"],
@@ -212,6 +216,9 @@ class TestParseLabelInvocation:
 class TestParseControlLabelInvocation:
     def test_label_auto(self) -> None:
         assert parse_control_label_invocation("vv-ai:auto") == "vv-ai:auto"
+
+    def test_label_merge(self) -> None:
+        assert parse_control_label_invocation("vv-ai:merge") == "vv-ai:merge"
 
     @pytest.mark.parametrize(
         "label_name",
@@ -345,6 +352,20 @@ class TestBuildRawInputFromIssueLabeledEvent:
 
         assert raw.command is None
         assert raw.control_label_name == "vv-ai:auto"
+        assert raw.label_action == "labeled"
+        assert raw.target_type == "issue"
+        assert raw.target_number == 42
+        assert raw.actor == "Hiroshiba"
+        assert raw.actor_id == 1
+
+    def test_issue_labeled_merge(self) -> None:
+        raw = build_raw_input_from_issue_labeled_event(
+            self._make_event("vv-ai:merge")
+        )
+
+        assert raw.command is None
+        assert raw.control_label_name == "vv-ai:merge"
+        assert raw.label_action == "labeled"
         assert raw.target_type == "issue"
         assert raw.target_number == 42
         assert raw.actor == "Hiroshiba"
@@ -392,10 +413,14 @@ class TestBuildRawInputFromIssueLabeledEvent:
             )
 
 
-class TestBuildRawInputFromPullRequestLabeledEvent:
-    def _make_event(self, label_name: str) -> PullRequestLabeledEvent:
-        return PullRequestLabeledEvent.model_validate({
-            "action": "labeled",
+class TestBuildRawInputFromPullRequestLabelEvent:
+    def _make_event(
+        self,
+        label_name: str,
+        action: str,
+    ) -> PullRequestLabelEvent:
+        return PullRequestLabelEvent.model_validate({
+            "action": action,
             "pull_request": {"number": 43, "updated_at": "2026-05-18T04:00:00Z"},
             "label": {"name": label_name},
             "repository": {"full_name": "org/repo"},
@@ -403,8 +428,8 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
         })
 
     def test_pull_request_labeled_review(self) -> None:
-        raw = build_raw_input_from_pull_request_labeled_event(
-            self._make_event("vv-ai:review")
+        raw = build_raw_input_from_pull_request_label_event(
+            self._make_event("vv-ai:review", "labeled")
         )
         assert raw.event_name == "pull_request"
         assert raw.command == "review"
@@ -418,20 +443,45 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
         assert raw.trigger_event_created_at == "2026-05-18T04:00:00Z"
 
     def test_pull_request_labeled_auto(self) -> None:
-        raw = build_raw_input_from_pull_request_labeled_event(
-            self._make_event("vv-ai:auto")
+        raw = build_raw_input_from_pull_request_label_event(
+            self._make_event("vv-ai:auto", "labeled")
         )
 
         assert raw.command is None
         assert raw.control_label_name == "vv-ai:auto"
+        assert raw.label_action == "labeled"
         assert raw.target_type == "pr"
         assert raw.target_number == 43
         assert raw.actor == "Hiroshiba"
         assert raw.actor_id == 1
 
+    def test_pull_request_labeled_merge(self) -> None:
+        raw = build_raw_input_from_pull_request_label_event(
+            self._make_event("vv-ai:merge", "labeled")
+        )
+
+        assert raw.command is None
+        assert raw.control_label_name == "vv-ai:merge"
+        assert raw.label_action == "labeled"
+        assert raw.target_type == "pr"
+        assert raw.target_number == 43
+        assert raw.actor == "Hiroshiba"
+        assert raw.actor_id == 1
+
+    def test_pull_request_unlabeled_merge(self) -> None:
+        raw = build_raw_input_from_pull_request_label_event(
+            self._make_event("vv-ai:merge", "unlabeled")
+        )
+
+        assert raw.command is None
+        assert raw.control_label_name == "vv-ai:merge"
+        assert raw.label_action == "unlabeled"
+        assert raw.target_type == "pr"
+        assert raw.target_number == 43
+
     def test_pull_request_labeled_address(self) -> None:
-        raw = build_raw_input_from_pull_request_labeled_event(
-            self._make_event("vv-ai:address")
+        raw = build_raw_input_from_pull_request_label_event(
+            self._make_event("vv-ai:address", "labeled")
         )
         assert raw.command == "address"
         assert raw.instruction is None
@@ -439,8 +489,8 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
         assert raw.trigger_label_name == "vv-ai:address"
 
     def test_pull_request_labeled_next_without_instruction(self) -> None:
-        raw = build_raw_input_from_pull_request_labeled_event(
-            self._make_event("vv-ai:next")
+        raw = build_raw_input_from_pull_request_label_event(
+            self._make_event("vv-ai:next", "labeled")
         )
         assert raw.command == "next"
         assert raw.instruction is None
@@ -448,8 +498,8 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
         assert raw.trigger_label_name == "vv-ai:next"
 
     def test_pull_request_labeled_sync_without_instruction(self) -> None:
-        raw = build_raw_input_from_pull_request_labeled_event(
-            self._make_event("vv-ai:sync")
+        raw = build_raw_input_from_pull_request_label_event(
+            self._make_event("vv-ai:sync", "labeled")
         )
         assert raw.command == "sync"
         assert raw.instruction is None
@@ -458,8 +508,20 @@ class TestBuildRawInputFromPullRequestLabeledEvent:
 
     def test_pull_request_labeled_rejects_breakdown(self) -> None:
         with pytest.raises(InputError):
-            build_raw_input_from_pull_request_labeled_event(
-                self._make_event("vv-ai:breakdown")
+            build_raw_input_from_pull_request_label_event(
+                self._make_event("vv-ai:breakdown", "labeled")
+            )
+
+    def test_pull_request_unlabeled_rejects_auto(self) -> None:
+        with pytest.raises(InputError):
+            build_raw_input_from_pull_request_label_event(
+                self._make_event("vv-ai:auto", "unlabeled")
+            )
+
+    def test_pull_request_unlabeled_rejects_command_label(self) -> None:
+        with pytest.raises(InputError):
+            build_raw_input_from_pull_request_label_event(
+                self._make_event("vv-ai:review", "unlabeled")
             )
 
 

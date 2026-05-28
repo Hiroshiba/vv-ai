@@ -30,6 +30,7 @@ def _make_control_label(**overrides: object) -> ResolvedControlLabel:
     defaults: dict[str, object] = {
         "event_name": "issues",
         "control_label_name": "vv-ai:auto",
+        "label_action": "labeled",
         "target_type": "issue",
         "target_number": 42,
         "has_target": True,

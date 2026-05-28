@@ -685,6 +685,61 @@ def test_get_pull_request_closing_state_builds_model() -> None:
     assert state.closing_issue_references[0].number == 2
 
 
+def test_merge_pull_request_uses_pr_merge_command() -> None:
+    """merge_pull_request は gh pr merge を実行する。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return ""
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    client.merge_pull_request("org/repo", 12, ["--auto", "--squash"])
+
+    assert captured_args == [
+        "gh",
+        "pr",
+        "merge",
+        "12",
+        "--repo",
+        "org/repo",
+        "--auto",
+        "--squash",
+    ]
+
+
+def test_disable_pull_request_auto_merge_uses_disable_auto() -> None:
+    """disable_pull_request_auto_merge は gh pr merge --disable-auto を実行する。"""
+    captured_args: list[str] = []
+
+    def fake_run(args: Sequence[str]) -> str:
+        captured_args.extend(args)
+        return ""
+
+    client = GitHubClient(fake_run, lambda args: b"")
+
+    client.disable_pull_request_auto_merge("org/repo", 12)
+
+    assert captured_args == [
+        "gh",
+        "pr",
+        "merge",
+        "12",
+        "--repo",
+        "org/repo",
+        "--disable-auto",
+    ]
+
+
+def test_merge_pull_request_rejects_invalid_number() -> None:
+    """merge_pull_request は不正な番号を拒否する。"""
+    client = GitHubClient(lambda args: "", lambda args: b"")
+
+    with pytest.raises(GitHubClientError, match="number"):
+        client.merge_pull_request("org/repo", 0, [])
+
+
 def test_remove_sub_issue_uses_delete_method() -> None:
     """remove_sub_issue は sub_issue_id を指定して DELETE する。"""
     captured_args: list[Sequence[str]] = []

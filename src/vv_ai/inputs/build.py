@@ -19,8 +19,9 @@ from vv_ai.inputs.models import (
     InputError,
     IssueCommentEvent,
     IssueLabeledEvent,
+    LabelAction,
     PullRequestEvent,
-    PullRequestLabeledEvent,
+    PullRequestLabelEvent,
     RawInput,
     SessionMode,
     TargetType,
@@ -85,8 +86,12 @@ def build_raw_input_from_event_file(event_name: EventName, event_file: Path) -> 
                 return build_raw_input_from_pull_request_event(
                     PullRequestEvent.model_validate(payload)
                 )
-            return build_raw_input_from_pull_request_labeled_event(
-                PullRequestLabeledEvent.model_validate(payload)
+            if payload.get("action") in {"labeled", "unlabeled"}:
+                return build_raw_input_from_pull_request_label_event(
+                    PullRequestLabelEvent.model_validate(payload)
+                )
+            raise InputError(
+                "`pull_request` event は labeled、unlabeled、closed action である必要があります"
             )
         if event_name == "local":
             raise InputError("`local` event は event-file では再現できません")
@@ -166,13 +171,21 @@ def build_raw_input_from_issue_labeled_event(event: IssueLabeledEvent) -> RawInp
             repository_full_name=event.repository.full_name,
             actor=event.sender.login,
             actor_id=event.sender.id,
+            label_action="labeled",
             trigger_label_name=event.label.name,
             trigger_event_created_at=event.issue.updated_at,
         )
     control_label_name = parse_control_label_invocation(event.label.name)
+    _ensure_control_label_action_allowed(
+        control_label_name,
+        "issues",
+        "issue",
+        "labeled",
+    )
     return RawInput(
         event_name="issues",
         control_label_name=control_label_name,
+        label_action="labeled",
         target_type="issue",
         target_number=event.issue.number,
         repository_full_name=event.repository.full_name,
@@ -183,13 +196,15 @@ def build_raw_input_from_issue_labeled_event(event: IssueLabeledEvent) -> RawInp
     )
 
 
-def build_raw_input_from_pull_request_labeled_event(
-    event: PullRequestLabeledEvent,
+def build_raw_input_from_pull_request_label_event(
+    event: PullRequestLabelEvent,
 ) -> RawInput:
-    """`pull_request` labeled payload から `RawInput` を構築する。"""
-    _ensure_labeled_action(event.action, "pull_request")
+    """`pull_request` label payload から `RawInput` を構築する。"""
+    label_action = _ensure_pull_request_label_action(event.action)
     command = _parse_label_invocation_or_none(event.label.name)
     if command is not None:
+        if label_action != "labeled":
+            raise InputError("`pull_request.unlabeled` では command label は使えません")
         _ensure_label_command_allowed(command, "pr")
         return RawInput(
             event_name="pull_request",
@@ -199,13 +214,21 @@ def build_raw_input_from_pull_request_labeled_event(
             repository_full_name=event.repository.full_name,
             actor=event.sender.login,
             actor_id=event.sender.id,
+            label_action=label_action,
             trigger_label_name=event.label.name,
             trigger_event_created_at=event.pull_request.updated_at,
         )
     control_label_name = parse_control_label_invocation(event.label.name)
+    _ensure_control_label_action_allowed(
+        control_label_name,
+        "pull_request",
+        "pr",
+        label_action,
+    )
     return RawInput(
         event_name="pull_request",
         control_label_name=control_label_name,
+        label_action=label_action,
         target_type="pr",
         target_number=event.pull_request.number,
         repository_full_name=event.repository.full_name,
@@ -219,7 +242,7 @@ def build_raw_input_from_pull_request_labeled_event(
 def build_raw_input_from_pull_request_event(event: PullRequestEvent) -> RawInput:
     """`pull_request` payload から provider なしの `RawInput` を構築する。"""
     if event.action != "closed":
-        raise InputError("`pull_request` event は labeled または closed action である必要があります")
+        raise InputError("`pull_request` event は closed action である必要があります")
     if event.pull_request.merged is None:
         raise InputError("`pull_request.closed` payload に merged がありません")
     return RawInput(
@@ -332,6 +355,42 @@ def _ensure_labeled_action(action: str | None, event_name: EventName) -> None:
         raise InputError(f"`{event_name}` event は labeled action である必要があります")
 
 
+def _ensure_pull_request_label_action(action: str | None) -> LabelAction:
+    """`pull_request` の label action を検証して返す。"""
+    if action == "labeled" or action == "unlabeled":
+        return action
+    raise InputError(
+        "`pull_request` event は labeled または unlabeled action である必要があります"
+    )
+
+
+def _ensure_control_label_action_allowed(
+    control_label_name: ControlLabelName,
+    event_name: EventName,
+    target_type: TargetType,
+    label_action: LabelAction,
+) -> None:
+    """制御ラベルの event と action の組み合わせを検証する。"""
+    if control_label_name == "vv-ai:auto" and label_action == "labeled":
+        return
+    if (
+        control_label_name == "vv-ai:merge"
+        and label_action == "labeled"
+        and event_name in {"issues", "pull_request"}
+    ):
+        return
+    if (
+        control_label_name == "vv-ai:merge"
+        and label_action == "unlabeled"
+        and event_name == "pull_request"
+        and target_type == "pr"
+    ):
+        return
+    raise InputError(
+        f"`{event_name}.{label_action}` では `{control_label_name}` は使えません"
+    )
+
+
 def _ensure_label_command_allowed(command: CommandName, target_type: TargetType) -> None:
     """target 種別で許可されないラベル command を拒否する。"""
     if target_type == "issue" and command in _ISSUE_LABEL_COMMANDS:
@@ -438,9 +497,9 @@ def _looks_like_issue_labeled_event(payload: dict[str, Any]) -> bool:
 
 
 def _looks_like_pull_request_labeled_event(payload: dict[str, Any]) -> bool:
-    """`pull_request` labeled らしい payload かを判定する。"""
+    """`pull_request` label らしい payload かを判定する。"""
     return (
-        payload.get("action") == "labeled"
+        payload.get("action") in {"labeled", "unlabeled"}
         and isinstance(payload.get("pull_request"), dict)
         and isinstance(payload.get("label"), dict)
         and isinstance(payload.get("repository"), dict)

@@ -1083,8 +1083,17 @@ class TestLabelEvent:
         label_name: str,
     ) -> Path:
         """pull_request labeled event payload を JSON ファイルとして書き出す。"""
+        return self._write_pull_request_label_event(tmp_path, label_name, "labeled")
+
+    def _write_pull_request_label_event(
+        self,
+        tmp_path: Path,
+        label_name: str,
+        action: str,
+    ) -> Path:
+        """pull_request label event payload を JSON ファイルとして書き出す。"""
         payload = {
-            "action": "labeled",
+            "action": action,
             "pull_request": {"number": 1, "updated_at": "2026-05-08T00:00:00Z"},
             "label": {"name": label_name},
             "repository": {"full_name": "org/repo"},
@@ -1154,6 +1163,74 @@ class TestLabelEvent:
         assert plan["source_label_name"] == "vv-ai:confirm"
         assert plan["action"] == "continue"
         assert plan["next_label_name"] == "vv-ai:requirements"
+
+    def test_pull_request_merge_label_runs_merge_control(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_pull_request_labeled_event(tmp_path, "vv-ai:merge")
+        argv = ["--event", "pull_request", "--event-file", str(event_path)]
+        mock_gh = MagicMock()
+
+        with (
+            patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
+            patch("vv_ai.cli.build_github_client", return_value=mock_gh),
+            patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}),
+        ):
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        mock_gh.merge_pull_request.assert_called_once_with("org/repo", 1, [])
+        mock_gh.disable_pull_request_auto_merge.assert_not_called()
+
+    def test_pull_request_merge_unlabel_runs_disable_auto(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_pull_request_label_event(
+            tmp_path,
+            "vv-ai:merge",
+            "unlabeled",
+        )
+        argv = ["--event", "pull_request", "--event-file", str(event_path)]
+        mock_gh = MagicMock()
+
+        with (
+            patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
+            patch("vv_ai.cli.build_github_client", return_value=mock_gh),
+            patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}),
+        ):
+            exit_code = main(argv)
+
+        assert exit_code == 0
+        mock_gh.merge_pull_request.assert_not_called()
+        mock_gh.disable_pull_request_auto_merge.assert_called_once_with("org/repo", 1)
+
+    def test_auto_control_label_succeeds(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:auto")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+
+        with patch("vv_ai.cli.find_repo_root", return_value=tmp_path):
+            exit_code = main(argv)
+
+        assert exit_code == 0
+
+    def test_issue_merge_label_fails(self, tmp_path: Path) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:merge")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        mock_gh = MagicMock()
+
+        with (
+            patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
+            patch("vv_ai.cli.build_github_client", return_value=mock_gh),
+            patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}),
+        ):
+            exit_code = main(argv)
+
+        assert exit_code == 1
+        mock_gh.merge_pull_request.assert_not_called()
+        mock_gh.disable_pull_request_auto_merge.assert_not_called()
 
     def test_issue_next_label_removes_trigger_label(self, tmp_path: Path) -> None:
         _write_config(tmp_path)

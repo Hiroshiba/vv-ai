@@ -87,6 +87,8 @@ provider_priority:
   - codex
   - claude
 pull_request_target_branch: master
+merge_args:
+  - --squash
 ```
 
 | 項目 | 必須 | 説明 |
@@ -95,6 +97,7 @@ pull_request_target_branch: master
 | `internal_bot_ids` | 任意 | ラベル起動を許可する GitHub App bot の user ID 一覧 |
 | `provider_priority` | 任意 | プロバイダの優先順。デフォルトは `[codex, claude]` |
 | `pull_request_target_branch` | 任意 | PR の向き先ブランチ。未指定時はリポジトリのデフォルトブランチ |
+| `merge_args` | 任意 | `vv-ai:merge` で実行する `gh pr merge` の追加引数 |
 
 ### Secrets
 
@@ -169,6 +172,8 @@ Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動
 実行後は、起動元の `vv-ai:<command>` ラベルを対象 Issue または PR から外します。
 
 <!-- `vv-ai:auto` 単体でコマンドを実行しない挙動は自動進行の基盤段階の仮実装です。最終段階で、自動進行中の対象へ次の実行用ラベルを付ける制御を書き入れます。 -->
+
+`vv-ai:auto` と `vv-ai:merge` はコマンドではなく制御ラベルです。`vv-ai:merge` は PR の merge 操作を許可するために使います。
 
 ラベル起動に使う GitHub ラベルはツールで作成できます。既存のラベルは色と説明を更新します。
 

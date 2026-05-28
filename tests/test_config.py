@@ -45,3 +45,49 @@ class TestVVAIConfig:
                 allowed_users=["Hiroshiba"],
                 pull_request_target_branch=" ",
             )
+
+    def test_merge_args_default(self) -> None:
+        config = VVAIConfig(allowed_users=["Hiroshiba"])
+
+        assert config.merge_args == []
+
+    def test_merge_args_allows_auto_and_squash(self) -> None:
+        config = VVAIConfig(
+            allowed_users=["Hiroshiba"],
+            merge_args=["--auto", "--squash"],
+        )
+
+        assert config.merge_args == ["--auto", "--squash"]
+
+    def test_merge_args_allows_subject_value(self) -> None:
+        config = VVAIConfig(
+            allowed_users=["Hiroshiba"],
+            merge_args=["--subject", "件名"],
+        )
+
+        assert config.merge_args == ["--subject", "件名"]
+
+    def test_merge_args_allows_subject_equal_value(self) -> None:
+        config = VVAIConfig(
+            allowed_users=["Hiroshiba"],
+            merge_args=["--subject=件名"],
+        )
+
+        assert config.merge_args == ["--subject=件名"]
+
+    @pytest.mark.parametrize(
+        "merge_args",
+        [
+            ["--repo", "org/repo"],
+            ["-R", "org/repo"],
+            ["--disable-auto"],
+            ["--body-file", "file"],
+            ["-F", "file"],
+            ["1"],
+            ["--subject"],
+            ["--unknown"],
+        ],
+    )
+    def test_merge_args_rejects_invalid_args(self, merge_args: list[str]) -> None:
+        with pytest.raises(ValidationError):
+            VVAIConfig(allowed_users=["Hiroshiba"], merge_args=merge_args)

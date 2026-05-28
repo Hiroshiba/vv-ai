@@ -36,6 +36,7 @@ from vv_ai.backends.github.client import build_github_client
 from vv_ai.backends.github.models import GitHubClientError, GitHubPullRequest
 from vv_ai.inputs.build import build_raw_input_from_cli
 from vv_ai.inputs.models import CLIInput, InputError
+from vv_ai.merge_control import MergeControlError, run_merge_control
 from vv_ai.artifacts.metrics import (
     MetricsBehavior,
     MetricsUsage,
@@ -215,8 +216,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if isinstance(preflight_result, SilentSkip):
         return _handle_silent_skip(preflight_result)
     if isinstance(preflight_result, ReadyControlExecution):
-        print(_format_ready_control_message(preflight_result))
-        return 0
+        return _run_ready_control_execution(preflight_result)
     if isinstance(preflight_result, ReadyPullRequestClosed):
         return _run_pull_request_closed_auto_continuation(preflight_result)
 
@@ -244,6 +244,26 @@ def _run_pull_request_closed_auto_continuation(
         return 1
     print(f"自動継続結果: {result.status}")
     return 0
+
+
+def _run_ready_control_execution(ready: ReadyControlExecution) -> int:
+    """制御ラベル処理を実行する。"""
+    if ready.control.control_label_name == "vv-ai:auto":
+        print(_format_ready_control_message(ready))
+        return 0
+    if ready.control.control_label_name == "vv-ai:merge":
+        try:
+            result = run_merge_control(
+                build_github_client(),
+                ready.control,
+                ready.config,
+            )
+        except (MergeControlError, GitHubClientError) as exc:
+            print(f"merge 制御エラー: {exc}", file=sys.stderr)
+            return 1
+        print(f"merge 制御結果: {result.status}")
+        return 0
+    raise AssertionError(f"未対応の制御ラベルです: {ready.control.control_label_name}")
 
 
 def _run_verify_subcommand(verify_argv: Sequence[str]) -> int:
