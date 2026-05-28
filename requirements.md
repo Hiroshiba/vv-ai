@@ -167,7 +167,7 @@ push 成功後または push 不要時、wrapper は整合性確認 AI の出力
 
 ### ワークフロー構成
 
-- **1 本の workflow** に `issue_comment`、`issues.labeled`、`pull_request.labeled`、`pull_request.unlabeled`、`workflow_dispatch` を同居
+- **1 本の workflow** に `issue_comment`、`issues.labeled`、`pull_request.labeled`、`pull_request.unlabeled`、`pull_request.closed`、`workflow_dispatch` を同居
 - 同一 Issue/PR 番号の実行は **直列化（キュー）**
   - GitHub Actions の `concurrency` を使用
   - `cancel-in-progress: false`（前の実行が終わるまで待つ）
