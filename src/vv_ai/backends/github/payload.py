@@ -335,6 +335,17 @@ def _count_unresolved_review_threads(raw_pages: list[object]) -> int:
     return count
 
 
+def _list_review_thread_ids(raw_pages: list[object]) -> set[str]:
+    """GraphQL reviewThreads JSON から thread ID 一覧を返す。"""
+    thread_ids: set[str] = set()
+    for raw_page in raw_pages:
+        raw_nodes = _extract_review_thread_nodes(raw_page)
+        for raw_thread in raw_nodes:
+            thread = _require_mapping(raw_thread, "reviewThreads.nodes")
+            thread_ids.add(_require_string(thread.get("id"), "reviewThreads.nodes.id"))
+    return thread_ids
+
+
 def _validate_add_pull_request_review_thread_reply(
     payload: dict[str, object],
 ) -> None:

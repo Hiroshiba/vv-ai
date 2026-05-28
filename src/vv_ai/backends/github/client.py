@@ -50,6 +50,7 @@ from vv_ai.backends.github.payload import (
     _build_pull_request_from_rest,
     _build_pull_request_sync_state,
     _count_unresolved_review_threads,
+    _list_review_thread_ids,
     _build_reaction,
     _build_tree,
     _decode_blob,
@@ -235,6 +236,50 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
         if not isinstance(payload, list):
             raise GitHubClientError("review thread 取得結果の JSON 形式が不正です")
         return _count_unresolved_review_threads(payload)
+
+    def list_pull_request_review_thread_ids(
+        self,
+        repository_full_name: str,
+        number: int,
+    ) -> set[str]:
+        """Pull Request の review thread ID 一覧を返す。"""
+        owner, repo = _require_repository_full_name(repository_full_name).split("/")
+        query = """
+query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $endCursor) {
+        nodes {
+          id
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+}
+""".strip()
+        payload = self._run_json(
+            [
+                "api",
+                "graphql",
+                "--paginate",
+                "--slurp",
+                "-f",
+                f"query={query}",
+                "-f",
+                f"owner={owner}",
+                "-f",
+                f"repo={repo}",
+                "-F",
+                f"number={_require_positive_id(number, 'number')}",
+            ]
+        )
+        if not isinstance(payload, list):
+            raise GitHubClientError("review thread 取得結果の JSON 形式が不正です")
+        return _list_review_thread_ids(payload)
 
     def add_pull_request_review_thread_reply(
         self,

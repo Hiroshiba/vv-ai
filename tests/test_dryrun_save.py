@@ -816,6 +816,10 @@ class TestImplementResponseComment:
             ),
         )
         github_client = MagicMock()
+        github_client.list_pull_request_review_thread_ids.return_value = {
+            "PRRT_1",
+            "PRRT_2",
+        }
 
         with (
             patch("vv_ai.commands.post_execution.commit_all_changes", return_value=True),
@@ -835,11 +839,79 @@ class TestImplementResponseComment:
         github_client.create_issue_comment.assert_called_once_with(
             "org/repo", 2, "レビュー指摘対応完了"
         )
+        github_client.list_pull_request_review_thread_ids.assert_called_once_with(
+            "org/repo",
+            2,
+        )
         github_client.add_pull_request_review_thread_reply.assert_called_once_with(
             "PRRT_1",
             "返信しました",
         )
         github_client.resolve_review_thread.assert_called_once_with("PRRT_2")
+
+    def test_address_pr_rejects_review_thread_action_for_other_pr(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ready = _make_ready_execution(
+            command=_make_command(
+                command="address",
+                dry_run=False,
+                target=ResolvedTarget(
+                    backend="github",
+                    kind="pr",
+                    canonical_id="org/repo#2",
+                    repository_full_name="org/repo",
+                    number=2,
+                ),
+            )
+        )
+        actions_dir = tmp_path / "hiho_temp" / "actions"
+        actions_dir.mkdir(parents=True)
+        (actions_dir / "01.md").write_text(
+            "THREAD_ID: PRRT_OTHER\nACTION: resolve\nBODY:\n",
+            encoding="utf-8",
+        )
+        result = _make_execution_result(
+            "success",
+            response_text=(
+                "COMMIT_MESSAGE: fix: address review\n"
+                "BODY:\n"
+                "レビュー指摘対応完了\n"
+                f"REVIEW_THREAD_ACTIONS_DIR: {actions_dir}"
+            ),
+        )
+        github_client = MagicMock()
+        github_client.list_pull_request_review_thread_ids.return_value = {"PRRT_1"}
+
+        with (
+            patch(
+                "vv_ai.commands.post_execution.commit_all_changes",
+                return_value=True,
+            ) as mock_commit,
+            patch("vv_ai.commands.post_execution.push_branch") as mock_push,
+            pytest.raises(RuntimeError, match="対象 PR 外"),
+        ):
+            _handle_pr_change_post_execution(
+                tmp_path,
+                ready,
+                result,
+                github_client,
+                "feature-branch",
+                _make_github_pr(number=2, is_cross_repository=False),
+                None,
+                {},
+            )
+
+        github_client.list_pull_request_review_thread_ids.assert_called_once_with(
+            "org/repo",
+            2,
+        )
+        mock_commit.assert_not_called()
+        mock_push.assert_not_called()
+        github_client.create_issue_comment.assert_not_called()
+        github_client.add_pull_request_review_thread_reply.assert_not_called()
+        github_client.resolve_review_thread.assert_not_called()
 
     def test_fork_patch_comment_includes_response_text(self) -> None:
         ready = _make_ready_execution(
