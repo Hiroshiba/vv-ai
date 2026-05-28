@@ -8,7 +8,11 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from vv_ai.cli import _run_ready_execution
-from vv_ai.commands.runner import CommandRunResult
+from vv_ai.commands.runner import (
+    CommandCleanupError,
+    CommandPostExecutionError,
+    CommandRunResult,
+)
 from vv_ai.commands.post_execution import (
     _handle_breakdown_post_execution,
     _handle_implement_issue_post_execution,
@@ -1445,6 +1449,81 @@ class TestFinallySaveGuarantee:
 
         saved_result: ExecutionResult = mock_save.call_args[0][3]
         assert saved_result.status == "failure"
+
+    @patch("vv_ai.cli.save_execution_artifacts")
+    @patch("vv_ai.cli.run_command")
+    def test_post_execution_failure_preserves_provider_result(
+        self,
+        mock_run_command: MagicMock,
+        mock_save: MagicMock,
+    ) -> None:
+        provider_result = _make_execution_result(
+            "success",
+            response_text="AI 応答",
+        ).model_copy(
+            update={
+                "state_ref": SessionStateRef(provider_session_id="provider-session-id"),
+                "provider_session_path": Path("/tmp/provider-session"),
+            }
+        )
+        mock_run_command.side_effect = CommandPostExecutionError(
+            "後処理に失敗しました: RuntimeError: push 失敗",
+            provider_result,
+            None,
+            None,
+        )
+        mock_save.return_value = _make_saved_artifacts()
+        ready = _make_ready_execution()
+
+        exit_code = _run_ready_execution(
+            Path("/dummy"), ready, {}, preflight_duration_seconds=0.1
+        )
+
+        saved_result: ExecutionResult = mock_save.call_args[0][3]
+        assert exit_code == 1
+        assert saved_result.status == "failure"
+        assert saved_result.state_ref.provider_session_id == "provider-session-id"
+        assert saved_result.provider_session_path == Path("/tmp/provider-session")
+        assert saved_result.response_text == "AI 応答"
+        assert "push 失敗" in saved_result.report_sections.validation
+        assert "provider session は未保存である" not in saved_result.report_sections.notes
+
+    @patch("vv_ai.cli.save_execution_artifacts")
+    @patch("vv_ai.cli.run_command")
+    def test_cleanup_failure_preserves_provider_result(
+        self,
+        mock_run_command: MagicMock,
+        mock_save: MagicMock,
+    ) -> None:
+        provider_result = _make_execution_result(
+            "success",
+            response_text="AI 応答",
+        ).model_copy(
+            update={
+                "state_ref": SessionStateRef(provider_session_id="provider-session-id"),
+                "provider_session_path": Path("/tmp/provider-session"),
+            }
+        )
+        mock_run_command.side_effect = CommandCleanupError(
+            "ラベル削除に失敗しました: RuntimeError: label 削除失敗",
+            provider_result,
+            None,
+            None,
+        )
+        mock_save.return_value = _make_saved_artifacts()
+        ready = _make_ready_execution()
+
+        exit_code = _run_ready_execution(
+            Path("/dummy"), ready, {}, preflight_duration_seconds=0.1
+        )
+
+        saved_result: ExecutionResult = mock_save.call_args[0][3]
+        assert exit_code == 1
+        assert saved_result.status == "failure"
+        assert saved_result.state_ref.provider_session_id == "provider-session-id"
+        assert saved_result.provider_session_path == Path("/tmp/provider-session")
+        assert saved_result.response_text == "AI 応答"
+        assert "label 削除失敗" in saved_result.report_sections.validation
 
     @patch("vv_ai.cli.save_execution_artifacts")
     @patch("vv_ai.cli.run_command")

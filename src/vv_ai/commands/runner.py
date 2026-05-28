@@ -50,16 +50,24 @@ _PR_CHANGE_COMMANDS = frozenset({"implement", "address"})
 _AUTO_LABEL_NAME = "vv-ai:auto"
 
 
-class CommandCleanupError(RuntimeError):
-    """コマンド終了処理に失敗したことを表す例外。"""
+class CommandPostExecutionError(RuntimeError):
+    """provider 実行後の後処理に失敗したことを表す例外。"""
 
     def __init__(
         self,
         message: str,
+        execution_result: ExecutionResult,
         created_pr: GitHubPullRequest | None,
+        auto_continuation_decision: AutoContinuationDecision | None,
     ) -> None:
         super().__init__(message)
+        self.execution_result = execution_result
         self.created_pr = created_pr
+        self.auto_continuation_decision = auto_continuation_decision
+
+
+class CommandCleanupError(CommandPostExecutionError):
+    """コマンド終了処理に失敗したことを表す例外。"""
 
 
 @dataclass(frozen=True)
@@ -298,6 +306,17 @@ def run_command(
             )
             assert execution_result is not None
             finalize_status = execution_result.status
+        except Exception as exc:
+            primary_error = exc
+            if execution_result is not None and execution_result.status == "success":
+                message = f"後処理に失敗しました: {_format_exception(exc)}"
+                raise CommandPostExecutionError(
+                    message,
+                    execution_result,
+                    created_pr,
+                    auto_continuation_decision,
+                ) from exc
+            raise
         except BaseException as exc:
             primary_error = exc
             raise
@@ -341,7 +360,13 @@ def run_command(
                     )
                 else:
                     message = f"ラベル削除に失敗しました: {_format_exception(exc)}"
-                    raise CommandCleanupError(message, created_pr) from exc
+                    assert execution_result is not None
+                    raise CommandCleanupError(
+                        message,
+                        execution_result,
+                        created_pr,
+                        auto_continuation_decision,
+                    ) from exc
 
     assert execution_result is not None
     return CommandRunResult(
