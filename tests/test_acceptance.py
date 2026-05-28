@@ -1126,7 +1126,10 @@ class TestLabelEvent:
         event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:confirm")
         argv = ["--event", "issues", "--event-file", str(event_path)]
         session = _make_resolved_session("github", "org/repo#1", "codex")
-        result = _make_execution_result("success", "## 要望確認\n\n確認しました")
+        result = _make_execution_result(
+            "success",
+            "AUTO_STATUS: continue\n## 要望確認\n\n確認しました",
+        )
         mock_gh = MagicMock()
 
         with contextlib.ExitStack() as stack:
@@ -1149,7 +1152,8 @@ class TestLabelEvent:
         assert plan["target_type"] == "issue"
         assert plan["target_number"] == 1
         assert plan["source_label_name"] == "vv-ai:confirm"
-        assert plan["next_label_name"] == "vv-ai:next"
+        assert plan["action"] == "continue"
+        assert plan["next_label_name"] == "vv-ai:requirements"
 
     def test_issue_next_label_removes_trigger_label(self, tmp_path: Path) -> None:
         _write_config(tmp_path)

@@ -1086,7 +1086,7 @@ class TestFinallySaveGuarantee:
         mock_run_command.return_value = CommandRunResult(
             execution_result=_make_execution_result("success"),
             created_pr=None,
-            auto_continuation_enabled=False,
+            auto_continuation_decision=None,
         )
         mock_save.return_value = _make_saved_artifacts()
         ready = _make_ready_execution()

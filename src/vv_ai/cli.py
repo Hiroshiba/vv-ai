@@ -405,7 +405,7 @@ def _run_ready_execution(
     exit_code = 0
 
     created_pr = None
-    auto_continuation_enabled = False
+    auto_continuation_decision = None
     try:
         command_result = run_command(
             repo_root,
@@ -415,7 +415,7 @@ def _run_ready_execution(
         )
         execution_result = command_result.execution_result
         created_pr = command_result.created_pr
-        auto_continuation_enabled = command_result.auto_continuation_enabled
+        auto_continuation_decision = command_result.auto_continuation_decision
     except CommandCleanupError as exc:
         runtime_error = exc
         created_pr = exc.created_pr
@@ -462,12 +462,15 @@ def _run_ready_execution(
             print(f"session fork エラー: {exc}", file=sys.stderr)
             return 1
 
-    if auto_continuation_enabled:
+    if auto_continuation_decision is not None:
         try:
             save_auto_continuation_plan(
                 repo_root,
                 ready_execution.workflow_id,
-                build_auto_continuation_plan(ready_execution),
+                build_auto_continuation_plan(
+                    ready_execution,
+                    auto_continuation_decision,
+                ),
             )
         except AutoContinuationError as exc:
             print(f"自動継続計画保存エラー: {exc}", file=sys.stderr)

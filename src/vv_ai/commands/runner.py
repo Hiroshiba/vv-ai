@@ -9,6 +9,10 @@ from pathlib import Path
 
 from vv_ai.backends.github.client import GitHubClient, build_github_client
 from vv_ai.backends.github.models import GitHubPullRequest
+from vv_ai.auto_control import (
+    AutoContinuationDecision,
+    parse_auto_control_response,
+)
 from vv_ai.commands.post_execution import handle_post_execution
 from vv_ai.commands.reactions import add_reaction_safely, finalize_reactions
 from vv_ai.executions.result import ExecutionResult, ExecutionStatus
@@ -60,7 +64,7 @@ class CommandRunResult:
 
     execution_result: ExecutionResult
     created_pr: GitHubPullRequest | None
-    auto_continuation_enabled: bool
+    auto_continuation_decision: AutoContinuationDecision | None
 
 
 def run_command(
@@ -107,6 +111,7 @@ def run_command(
     finalize_status: ExecutionStatus = "failure"
     primary_error: BaseException | None = None
     auto_continuation_requested = False
+    auto_continuation_decision: AutoContinuationDecision | None = None
     try:
         try:
             auto_continuation_requested = _has_auto_continuation_label(
@@ -127,8 +132,9 @@ def run_command(
                 return CommandRunResult(
                     execution_result=execution_result,
                     created_pr=None,
-                    auto_continuation_enabled=_should_defer_label_cleanup(
+                    auto_continuation_decision=_build_auto_decision(
                         auto_continuation_requested,
+                        command.command,
                         execution_result,
                     ),
                 )
@@ -148,13 +154,15 @@ def run_command(
                     preflight_duration_seconds,
                 )
                 finalize_status = execution_result.status
+                auto_continuation_decision = _build_auto_decision(
+                    auto_continuation_requested,
+                    command.command,
+                    execution_result,
+                )
                 return CommandRunResult(
                     execution_result=execution_result,
                     created_pr=None,
-                    auto_continuation_enabled=_should_defer_label_cleanup(
-                        auto_continuation_requested,
-                        execution_result,
-                    ),
+                    auto_continuation_decision=auto_continuation_decision,
                 )
 
             if (
@@ -241,6 +249,7 @@ def run_command(
                 implement_branch_name,
                 worktree_ref,
                 unresolved_review_thread_count,
+                auto_continuation_requested,
             )
             execution_result = execute_provider(
                 repo_root,
@@ -256,6 +265,11 @@ def run_command(
                         target_context.state,
                     )
                 }
+            )
+            auto_continuation_decision = _build_auto_decision(
+                auto_continuation_requested,
+                command.command,
+                execution_result,
             )
 
             created_pr = handle_post_execution(
@@ -294,8 +308,7 @@ def run_command(
             and not command.dry_run
             and command.trigger_label_name is not None
             and not _should_defer_label_cleanup(
-                auto_continuation_requested,
-                execution_result,
+                auto_continuation_decision,
             )
         ):
             try:
@@ -321,10 +334,7 @@ def run_command(
     return CommandRunResult(
         execution_result=execution_result,
         created_pr=created_pr,
-        auto_continuation_enabled=_should_defer_label_cleanup(
-            auto_continuation_requested,
-            execution_result,
-        ),
+        auto_continuation_decision=auto_continuation_decision,
     )
 
 
@@ -428,15 +438,24 @@ def _has_auto_continuation_label(
     )
 
 
-def _should_defer_label_cleanup(
+def _build_auto_decision(
     auto_continuation_requested: bool,
-    execution_result: ExecutionResult | None,
+    command_name: str,
+    execution_result: ExecutionResult,
+) -> AutoContinuationDecision | None:
+    if not auto_continuation_requested:
+        return None
+    if execution_result.status != "success":
+        return None
+    result = parse_auto_control_response(command_name, execution_result.response_text)
+    execution_result.response_text = result.response_text
+    return result.decision
+
+
+def _should_defer_label_cleanup(
+    auto_continuation_decision: AutoContinuationDecision | None,
 ) -> bool:
-    return (
-        auto_continuation_requested
-        and execution_result is not None
-        and execution_result.status == "success"
-    )
+    return auto_continuation_decision is not None
 
 
 def _has_primary_failure(
