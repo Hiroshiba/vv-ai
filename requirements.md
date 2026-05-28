@@ -536,7 +536,7 @@ provider_priority:
   - 3 行目以降: Markdown の PR コメント本文
 - PR タイトルと commit message は Conventional Commits 形式を推奨
 - Issue 起点の PR description は元 Issue への参照を含める
-- Issue 起点の PR description は、Issue を解決する内容なら GitHub closing keyword を使ってもよい
+- Issue 起点の PR description は、Issue を解決する内容なら GitHub closing keyword を使う
 
 ---
 

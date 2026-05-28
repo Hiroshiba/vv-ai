@@ -60,7 +60,7 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
         "PR タイトルは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。\n"
         "コミットメッセージは Conventional Commits 形式にしてください（例: fix: PRタイトルを日本語にする）。\n"
         "PR 本文には元 Issue への参照を含めてください。\n"
-        "Issue を解決する内容なら GitHub closing keyword を使っても構いません。\n"
+        "Issue を解決する内容なら GitHub closing keyword を使ってください。\n"
         "以下のフォーマットに厳密に従ってください:\n"
         "1行目: TITLE: <タイトル文字列>\n"
         "2行目: COMMIT_MESSAGE: <コミットメッセージ>\n"
