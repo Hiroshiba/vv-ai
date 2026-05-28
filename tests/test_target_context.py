@@ -127,6 +127,22 @@ def _make_comment(comment_id: int, body: str, updated_at: str) -> GitHubComment:
     )
 
 
+def _make_comment_with_created_at(
+    comment_id: int,
+    body: str,
+    created_at: str,
+) -> GitHubComment:
+    """created_at を指定した GitHubComment を返す。"""
+    return GitHubComment(
+        id=comment_id,
+        body=body,
+        author=GitHubActor(login="Hiroshiba"),
+        created_at=created_at,
+        updated_at=created_at,
+        url=f"https://github.com/org/repo/issues/1#issuecomment-{comment_id}",
+    )
+
+
 def _make_review(
     review_id: int,
     body: str,
@@ -351,3 +367,28 @@ def test_comment_and_pull_request_review_state_keys_do_not_conflict() -> None:
     assert "レビュー本文" in result.prompt_block
     assert "1" in result.state.comment_hashes
     assert "review:1" in result.state.comment_hashes
+
+
+def test_comments_with_same_created_at_keep_numeric_id_order() -> None:
+    client = _GitHubClient(
+        _make_issue("未使用", "未使用"),
+        _make_pull_request("PR タイトル", "PR 本文"),
+        [
+            _make_comment_with_created_at(10, "補足コメント", "2026-05-08T00:00:00Z"),
+            _make_comment_with_created_at(2, "指摘コメント", "2026-05-08T00:00:00Z"),
+        ],
+        [],
+    )
+
+    result = build_target_context(
+        client,
+        _make_pr_target(),
+        None,
+        empty_target_context_state(),
+        None,
+    )
+
+    assert result.prompt_block is not None
+    assert result.prompt_block.index("指摘コメント") < result.prompt_block.index(
+        "補足コメント"
+    )

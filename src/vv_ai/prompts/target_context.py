@@ -165,8 +165,17 @@ def _sort_target_context_entries(
     ]
     return sorted(
         entries,
-        key=lambda entry: (entry.created_at, _build_entry_key(entry)),
+        key=_build_entry_sort_key,
     )
+
+
+def _build_entry_sort_key(entry: TargetContextEntry) -> tuple[str, int, int]:
+    """target context entry の並び順に使う key を返す。"""
+    if isinstance(entry, GitHubComment):
+        return entry.created_at, 0, entry.id
+    if isinstance(entry, GitHubPullRequestReview):
+        return entry.created_at, 1, entry.id
+    raise TargetContextError("target context entry の種別が不正です")
 
 
 def _build_entry_key(entry: TargetContextEntry) -> str:
