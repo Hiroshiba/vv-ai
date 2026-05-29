@@ -10,7 +10,7 @@ _COMMAND_TASK_DESCRIPTION: dict[str, str] = {
         "あなたの出力テキストがそのままコメントとして投稿されます。"
     ),
     "review": (
-        "review-diff スキルを使って、この PR をレビューしてください。"
+        "review-diff スキルと review-text スキルを使って、この PR をレビューしてください。"
         "あなたの出力テキストがそのままコメントとして投稿されます。"
     ),
     "confirm": (
