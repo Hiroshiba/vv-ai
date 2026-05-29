@@ -53,7 +53,7 @@ from vv_ai.workflow.preflight import (
     run_preflight,
 )
 from vv_ai.providers.selection import ProviderResolutionError
-from vv_ai.commands.runner import CommandCleanupError, run_command
+from vv_ai.commands.runner import CommandPostExecutionError, run_command
 from vv_ai.sessions.models import SessionKey, SessionStateRef
 from vv_ai.artifacts.session import SessionArtifactError, fork_session_artifact
 from vv_ai.artifacts.report import ReportSections
@@ -460,15 +460,15 @@ def _run_ready_execution(
         execution_result = command_result.execution_result
         created_pr = command_result.created_pr
         auto_continuation_decision = command_result.auto_continuation_decision
-    except CommandCleanupError as exc:
+    except CommandPostExecutionError as exc:
         runtime_error = exc
         created_pr = exc.created_pr
+        auto_continuation_decision = exc.auto_continuation_decision
         exit_code = 1
-        execution_result = _build_failure_result(
+        execution_result = _build_post_execution_failure_result(
             ready_execution,
             exc,
-            preflight_duration_seconds,
-            execution_duration_seconds=time.perf_counter() - execution_started_at,
+            exc.execution_result,
         )
     except KeyboardInterrupt as exc:
         runtime_error = exc
@@ -604,6 +604,49 @@ def _build_failure_result(
         allow_edits_notice_posted=False,
         response_text=None,
     )
+
+
+def _build_post_execution_failure_result(
+    ready_execution: ReadyExecution,
+    error: CommandPostExecutionError,
+    provider_result: ExecutionResult,
+) -> ExecutionResult:
+    """provider 実行結果を保持した後処理失敗結果を返す。"""
+    detail = _format_exception(error)
+    return provider_result.model_copy(
+        update={
+            "status": "failure",
+            "report_sections": ReportSections(
+                summary=(
+                    f"`{ready_execution.command.command}` の provider 実行は成功したが、"
+                    "後処理で失敗した。"
+                ),
+                changes=(
+                    "provider 実行結果を保持したまま、最終 status を failure として保存した。"
+                ),
+                decisions=(
+                    "後処理失敗でも調査に必要な provider session と provider 実行結果を"
+                    "artifact に残す方針を優先した。"
+                ),
+                validation=(
+                    "provider 実行: success\n"
+                    "post execution: failure\n"
+                    "workflow: failure\n"
+                    f"失敗要因: {detail}"
+                ),
+                risks_open_questions=detail,
+                next_actions="後処理の失敗要因を解消して再実行する。",
+                notes=_build_post_execution_failure_notes(provider_result),
+            ),
+        }
+    )
+
+
+def _build_post_execution_failure_notes(provider_result: ExecutionResult) -> str:
+    """後処理失敗時の provider session 保存状態を返す。"""
+    if provider_result.provider_session_path is None:
+        return "provider session path は provider 実行結果に含まれていない。"
+    return "provider session は後続調査用に保存対象として保持した。"
 
 
 def _build_steps(

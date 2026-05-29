@@ -28,6 +28,7 @@ from vv_ai.artifacts.metrics import MetricsBehavior, MetricsUsage, ProviderSpeci
 from vv_ai.workflow.preflight import ReadyExecution
 from vv_ai.providers.selection import ResolvedProvider, get_provider_spec
 from vv_ai.artifacts.report import ReportSections
+from vv_ai.git.operations import GitOpsError
 from vv_ai.inputs.resolve import BackendName, ResolvedCommand, ResolvedTarget
 from vv_ai.sessions.models import ResolvedSession, SessionKey, SessionStateRef
 
@@ -1488,6 +1489,73 @@ class TestLabelEvent:
             1,
             "vv-ai:implement",
         )
+
+    def test_implement_issue_push_failure_preserves_provider_result(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        _write_config(tmp_path)
+        event_path = self._write_issue_labeled_event(tmp_path, "vv-ai:implement")
+        argv = ["--event", "issues", "--event-file", str(event_path)]
+        session = _make_resolved_session("github", "org/repo#1", "codex")
+        provider_session_path = tmp_path / "provider-session"
+        provider_session_path.mkdir()
+        result = _make_execution_result(
+            "success",
+            (
+                "TITLE: AI PR\n"
+                "COMMIT_MESSAGE: feat: ai commit\n"
+                "BODY:\n"
+                "AI が考えた本文"
+            ),
+        ).model_copy(
+            update={
+                "state_ref": SessionStateRef(provider_session_id="provider-session-id"),
+                "provider_session_path": provider_session_path,
+            }
+        )
+        mock_gh = MagicMock()
+        mock_gh.get_repo_info.return_value = RepoInfo(
+            is_fork=False,
+            parent_full_name=None,
+            parent_default_branch=None,
+        )
+        mock_gh.get_issue.return_value = _make_github_issue("org/repo", 1)
+        mock_gh.has_issue_sub_issues.return_value = False
+        mock_gh.list_issue_comments.return_value = []
+        mock_gh.list_pull_request_reviews.return_value = []
+        mock_gh.list_issue_timeline_events.return_value = []
+        mock_gh.list_issue_label_names.return_value = []
+        mock_gh.get_default_branch.return_value = "main"
+
+        with (
+            patch("vv_ai.cli.find_repo_root", return_value=tmp_path),
+            patch("vv_ai.cli.resolve_session", return_value=session),
+            patch("vv_ai.commands.runner.execute_provider", return_value=result),
+            patch(
+                "vv_ai.cli.save_execution_artifacts",
+                return_value=MagicMock(spec=SavedExecutionArtifacts),
+            ) as mock_save,
+            patch("vv_ai.commands.runner.build_github_client", return_value=mock_gh),
+            patch("vv_ai.commands.runner.create_and_checkout_branch"),
+            patch("vv_ai.commands.post_execution.commit_all_changes", return_value=True),
+            patch("vv_ai.commands.post_execution.has_commits_ahead", return_value=True),
+            patch(
+                "vv_ai.commands.post_execution.push_branch",
+                side_effect=GitOpsError("push 失敗"),
+            ),
+            patch.dict("os.environ", {"VV_OPENAI_API_KEY": "dummy-key"}),
+        ):
+            exit_code = main(argv)
+
+        saved_result: ExecutionResult = mock_save.call_args[0][3]
+        assert exit_code == 1
+        assert saved_result.status == "failure"
+        assert saved_result.state_ref.provider_session_id == "provider-session-id"
+        assert saved_result.provider_session_path == provider_session_path
+        assert saved_result.response_text == result.response_text
+        assert "push 失敗" in saved_result.report_sections.validation
+        assert "provider session は未保存である" not in saved_result.report_sections.notes
 
     def test_provider_failure_is_primary_when_label_removal_also_fails(
         self,
