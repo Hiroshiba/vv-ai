@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import getpass
 import json
 import subprocess
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
@@ -12,6 +14,7 @@ from tools import setup_vv_ai
 from tools.setup_vv_ai import (
     DistributionSource,
     SetupVVAIError,
+    _ask_github_app_private_key,
     _ask_yes_no,
     _build_new_config_text,
     _list_secret_names,
@@ -367,6 +370,53 @@ def test_ask_yes_no_returns_default_on_empty_input(
 
     assert _ask_yes_no("実行しますか", True) is True
     assert _ask_yes_no("実行しますか", False) is False
+
+
+def test_ask_github_app_private_key_reads_hidden_multiline_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_ask_github_app_private_key は getpass で複数行の秘密鍵を読む。"""
+    answers = iter(
+        [
+            "-----BEGIN PRIVATE KEY-----",
+            "private-key-body",
+            "-----END PRIVATE KEY-----",
+            "",
+        ]
+    )
+    prompts: list[str] = []
+
+    def fake_getpass(prompt: str) -> str:
+        prompts.append(prompt)
+        return next(answers)
+
+    monkeypatch.setattr("getpass.getpass", fake_getpass)
+
+    assert _ask_github_app_private_key() == (
+        "-----BEGIN PRIVATE KEY-----\n"
+        "private-key-body\n"
+        "-----END PRIVATE KEY-----\n"
+    )
+    assert prompts == [
+        "VV_AI_APP_PRIVATE_KEY: ",
+        "VV_AI_APP_PRIVATE_KEY: ",
+        "VV_AI_APP_PRIVATE_KEY: ",
+        "VV_AI_APP_PRIVATE_KEY: ",
+    ]
+
+
+def test_ask_github_app_private_key_rejects_getpass_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_ask_github_app_private_key は非表示入力できない場合に失敗する。"""
+
+    def fake_getpass(prompt: str) -> NoReturn:
+        raise getpass.GetPassWarning("表示されます")
+
+    monkeypatch.setattr(getpass, "getpass", fake_getpass)
+
+    with pytest.raises(SetupVVAIError, match="非表示"):
+        _ask_github_app_private_key()
 
 
 def test_run_uvx_tool_runs_tool_from_distribution(

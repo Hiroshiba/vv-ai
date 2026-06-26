@@ -7,6 +7,7 @@ import getpass
 import json
 import subprocess
 import sys
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, distribution
@@ -382,15 +383,20 @@ def _ask_single_line_secret(secret_name: str) -> str:
 
 def _ask_github_app_private_key() -> str:
     """GitHub App の秘密鍵を複数行で入力させる。"""
-    print("VV_AI_APP_PRIVATE_KEY を入力してください。空行で終了します。")
+    print("VV_AI_APP_PRIVATE_KEY を 1 行ずつ入力してください。空行で終了します。")
     lines: list[str] = []
     while True:
-        line = sys.stdin.readline()
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", getpass.GetPassWarning)
+                line = getpass.getpass("VV_AI_APP_PRIVATE_KEY: ")
+        except EOFError as e:
+            raise SetupVVAIError("VV_AI_APP_PRIVATE_KEY の入力が必要です") from e
+        except getpass.GetPassWarning as e:
+            raise SetupVVAIError("VV_AI_APP_PRIVATE_KEY を非表示で入力できません") from e
         if line == "":
             break
-        if line in {"\n", "\r\n"}:
-            break
-        lines.append(line)
+        lines.append(f"{line}\n")
     if len(lines) == 0:
         raise SetupVVAIError("VV_AI_APP_PRIVATE_KEY の入力が必要です")
     return "".join(lines)
