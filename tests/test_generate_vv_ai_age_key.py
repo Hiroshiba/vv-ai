@@ -10,7 +10,6 @@ from typing import NoReturn
 
 import pytest
 
-from tools import setup_vv_ai
 from tools.generate_vv_ai_age_key import (
     GenerateVVAIKeyError,
     _generate_age_key,
@@ -38,24 +37,6 @@ def test_project_scripts_include_setup_vv_ai() -> None:
     )
 
     assert pyproject["project"]["scripts"]["setup-vv-ai"] == "tools.setup_vv_ai:main"
-
-
-def test_setup_vv_ai_main_exits_1_until_implemented(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """setup-vv-ai は導入作業の実装まで未実装エラーを出す。"""
-    monkeypatch.setattr(sys, "argv", ["setup-vv-ai"])
-
-    with pytest.raises(SystemExit) as e:
-        setup_vv_ai.main()
-
-    captured = capsys.readouterr()
-    assert e.value.code == 1
-    assert captured.out == ""
-    assert captured.err == (
-        "エラー: setup-vv-ai は未実装です。Issue #271 で実装します\n"
-    )
 
 
 def test_generate_age_key_outputs_age_keygen_stdout(
