@@ -13,3 +13,7 @@ description: 変更をコミットする。実装完了後の git commit に使�
 2. コミットメッセージをそのパスに書く
 3. `git add <paths>` で対象ファイルをステージングする
 4. `git commit -F <tempfile>` でコミットする
+
+## 文章規範
+
+- 必ず文章を書く直前に`japanese-tech-writing`スキルを実行する

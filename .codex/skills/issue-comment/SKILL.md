@@ -12,3 +12,7 @@ description: GitHub Issue にコメントを投稿する。
 1. `mkdir -p hiho_temp && mktemp -u hiho_temp/hiho.XXXXXXXXXX` で一時ファイルパスを取得する
 2. コメント本文をそのパスに書く
 3. `gh issue comment <num> --body-file <tempfile>` で投稿する
+
+## 文章規範
+
+- 必ず文章を書く直前に`japanese-tech-writing`スキルを実行する
