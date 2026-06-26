@@ -7,10 +7,6 @@ description: 実装作業の日誌を diary/YYYY-MM-DD_HHmmss.md に作成する
 
 実装作業を振り返り、日誌ファイルを作成する。
 
-## 文章規範
-
-- 必ず文章を書く直前に`japanese-tech-writing`スキルを実行する
-
 ## 処理フロー
 
 1. `date +%Y-%m-%d_%H%M%S` で現在日時を取得する
@@ -33,3 +29,7 @@ description: 実装作業の日誌を diary/YYYY-MM-DD_HHmmss.md に作成する
 ### 手こずったこと
 
 実装中に詰まった点、想定外の問題、解決に時間がかかったことを記載する。なければ「なし」と書く。
+
+## 文章規範
+
+- 必ず文章を書く直前に`japanese-tech-writing`スキルを実行する

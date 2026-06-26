@@ -15,3 +15,7 @@ allowed-tools: Bash(gh issue close:*), Bash(gh issue comment:*)
 4. `gh issue close <num>` でクローズする
 
 コメント不要なら 1〜3 を省略して 4 のみ実行する。
+
+## 文章規範
+
+- 必ず文章を書く直前に`japanese-tech-writing`スキルを実行する
