@@ -12,6 +12,7 @@ from tools import setup_vv_ai
 from tools.setup_vv_ai import (
     DistributionSource,
     SetupVVAIError,
+    _ask_yes_no,
     _build_new_config_text,
     _list_secret_names,
     _read_source_file,
@@ -19,6 +20,7 @@ from tools.setup_vv_ai import (
     _resolve_github_repository_name,
     _resolve_repository_info,
     _run_setup,
+    _run_optional_uvx_tools,
     _run_uvx_tool,
     _set_secret,
     _setup_optional_context7_secret,
@@ -244,7 +246,7 @@ def test_setup_required_secrets_asks_missing_and_updates_selected(
     questions: list[str] = []
     set_values: dict[str, str] = {}
 
-    def fake_ask_yes_no(question: str) -> bool:
+    def fake_ask_yes_no(question: str, default_answer: bool) -> bool:
         questions.append(question)
         return "PRIVATE_KEY" in question
 
@@ -286,7 +288,11 @@ def test_setup_optional_context7_secret_sets_when_selected(
     """_setup_optional_context7_secret は選択された場合だけ設定する。"""
     set_values: dict[str, str] = {}
 
-    monkeypatch.setattr(setup_vv_ai, "_ask_yes_no", lambda question: True)
+    monkeypatch.setattr(
+        setup_vv_ai,
+        "_ask_yes_no",
+        lambda question, default_answer: True,
+    )
     monkeypatch.setattr(
         setup_vv_ai,
         "_ask_single_line_secret",
@@ -329,6 +335,40 @@ def test_set_secret_runs_gh_secret_set(
     assert calls == [(["gh", "secret", "set", "VV_AI_APP_ID"], "12345")]
 
 
+def test_set_secret_rejects_invalid_app_id() -> None:
+    """_set_secret は不正な GitHub App ID を拒否する。"""
+    with pytest.raises(SetupVVAIError, match="正の整数"):
+        _set_secret("VV_AI_APP_ID", "abc")
+
+
+def test_set_secret_rejects_invalid_age_public_key() -> None:
+    """_set_secret は不正な age 公開鍵を拒否する。"""
+    with pytest.raises(SetupVVAIError, match="age 公開鍵"):
+        _set_secret("VV_AI_AGE_PUBLIC_KEY", "invalid")
+
+
+def test_set_secret_rejects_invalid_age_secret_key() -> None:
+    """_set_secret は不正な age 秘密鍵を拒否する。"""
+    with pytest.raises(SetupVVAIError, match="age 秘密鍵"):
+        _set_secret("VV_AI_AGE_SECRET_KEY", "invalid")
+
+
+def test_set_secret_rejects_invalid_app_private_key() -> None:
+    """_set_secret は不正な GitHub App 秘密鍵を拒否する。"""
+    with pytest.raises(SetupVVAIError, match="PEM"):
+        _set_secret("VV_AI_APP_PRIVATE_KEY", "invalid")
+
+
+def test_ask_yes_no_returns_default_on_empty_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_ask_yes_no は空入力なら既定値を返す。"""
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+
+    assert _ask_yes_no("実行しますか", True) is True
+    assert _ask_yes_no("実行しますか", False) is False
+
+
 def test_run_uvx_tool_runs_tool_from_distribution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -355,6 +395,65 @@ def test_run_uvx_tool_runs_tool_from_distribution(
             "git+https://github.com/Hiroshiba/vv-ai.git@abc123",
             "create-vv-ai-labels",
         ]
+    ]
+
+
+def test_run_optional_uvx_tools_skips_ai_settings_and_runs_labels_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_run_optional_uvx_tools は既定でラベル同期だけ実行する。"""
+    uvx_tools: list[str] = []
+
+    monkeypatch.setattr(
+        setup_vv_ai,
+        "_ask_yes_no",
+        lambda question, default_answer: default_answer,
+    )
+    monkeypatch.setattr(
+        setup_vv_ai,
+        "_run_uvx_tool",
+        lambda source, tool_name: uvx_tools.append(tool_name),
+    )
+
+    distribution_source = DistributionSource(
+        uvx_from="git+https://github.com/Hiroshiba/vv-ai.git@abc123",
+        source_root=None,
+        commit_id="abc123",
+    )
+    _run_optional_uvx_tools(distribution_source)
+
+    assert uvx_tools == ["create-vv-ai-labels"]
+
+
+def test_run_optional_uvx_tools_runs_selected_ai_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_run_optional_uvx_tools は選択された AI 設定コマンドを実行する。"""
+    uvx_tools: list[str] = []
+
+    def fake_ask_yes_no(question: str, default_answer: bool) -> bool:
+        return question in {
+            "Codex 認証 Secret を設定しますか",
+            "Claude 設定 Secret を設定しますか",
+        }
+
+    monkeypatch.setattr(setup_vv_ai, "_ask_yes_no", fake_ask_yes_no)
+    monkeypatch.setattr(
+        setup_vv_ai,
+        "_run_uvx_tool",
+        lambda source, tool_name: uvx_tools.append(tool_name),
+    )
+
+    distribution_source = DistributionSource(
+        uvx_from="git+https://github.com/Hiroshiba/vv-ai.git@abc123",
+        source_root=None,
+        commit_id="abc123",
+    )
+    _run_optional_uvx_tools(distribution_source)
+
+    assert uvx_tools == [
+        "set-codex-auth-secret",
+        "set-claude-settings-secret",
     ]
 
 
@@ -399,7 +498,11 @@ def test_run_setup_creates_files_sets_secrets_and_runs_tools(
         "_ask_github_app_private_key",
         lambda: "private-key\n",
     )
-    monkeypatch.setattr(setup_vv_ai, "_ask_yes_no", lambda question: False)
+    monkeypatch.setattr(
+        setup_vv_ai,
+        "_ask_yes_no",
+        lambda question, default_answer: default_answer,
+    )
     monkeypatch.setattr(
         setup_vv_ai,
         "_set_secret",
@@ -431,11 +534,7 @@ def test_run_setup_creates_files_sets_secrets_and_runs_tools(
         "VV_AI_APP_ID": "value-VV_AI_APP_ID",
         "VV_AI_APP_PRIVATE_KEY": "private-key\n",
     }
-    assert uvx_tools == [
-        "set-codex-auth-secret",
-        "set-claude-settings-secret",
-        "create-vv-ai-labels",
-    ]
+    assert uvx_tools == ["create-vv-ai-labels"]
 
 
 def test_resolve_github_repository_name_rejects_non_github() -> None:

@@ -23,11 +23,6 @@ _REQUIRED_SECRET_NAMES = (
     "VV_AI_APP_PRIVATE_KEY",
 )
 _CONTEXT7_SECRET_NAME = "VV_CONTEXT7_API_KEY"
-_UVX_TOOL_NAMES = (
-    "set-codex-auth-secret",
-    "set-claude-settings-secret",
-    "create-vv-ai-labels",
-)
 
 
 def main() -> None:
@@ -81,9 +76,7 @@ def _run_setup() -> None:
     secret_names = _list_secret_names()
     _setup_required_secrets(secret_names)
     _setup_optional_context7_secret(secret_names)
-
-    for tool_name in _UVX_TOOL_NAMES:
-        _run_uvx_tool(distribution_source, tool_name)
+    _run_optional_uvx_tools(distribution_source)
 
 
 def _resolve_distribution_source() -> DistributionSource:
@@ -258,7 +251,7 @@ def _setup_required_secrets(secret_names: set[str]) -> None:
     """必須 GitHub Secret を登録または更新する。"""
     for secret_name in _REQUIRED_SECRET_NAMES:
         if secret_name in secret_names:
-            if not _ask_yes_no(f"{secret_name} は登録済みです。更新しますか"):
+            if not _ask_yes_no(f"{secret_name} は登録済みです。更新しますか", False):
                 continue
         if secret_name == "VV_AI_APP_PRIVATE_KEY":
             secret_value = _ask_github_app_private_key()
@@ -270,9 +263,9 @@ def _setup_required_secrets(secret_names: set[str]) -> None:
 def _setup_optional_context7_secret(secret_names: set[str]) -> None:
     """任意の context7 GitHub Secret を登録または更新する。"""
     if _CONTEXT7_SECRET_NAME in secret_names:
-        if not _ask_yes_no(f"{_CONTEXT7_SECRET_NAME} は登録済みです。更新しますか"):
+        if not _ask_yes_no(f"{_CONTEXT7_SECRET_NAME} は登録済みです。更新しますか", False):
             return
-    elif not _ask_yes_no(f"{_CONTEXT7_SECRET_NAME} を登録しますか"):
+    elif not _ask_yes_no(f"{_CONTEXT7_SECRET_NAME} を登録しますか", False):
         return
 
     _set_secret(_CONTEXT7_SECRET_NAME, _ask_single_line_secret(_CONTEXT7_SECRET_NAME))
@@ -284,6 +277,7 @@ def _set_secret(secret_name: str, secret_value: str) -> None:
         raise SetupVVAIError("GitHub Secret 名が空です")
     if secret_value == "":
         raise SetupVVAIError(f"{secret_name} の値が空です")
+    _validate_secret_value(secret_name, secret_value)
 
     cmd = ["gh", "secret", "set", secret_name]
     try:
@@ -300,16 +294,61 @@ def _set_secret(secret_name: str, secret_value: str) -> None:
         raise SetupVVAIError(
             f"gh secret set が失敗しました exit {result.returncode}:\n{result.stderr}"
         )
-    print(f"GitHub Secret を設定しました: {secret_name}")
+    print("GitHub Secret を設定しました")
 
 
-def _ask_yes_no(question: str) -> bool:
+def _validate_secret_value(secret_name: str, secret_value: str) -> None:
+    """GitHub Secret の値の形式を検証する。"""
+    if secret_name == "VV_AI_AGE_PUBLIC_KEY":
+        if not secret_value.startswith("age1"):
+            raise SetupVVAIError("VV_AI_AGE_PUBLIC_KEY は age 公開鍵の形式で入力してください")
+        return
+    if secret_name == "VV_AI_AGE_SECRET_KEY":
+        if not secret_value.startswith("AGE-SECRET-KEY-"):
+            raise SetupVVAIError("VV_AI_AGE_SECRET_KEY は age 秘密鍵の形式で入力してください")
+        return
+    if secret_name == "VV_AI_APP_ID":
+        if not _is_positive_decimal_text(secret_value):
+            raise SetupVVAIError("VV_AI_APP_ID は正の整数で入力してください")
+        return
+    if secret_name == "VV_AI_APP_PRIVATE_KEY":
+        _validate_github_app_private_key(secret_value)
+
+
+def _is_positive_decimal_text(value: str) -> bool:
+    """文字列が正の整数表記なら真を返す。"""
+    if value == "":
+        return False
+    for char in value:
+        if char not in "0123456789":
+            return False
+    return int(value) > 0
+
+
+def _validate_github_app_private_key(secret_value: str) -> None:
+    """GitHub App 秘密鍵の PEM 形式を検証する。"""
+    stripped_value = secret_value.strip()
+    if stripped_value.startswith("-----BEGIN RSA PRIVATE KEY-----") and (
+        stripped_value.endswith("-----END RSA PRIVATE KEY-----")
+    ):
+        return
+    if stripped_value.startswith("-----BEGIN PRIVATE KEY-----") and (
+        stripped_value.endswith("-----END PRIVATE KEY-----")
+    ):
+        return
+    raise SetupVVAIError("VV_AI_APP_PRIVATE_KEY は PEM 形式の秘密鍵で入力してください")
+
+
+def _ask_yes_no(question: str, default_answer: bool) -> bool:
     """yes または no の入力を求める。"""
+    prompt_suffix = "[Y/n]" if default_answer else "[y/N]"
     while True:
         try:
-            answer = input(f"{question} [y/n]: ").strip().lower()
+            answer = input(f"{question} {prompt_suffix}: ").strip().lower()
         except EOFError as e:
             raise SetupVVAIError("yes または no の入力が必要です") from e
+        if answer == "":
+            return default_answer
         if answer in {"y", "yes"}:
             return True
         if answer in {"n", "no"}:
@@ -369,6 +408,16 @@ def _run_uvx_tool(distribution_source: DistributionSource, tool_name: str) -> No
         raise SetupVVAIError(f"uvx の実行に失敗しました: {e}") from e
     if result.returncode != 0:
         raise SetupVVAIError(f"{tool_name} が失敗しました exit {result.returncode}")
+
+
+def _run_optional_uvx_tools(distribution_source: DistributionSource) -> None:
+    """対話結果に応じて補助コマンドを別プロセス実行する。"""
+    if _ask_yes_no("Codex 認証 Secret を設定しますか", False):
+        _run_uvx_tool(distribution_source, "set-codex-auth-secret")
+    if _ask_yes_no("Claude 設定 Secret を設定しますか", False):
+        _run_uvx_tool(distribution_source, "set-claude-settings-secret")
+    if _ask_yes_no("vv-ai ラベルを同期しますか", True):
+        _run_uvx_tool(distribution_source, "create-vv-ai-labels")
 
 
 def _run_gh_text(args: Sequence[str]) -> str:
