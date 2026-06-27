@@ -122,7 +122,14 @@ merge_args:
 
 GitHub App にはリポジトリ権限として `Contents: Read & Write` / `Issues: Read & Write` / `Pull requests: Read & Write` / `Workflows: Read & Write` / `Metadata: Read-only` を付与します。
 
-`VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` はツールで設定できます。
+age 鍵が無い場合は、鍵生成コマンドで作成します。
+
+```sh
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main generate-vv-ai-age-key
+```
+
+`setup-vv-ai` は `VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` の補助コマンドを実行するか確認します。
+個別に設定する場合は次を実行します。
 
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-codex-auth-secret --repo org/repo
@@ -178,6 +185,8 @@ Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動
 
 `vv-ai:auto` は自動進行、`vv-ai:merge` は PR の merge 許可に使います。
 
+`setup-vv-ai` はラベル同期の補助コマンドを実行するか確認します。
+個別に同期する場合は次を実行します。
 ラベル起動に使う GitHub ラベルはツールで作成できます。既存のラベルは色と説明を更新します。
 
 ```sh
@@ -199,9 +208,11 @@ gh workflow run vv-ai.yml \
 
 ### 導入手順
 
-1. `.github/workflows/vv-ai.yml` をリポジトリにコピーする
-2. リポジトリの Settings > Secrets and variables > Actions に必要な Secret を登録する
-3. リポジトリルートに `vv-ai.yml` を配置する
+対象リポジトリのルートで次を実行します。
+
+```sh
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main setup-vv-ai
+```
 
 ## ローカルデバッグ
 
