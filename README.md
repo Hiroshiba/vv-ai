@@ -114,30 +114,27 @@ merge_args:
 | `VV_AI_AGE_SECRET_KEY` | 必須 | artifact 復号に使う秘密鍵 |
 | `VV_AI_APP_ID` | 必須 | read/write 両方のインストールトークン生成に使う GitHub App ID |
 | `VV_AI_APP_PRIVATE_KEY` | 必須 | GitHub App の RSA 秘密鍵 |
-| `VV_ANTHROPIC_API_KEY` | Claude 用 | Claude Code CLI 用 API キー |
-| `VV_OPENAI_API_KEY` | Codex 用 | Codex CLI 用 API キー。`VV_CODEX_AUTH_JSON` と択一 |
+| `VV_ANTHROPIC_API_KEY` | Claude 用 | Claude Code CLI 用 API キー。導入更新コマンドでは直接入力しません |
+| `VV_OPENAI_API_KEY` | Codex 用 | Codex CLI 用 API キー。`VV_CODEX_AUTH_JSON` と択一。導入更新コマンドでは直接入力しません |
 | `VV_CODEX_AUTH_JSON` | Codex 用 | Codex CLI の OAuth 認証 JSON。`VV_OPENAI_API_KEY` と択一 |
 | `VV_CLAUDE_SETTINGS` | 任意 | モデル名・Base URL・MCP サーバーなどを指定する Claude Code の追加設定 JSON |
 | `VV_CONTEXT7_API_KEY` | 任意 | Context7 MCP の API キー。設定すると Claude Code / Codex 両方で Context7 が有効になる |
 
 GitHub App にはリポジトリ権限として `Contents: Read & Write` / `Issues: Read & Write` / `Pull requests: Read & Write` / `Workflows: Read & Write` / `Metadata: Read-only` を付与します。
 
-age 鍵が無い場合は、鍵生成コマンドで作成できます。
-出力された公開鍵と秘密鍵を `VV_AI_AGE_PUBLIC_KEY` と `VV_AI_AGE_SECRET_KEY` に登録します。
+age 鍵が無い場合は、鍵生成コマンドで作成します。
 
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main generate-vv-ai-age-key
 ```
 
-`VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` は補助コマンドで個別に設定できます。
+`setup-vv-ai` は `VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` の補助コマンドを実行するか確認します。
+個別に設定する場合は次を実行します。
 
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-codex-auth-secret --repo org/repo
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-claude-settings-secret --repo org/repo
 ```
-
-`VV_OPENAI_API_KEY` と `VV_ANTHROPIC_API_KEY` は導入更新コマンドでは直接入力しません。
-必要な場合は GitHub Actions Secrets に個別に登録します。
 
 ## GitHub Actions
 
@@ -188,7 +185,9 @@ Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動
 
 `vv-ai:auto` は自動進行、`vv-ai:merge` は PR の merge 許可に使います。
 
-ラベル起動に使う GitHub ラベルは補助コマンドで個別に同期できます。既存のラベルは色と説明を更新します。
+`setup-vv-ai` はラベル同期の補助コマンドを実行するか確認します。
+個別に同期する場合は次を実行します。
+既存のラベルは色と説明を更新します。
 
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main create-vv-ai-labels --repo org/repo
@@ -209,16 +208,11 @@ gh workflow run vv-ai.yml \
 
 ### 導入手順
 
-対象リポジトリのルートで導入更新コマンドを実行します。
+対象リポジトリのルートで次を実行します。
 
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main setup-vv-ai
 ```
-
-`setup-vv-ai` は `.github/workflows/vv-ai.yml` を配置し、`vv-ai.yml` が無い場合は作成します。
-必須の GitHub Secrets も登録または更新します。
-`setup-vv-ai` は、`VV_CODEX_AUTH_JSON`、`VV_CLAUDE_SETTINGS`、ラベル同期の補助コマンドを実行するか確認します。
-選択すると `set-codex-auth-secret`、`set-claude-settings-secret`、`create-vv-ai-labels` を同じ配布元から実行します。
 
 ## ローカルデバッグ
 
