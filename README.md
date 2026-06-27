@@ -114,8 +114,8 @@ merge_args:
 | `VV_AI_AGE_SECRET_KEY` | 必須 | artifact 復号に使う秘密鍵 |
 | `VV_AI_APP_ID` | 必須 | read/write 両方のインストールトークン生成に使う GitHub App ID |
 | `VV_AI_APP_PRIVATE_KEY` | 必須 | GitHub App の RSA 秘密鍵 |
-| `VV_ANTHROPIC_API_KEY` | Claude 用 | Claude Code CLI 用 API キー。導入更新コマンドでは直接入力しません |
-| `VV_OPENAI_API_KEY` | Codex 用 | Codex CLI 用 API キー。`VV_CODEX_AUTH_JSON` と択一。導入更新コマンドでは直接入力しません |
+| `VV_ANTHROPIC_API_KEY` | Claude 用 | Claude Code CLI 用 API キー |
+| `VV_OPENAI_API_KEY` | Codex 用 | Codex CLI 用 API キー。`VV_CODEX_AUTH_JSON` と択一 |
 | `VV_CODEX_AUTH_JSON` | Codex 用 | Codex CLI の OAuth 認証 JSON。`VV_OPENAI_API_KEY` と択一 |
 | `VV_CLAUDE_SETTINGS` | 任意 | モデル名・Base URL・MCP サーバーなどを指定する Claude Code の追加設定 JSON |
 | `VV_CONTEXT7_API_KEY` | 任意 | Context7 MCP の API キー。設定すると Claude Code / Codex 両方で Context7 が有効になる |
@@ -187,7 +187,7 @@ Issue または PR に `vv-ai:<command>` 形式のラベルを付けると起動
 
 `setup-vv-ai` はラベル同期の補助コマンドを実行するか確認します。
 個別に同期する場合は次を実行します。
-既存のラベルは色と説明を更新します。
+ラベル起動に使う GitHub ラベルはツールで作成できます。既存のラベルは色と説明を更新します。
 
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main create-vv-ai-labels --repo org/repo
