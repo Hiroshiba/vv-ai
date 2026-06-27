@@ -122,12 +122,22 @@ merge_args:
 
 GitHub App にはリポジトリ権限として `Contents: Read & Write` / `Issues: Read & Write` / `Pull requests: Read & Write` / `Workflows: Read & Write` / `Metadata: Read-only` を付与します。
 
+age 鍵が無い場合は、鍵生成コマンドで作成できます。
+出力された公開鍵と秘密鍵を `VV_AI_AGE_PUBLIC_KEY` と `VV_AI_AGE_SECRET_KEY` に登録します。
+
+```sh
+uvx --from git+https://github.com/Hiroshiba/vv-ai@main generate-vv-ai-age-key
+```
+
 `VV_CODEX_AUTH_JSON` と `VV_CLAUDE_SETTINGS` は補助コマンドで個別に設定できます。
 
 ```sh
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-codex-auth-secret --repo org/repo
 uvx --from git+https://github.com/Hiroshiba/vv-ai@main set-claude-settings-secret --repo org/repo
 ```
+
+`VV_OPENAI_API_KEY` と `VV_ANTHROPIC_API_KEY` は導入更新コマンドでは直接入力しません。
+必要な場合は GitHub Actions Secrets に個別に登録します。
 
 ## GitHub Actions
 
@@ -207,21 +217,8 @@ uvx --from git+https://github.com/Hiroshiba/vv-ai@main setup-vv-ai
 
 `setup-vv-ai` は `.github/workflows/vv-ai.yml` を配置し、`vv-ai.yml` が無い場合は作成します。
 必須の GitHub Secrets も登録または更新します。
-
-age 鍵が無い場合は、導入更新コマンドの前に鍵生成コマンドを実行します。
-
-```sh
-uvx --from git+https://github.com/Hiroshiba/vv-ai@main generate-vv-ai-age-key
-```
-
-出力された `Public key: age1...` の値を `VV_AI_AGE_PUBLIC_KEY` に、`AGE-SECRET-KEY-...` の値を `VV_AI_AGE_SECRET_KEY` に登録します。
-`setup-vv-ai` はこの 2 つの値を入力として受け付けます。
-
 `setup-vv-ai` は、`VV_CODEX_AUTH_JSON`、`VV_CLAUDE_SETTINGS`、ラベル同期の補助コマンドを実行するか確認します。
 選択すると `set-codex-auth-secret`、`set-claude-settings-secret`、`create-vv-ai-labels` を同じ配布元から実行します。
-
-`VV_OPENAI_API_KEY` と `VV_ANTHROPIC_API_KEY` は導入更新コマンドでは直接入力しません。
-必要な場合は GitHub Actions Secrets に別途登録してください。
 
 ## ローカルデバッグ
 
